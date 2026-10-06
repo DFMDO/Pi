@@ -27,7 +27,8 @@ export function normalizeHubAddress(input) {
 export function validateDraft(d, { adminPolicy = () => null } = {}) {
   const e = [];
   const w = d.wifi;
-  if (!w) e.push('Bitte wähle zuerst ein WLAN.');
+  if (w?.skip) { /* Netzwerkkabel: WLAN wird später in der Oberfläche nachgetragen */ }
+  else if (!w) e.push('Bitte wähle zuerst ein WLAN.');
   else {
     if (!ssidOk(w.ssid)) e.push('Der WLAN-Name ist ungültig (1–32 Zeichen).');
     if (w.enterprise) { if (!userOk(w.enterprise.user)) e.push('Bitte gib den Benutzernamen für das Firmen-WLAN ein.'); if (typeof w.enterprise.password !== 'string' || !w.enterprise.password || w.enterprise.password.length > 200) e.push('Bitte gib das Passwort für das Firmen-WLAN ein.'); }

@@ -41,6 +41,7 @@ export function createNm({ run = defaultRun, iface = 'wlan0' } = {}) {
     },
     async disconnect() { await run('nmcli', ['connection', 'down', 'dfm-wifi']); await run('nmcli', ['connection', 'delete', 'dfm-wifi']); },
     async hasLan() { const r = await run('nmcli', ['-t', '-f', 'DEVICE,TYPE,STATE', 'device']); return r.stdout.split('\n').some((l) => { const [, t, s] = splitT(l); return t === 'ethernet' && s === 'connected'; }); },
+    async lanAddress() { const r = await run('nmcli', ['-g', 'IP4.ADDRESS', 'device', 'show', 'eth0']); const m = /^(\d+\.\d+\.\d+\.\d+)/m.exec(r.stdout); return m ? m[1] : null; },
     async wifiConnected() { const r = await run('nmcli', ['-t', '-f', 'NAME,STATE', 'connection', 'show', '--active']); return r.stdout.split('\n').some((l) => splitT(l)[0] === 'dfm-wifi'); },
     async stations() { const r = await run('iw', ['dev', iface, 'station', 'dump']); return (r.stdout.match(/^Station /gm) ?? []).length; },
   };

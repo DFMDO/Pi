@@ -189,3 +189,15 @@ test('Hub-Einrichtung zeigt den Fingerabdruck sofort (Handy und Bildschirm); LED
   led.set('waiting'); assert.deepEqual(w, [1, 't150']); led.set('ready'); assert.equal(w.at(-1), 1); led.set('off'); assert.equal(w.at(-1), 0);
   assert.equal(PATTERNS.waiting.filter(([on]) => on === 150).length, 3, '3× kurz = wartet auf Einrichtung');
 });
+
+test('Netzwerkkabel: Einrichtung ohne WLAN möglich, Bildschirm springt direkt zur Einrichtungsseite', async () => {
+  let t = 1e6; const nm = { ...fakeNm(), hasLan: async () => true, lanAddress: async () => '192.168.1.77' }, written = [];
+  const ctl = createController({ nm, suffix: 'ab12', now: () => t, rnd: fakeRnd, hashPassword, policy: checkPasswordPolicy, hw: { model: 'Raspberry Pi 4', profile: 'pro' }, writeConfig: async (c, e) => written.push([c, e]) });
+  await ctl.startMode(); await ctl.tick(); const d = await ctl.display(); assert.equal(d.phase, 'step2'); assert.equal(d.url, 'http://192.168.1.77/'); assert.match(d.pin, /^\d{6}$/); assert.equal(d.lan, true);
+  const s = ctl.enterPin(ctl.state.pin).session; assert.equal(ctl.info(s).lan, true);
+  assert.deepEqual(await ctl.testWifi(s, { skip: true }), { ok: true, skipped: true });
+  assert.equal((await ctl.finish(s, { role: 'player', name: 'Shop-Screen', hubAddress: 'dfm-signage.local', pairCode: 'K7M4-X9RD' })).ok, true); await new Promise((r) => setTimeout(r, 1500));
+  assert.equal(ctl.result(s).state, 'done'); assert.equal(written.length, 1); assert.ok(!nm.log.some((l) => l[0] === 'connect'), 'kein WLAN verbunden');
+  const w = createController({ nm: { ...fakeNm(), hasLan: async () => false }, suffix: 'x', writeConfig: async () => {}, hashPassword, policy: () => null }); await w.startMode(); const s2 = w.enterPin(w.state.pin).session;
+  assert.equal((await w.testWifi(s2, { skip: true })).ok, false, 'ohne Kabel kann man das WLAN nicht überspringen');
+});

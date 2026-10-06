@@ -33,6 +33,7 @@
       ent ? [...field('Benutzername', 'eu', { set: (v) => { d.eu = v; } }), h('label', { for: 'ep' }, 'Passwort'), h('input', { id: 'ep', type: 'password', autocomplete: 'off', oninput: (e) => { d.ep = e.target.value; } })]
         : [h('label', { for: 'pw' }, 'WLAN-Passwort'), h('div', { class: 'row' }, pwIn = h('input', { id: 'pw', type: 'password', autocomplete: 'off', value: d.wifi?.password ?? '', maxlength: 64, oninput: (e) => { d.wifi = { ...(d.wifi ?? {}), password: e.target.value }; } }),
           h('button', { class: 'eye', type: 'button', 'aria-label': 'Passwort anzeigen oder verbergen', onclick: () => { showPw = !showPw; pwIn.type = showPw ? 'text' : 'password'; } }, '👁'))],
+      info.lan ? h('div', { class: 'card' }, h('p', {}, '🔌 Das Gerät hängt am Netzwerkkabel. Du kannst das WLAN auch später in der Oberfläche eintragen.'), h('button', { class: 'btn sec', type: 'button', onclick: () => { d.wifi = { skip: true }; testWifi(); } }, 'Ohne WLAN weiter (Kabel)')) : null,
       msg ? err(msg) : null,
       btn('WLAN prüfen und weiter', () => { d.wifi = { ...d.wifi, hidden, enterprise: ent ? { user: d.eu, password: d.ep } : undefined }; if (!d.wifi?.ssid) return wifiView('Bitte wähle ein WLAN aus.'); testWifi(); }));
   }

@@ -35,6 +35,11 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
     try { privRequest(process.env.DFM_PRIVD_DIR ?? '/run/dfm/privd', 'set-time', { epoch: Math.floor(req.body.epoch / 1000) }); } catch { return reply.code(500).send({ error: 'Die Uhr konnte nicht gestellt werden.' }); }
     audit.log({ user: req.user, action: 'uhr.gestellt', ip: req.ip, security: true, detail: { epoch: req.body.epoch } }); return { ok: true };
   });
+  // WLAN des Hubs nachtragen (z. B. wenn er per Kabel eingerichtet wurde)
+  app.post('/api/v1/system/wifi', { config: { perm: 'settings.manage' }, schema: { body: { type: 'object', required: ['ssid', 'password'], additionalProperties: false, properties: { ssid: { type: 'string', minLength: 1, maxLength: 32 }, password: { type: 'string', minLength: 8, maxLength: 64 } } } } }, async (req, reply) => {
+    try { privRequest(process.env.DFM_PRIVD_DIR ?? '/run/dfm/privd', 'wifi-connect', { ssid: req.body.ssid, password: req.body.password }); } catch (e) { return reply.code(400).send({ error: 'Diese WLAN-Angaben sind ungültig.' }); }
+    audit.log({ user: req.user, action: 'hub.wlan_geaendert', ip: req.ip, security: true, detail: { ssid: req.body.ssid } }); return { ok: true };
+  });
   app.get('/api/v1/system/certificate', { config: { perm: 'settings.manage' } }, async (_req, reply) =>
     reply.header('Content-Type', 'application/x-pem-file').header('Content-Disposition', 'attachment; filename="dfm-signage-hub.crt"').send(tls.cert));
   app.get('/api/v1/system/audit-verify', { config: { perm: 'audit.read' } }, async () => audit.verify());

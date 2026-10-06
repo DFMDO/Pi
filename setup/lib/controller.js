@@ -12,7 +12,7 @@ export const randPin = (rnd = randomInt) => String(rnd(1000000)).padStart(6, '0'
 export const IDLE_MS = 15 * 60000, MAX_PIN_FAILS = 5;
 
 export function createController({ nm, suffix, now = () => Date.now(), rnd = randomInt, writeConfig, hashPassword, policy, hw = {}, onDone = () => {}, discoverHub = async () => null, log = () => {}, serialPin = null, headless = false, wifiOnly = false, onWifiOnlyDone = async () => {}, prepareHub = async () => null, led = { set() {} } }) {
-  const s = { phase: 'welcome', ssid: `DFM-Setup-${suffix}`, password: '', pin: '', fails: 0, sessions: new Set(), started: 0, last: 0, stations: 0, draft: {}, result: { state: 'idle' }, networks: [], hubFound: null, cameraWifi: null };
+  const s = { phase: 'welcome', ssid: `DFM-Setup-${suffix}`, password: '', pin: '', fails: 0, sessions: new Set(), started: 0, last: 0, stations: 0, draft: {}, result: { state: 'idle' }, networks: [], hubFound: null, cameraWifi: null, lan: null };
 
   async function startMode() { // (Neu-)Start: neues Passwort + neue PIN, nur hier gültig
     s.password = randPassword(12, rnd); s.pin = serialPin ?? randPin(rnd); s.fails = 0; s.sessions.clear(); s.draft = {}; s.result = { state: 'idle' };
@@ -25,6 +25,7 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
   const authed = (t) => typeof t === 'string' && s.sessions.has(t);
 
   async function tick() { // alle 2 s
+    s.lan = await nm.hasLan().then(async (ok) => (ok ? { ip: await nm.lanAddress?.().catch(() => null) } : null)).catch(() => null);
     if (s.phase === 'step1' || s.phase === 'step2') {
       if (now() - s.last > IDLE_MS) { log('15 Minuten ohne Aktivität – Modus wird neu gestartet'); return startMode(); }
       s.stations = await nm.stations().catch(() => 0);
@@ -47,11 +48,12 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
   const api = {
     state: s, startMode, tick, enterPin, authed,
     info(t) { if (!authed(t)) return null; touch(); return { wifiOnly, model: hw.model ?? '', profile: hw.profile ?? 'standard', band24only: !/Pi (4|5|400|500)/.test(hw.model ?? ''), hubWarning: hw.profile && hw.profile !== 'pro' ? 'Dieses Gerät ist eher schwach. Als Hub empfehlen wir einen Raspberry Pi 4 (2 GB) oder besser.' : null,
-      hubFound: s.hubFound, cameraWifi: s.cameraWifi ? { ssid: s.cameraWifi.ssid } : null, networks: s.networks, suffix, defaultName: `Bildschirm ${suffix}` }; },
+      hubFound: s.hubFound, lan: !!s.lan, cameraWifi: s.cameraWifi ? { ssid: s.cameraWifi.ssid } : null, networks: s.networks, suffix, defaultName: `Bildschirm ${suffix}` }; },
 
     /** Schritt 1: WLAN prüfen. Wegen AP-only wird der Hotspot kurz abgeschaltet (Zwei-Phasen-Test). */
     async testWifi(t, w) {
       if (!authed(t)) return { ok: false, status: 401 }; touch();
+      if (w?.skip && s.lan) { s.draft.wifi = { skip: true }; s.result = { state: 'wifi-ok', hub: await discoverHub().catch(() => null) }; return { ok: true, skipped: true }; } // Kabel: kein WLAN-Test nötig
       if (w?.useCamera && s.cameraWifi) w = { ...s.cameraWifi }; // WLAN stammt aus dem Kamera-Scan (Passwort bleibt auf dem Gerät)
       const bad = !ssidOk(w?.ssid) ? 'Der WLAN-Name ist ungültig.' : w.enterprise ? null : (w.password && !wpaOk(w.password)) ? 'Das WLAN-Passwort muss 8 bis 63 Zeichen lang sein.' : null;
       if (bad) return { ok: false, error: bad };
@@ -93,7 +95,8 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
     await nm.startHotspot({ ssid: s.ssid, password: s.password }); s.phase = 'step1'; touch();
   }
   async function finalize(draft) {
-    if (!(await nm.wifiConnected())) { await nm.stopHotspot(); const r = await nm.connect(draft.wifi); if (!r.ok) { s.result = { state: 'failed', error: friendlyWifiError(r.reason) }; return restartHotspot(); } }
+    if (draft.wifi?.skip) await nm.stopHotspot();
+    else if (!(await nm.wifiConnected())) { await nm.stopHotspot(); const r = await nm.connect(draft.wifi); if (!r.ok) { s.result = { state: 'failed', error: friendlyWifiError(r.reason) }; return restartHotspot(); } }
     else await nm.stopHotspot();
     const cfg = { v: 1, role: draft.role, name: draft.role === 'hub' ? 'Hub' : draft.name.trim(), createdAt: new Date(now()).toISOString() };
     const extra = {};
@@ -108,6 +111,7 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
   api.display = async () => {
     const base = { phase: s.phase, ssid: s.ssid, minutesLeft: Math.max(0, Math.ceil((IDLE_MS - (now() - s.last)) / 60000)) };
     if (s.cameraWifi && (s.phase === 'step1' || s.phase === 'step2')) base.camera = `WLAN per Kamera erkannt: ${s.cameraWifi.ssid}`;
+    if (s.lan && (s.phase === 'step1' || s.phase === 'step2')) { const url = `http://${s.lan.ip ?? 'dfm-' + suffix + '.local'}/`; return { ...base, phase: 'step2', pin: s.pin, qr: url, url, lan: true }; } // Netzwerkkabel: gleich zur Einrichtungsseite
     if (s.phase === 'step1') return { ...base, password: s.password, qr: wifiQr({ ssid: s.ssid, password: s.password }), steps: ['Kamera-App öffnen', 'Code scannen', '„Verbinden“ tippen'] };
     if (s.phase === 'step2') return { ...base, pin: s.pin, qr: 'http://10.42.0.1/', url: 'http://10.42.0.1/' };
     if (s.phase === 'testing') return { ...base, message: s.result.state === 'wifi-testing' ? 'Das WLAN wird geprüft …' : 'Einrichtung wird abgeschlossen …' };
