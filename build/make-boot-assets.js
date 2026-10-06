@@ -19,6 +19,7 @@ async function screen(name, text, W = 1920, H = 1080) {
 await screen('standby.png', '');
 await screen('wartet.png', 'Einen Moment bitte – der Bildschirm startet gleich.');
 await screen('uhrzeit.png', 'Die Uhrzeit wird eingestellt. Einen Moment bitte.');
+await sharp({ create: { width: 1920, height: 1080, channels: 3, background: '#000000' } }).png().toFile(join(out, 'schwarz.png'));
 await screen('hilfe.png', 'Dieser Bildschirm wartet auf Verbindung. Bitte die Museums-IT informieren.');
 await sharp(await logo(360)).toFile(join(out, 'logo.png'));
 await sharp({ create: { width: 16, height: 8, channels: 3, background: RED } }).png().toFile(join(out, 'bar.png'));

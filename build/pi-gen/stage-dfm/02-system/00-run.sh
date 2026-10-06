@@ -2,7 +2,7 @@
 # System zusammenbauen: Dateien, Benutzer, Dienste, Härtung, „keine Geheimnisse im Image“.
 cp -a "${DFM_ROOTFS_OVERLAY}/." "${ROOTFS_DIR}/"
 install -d "${ROOTFS_DIR}/usr/share/dfm" "${ROOTFS_DIR}/etc/dfm" "${ROOTFS_DIR}/usr/share/plymouth/themes/dfm"
-cp "${DFM_BOOT_ASSETS}/standby.png" "${DFM_BOOT_ASSETS}/wartet.png" "${DFM_BOOT_ASSETS}/uhrzeit.png" "${DFM_BOOT_ASSETS}/hilfe.png" "${ROOTFS_DIR}/usr/share/dfm/"
+cp "${DFM_BOOT_ASSETS}/schwarz.png" "${DFM_BOOT_ASSETS}/standby.png" "${DFM_BOOT_ASSETS}/wartet.png" "${DFM_BOOT_ASSETS}/uhrzeit.png" "${DFM_BOOT_ASSETS}/hilfe.png" "${ROOTFS_DIR}/usr/share/dfm/"
 cp "${DFM_BOOT_ASSETS}/logo.png" "${DFM_BOOT_ASSETS}/bar.png" "${ROOTFS_DIR}/usr/share/plymouth/themes/dfm/"
 install -m 644 "${DFM_UPDATE_PUBKEY}" "${ROOTFS_DIR}/etc/dfm/update-key.pub"
 echo "${DFM_VERSION}" > "${ROOTFS_DIR}/etc/dfm/version"

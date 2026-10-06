@@ -219,7 +219,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const cfg = readJson(join(dataDir, 'agent.json'));
   const { chromiumRenderer, liteRenderer } = await import('./lib/renderers.js');
   const a = new Agent({ dataDir, log: (...x) => console.error(...x), port: Number(process.env.DFM_PORT ?? 8080) });
-  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getRotation: () => a.cfg?.orientation ?? 0, haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
+  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getRotation: () => a.cfg?.orientation ?? 0, haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
     : chromiumRenderer({ url: 'http://127.0.0.1:8080/player/', profileDir: join(dataDir, 'chromium-profile') });
   await a.start();
   for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => a.stop().then(() => process.exit(0)));
