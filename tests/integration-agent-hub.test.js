@@ -152,3 +152,18 @@ test('Bildschirm zeitgesteuert aus/an + Sync-Einstellungen kommen vom Hub; Downl
   await admin('PATCH', `/api/v1/devices/${deviceId}`, { display: null }); await until(() => agent.displayOff === false);
   await agent.stop(); await h.cleanup();
 });
+
+test('Live-Vorschau: Hub holt Screenshots, solange jemand angemeldet ist; Bildschirm liefert PNG', { timeout: 60000 }, async () => {
+  const h = await makeHub({ useTls: true }); await h.app.listen({ port: 0, host: '127.0.0.1' }); const hubUrl = `https://127.0.0.1:${h.app.server.address().port}`;
+  const { code, fingerprintRaw } = (await (await h.as('admin'))('POST', '/api/v1/pairing')).json(); const admin = await h.as('admin'); const deviceId = randomUUID();
+  const paired = pairWithHub({ hubUrl, code, expectedFp: fingerprintRaw, deviceId, name: 'D', model: 'Pi', profile: 'standard', hw: {}, pollMs: 30, timeoutMs: 10000 });
+  await until(async () => (await admin('GET', '/api/v1/devices')).json().length); await admin('POST', `/api/v1/devices/${deviceId}/approve`, {}); const { token, spki } = await paired;
+  const dataDir = mkdtempSync(join(tmpdir(), 'agent-')); writeFileSync(join(dataDir, 'agent.json'), JSON.stringify({ deviceId, hubUrl, hubSpki: spki, token, profile: 'standard' }));
+  const png = await sharp({ create: { width: 64, height: 36, channels: 3, background: '#c8102e' } }).png().toBuffer();
+  const agent = new Agent({ dataDir, port: 0, heartbeatMs: 200, renderer: { screenshot: async () => png, stop() {}, notify() {} } }); await agent.start(); await until(() => agent.connected);
+  assert.equal(h.app.devices.screenshotTick(), 1, 'angemeldeter Admin → Screenshot angefordert');
+  await until(async () => (await admin('GET', `/api/v1/devices/${deviceId}/screenshot`)).statusCode === 200);
+  const shot = await admin('GET', `/api/v1/devices/${deviceId}/screenshot`); assert.equal(shot.headers['content-type'], 'image/png'); assert.deepEqual(shot.rawPayload.subarray(0, 4), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  h.db.prepare('DELETE FROM sessions').run(); assert.equal(h.app.devices.screenshotTick(), 0, 'niemand angemeldet → keine unnötige Last');
+  await agent.stop(); await h.cleanup();
+});

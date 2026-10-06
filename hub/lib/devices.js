@@ -44,7 +44,14 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   const pushPlan = (d) => { sendTo(d.id, 'schedule_update', schedulePayload(db, d, now())); sendTo(d.id, 'media_manifest', manifestPayload(db, d, now())); };
   const pushAll = () => { for (const id of sockets.keys()) { const d = getDevice(id); if (d?.status === 'active') pushPlan(d); } };
   app.decorate('pushAll', pushAll);
-  app.decorate('devices', { sockets, sendTo, pushPlan });
+  /** Live-Vorschau: Solange jemand angemeldet ist (letzte 5 Minuten), holt der Hub jede Minute einen Screenshot von jedem verbundenen Bildschirm. */
+  function screenshotTick() {
+    if (!db.prepare('SELECT 1 FROM sessions WHERE last_seen > ?').get(now() - 5 * 60000)) return 0;
+    let n = 0; for (const id of sockets.keys()) if (sendTo(id, 'command', { id: 'auto-' + randomUUID(), command: 'screenshot' })) n++;
+    return n;
+  }
+  const shotTimer = setInterval(screenshotTick, 60000); shotTimer.unref(); app.addHook('onClose', async () => clearInterval(shotTimer));
+  app.decorate('devices', { sockets, sendTo, pushPlan, screenshotTick });
 
   const present = (d) => {
     const st = d.state_json ? JSON.parse(d.state_json) : null;

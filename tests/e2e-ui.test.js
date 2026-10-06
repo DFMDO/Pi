@@ -116,3 +116,15 @@ test('Playerseite: zeigt Termine aus dem lokalen Plan, kein Hub nötig, keine ex
   assert.deepEqual(w.bad, []); assert.deepEqual(w.errors, []);
   await browser.close(); await agent.stop();
 });
+
+test('Oberfläche responsiv: iPad hochkant und Handy – kein horizontales Scrollen, Navigation erreichbar', { skip, timeout: 90000 }, async () => {
+  const h = await makeHub({ useTls: true }); await h.app.listen({ port: 0, host: '127.0.0.1' }); h.db.prepare("INSERT OR REPLACE INTO settings VALUES('wizard.done','true')").run();
+  const browser = await chromium.launch({ executablePath: EXE, args: ARGS });
+  for (const [name, vp] of [['iPad', { width: 768, height: 1024 }], ['iPad quer', { width: 1024, height: 768 }], ['Handy', { width: 390, height: 844 }]]) {
+    const page = await (await browser.newContext({ ignoreHTTPSErrors: true, viewport: vp })).newPage();
+    await page.goto(`https://127.0.0.1:${h.app.server.address().port}`); await page.getByLabel('Benutzername').fill('admin'); await page.getByLabel('Passwort').fill(PW); await page.getByRole('button', { name: 'Anmelden' }).click();
+    await page.getByRole('heading', { name: 'Startseite' }).waitFor();
+    for (const link of ['Kalender', 'Bilder & Videos', 'Bildschirme']) { await page.getByRole('link', { name: new RegExp(link) }).click(); await page.waitForTimeout(300); const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth); assert.ok(wide <= 1, `${name}: ${link} läuft ${wide}px über`); }
+  }
+  await browser.close(); await h.cleanup();
+});
