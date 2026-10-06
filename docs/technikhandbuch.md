@@ -113,7 +113,7 @@ Siehe `sicherheit.md`. Der Fingerabdruck steht in der Oberfläche (Vierergruppen
 Admin-Panel („Auf Werkseinstellungen zurücksetzen“) oder Geräte-Reset: `factory-reset` stoppt die Dienste, formatiert die Datenpartition neu (Label `DFMDATA`) und startet neu → Erststart. **Rolle ändern:** zurücksetzen und neu einrichten.
 
 ## 9. Tests
-`npm test` (≈ 80 Tests): Zeitplan inkl. Sommer-/Winterzeit, Auth/Rate-Limit/CSRF/Rechte je Route und Rolle, Pairing und Pinning über echtes TLS (inkl. simuliertem Man-in-the-Middle), WebSocket, Medien/Upload/Varianten (ffmpeg, sharp, PDF), Papierkorb, Backup/Restore, signierte Updates und Rollback, Einrichtungslogik, Validierung/Injection, Erststart, Image-Prüfung, Release-Werkzeuge, **Ende-zu-Ende im echten Chromium** (Admin-UI, Handy-Einrichtung, Playerseite; ohne externe Anfragen, 44-px-Klickflächen). Hardware-Punkte: `hardware-checkliste.md`.
+`npm test` (96 Tests): Zeitplan inkl. Sommer-/Winterzeit, Auth/Rate-Limit/CSRF/Rechte je Route und Rolle, Pairing und Pinning über echtes TLS (inkl. simuliertem Man-in-the-Middle), WebSocket, Medien/Upload/Varianten (ffmpeg, sharp, PDF), Papierkorb, Backup/Restore, signierte Updates und Rollback, Einrichtungslogik, Validierung/Injection, Erststart, Image-Prüfung, Release-Werkzeuge, **Ende-zu-Ende im echten Chromium** (Admin-UI, Handy-Einrichtung, Playerseite; ohne externe Anfragen, 44-px-Klickflächen). Hardware-Punkte: `hardware-checkliste.md`.
 
 ## 10. Kompatibilitätstabelle
 | Modell | Image | Profil | Renderer | Rolle Hub | Bemerkung |
