@@ -43,7 +43,7 @@ export function checkTrees({ rootfs, boot, data, maxGb = 2.5 }) {
   add('Version eingetragen', !!read(join(rootfs, 'etc/dfm/version'))?.trim());
   const fstab = read(join(rootfs, 'etc/fstab')) ?? '';
   add('Root-Dateisystem ist schreibgeschützt (fstab)', /\s\/\s+ext4\s+[^\s]*\bro\b/.test(fstab) && !/@PTUUID@/.test(fstab));
-  add('Datenpartition und Bind-Mounts vorbereitet', /\/data\/state\/machine-id\s+\/etc\/machine-id/.test(fstab) && /\/data\/journal/.test(fstab));
+  add('Datenpartition und Bind-Mounts vorbereitet', /\/data\/state\/machine-id\s+\/etc\/machine-id/.test(fstab) && /\/data\/log\s+\/var\/log/.test(fstab));
   const cmd = read(join(boot, 'cmdline.txt')) ?? '';
   add('Boot-Parameter: ro, ruhiger Start, WLAN-Land DE, kein init=', /\bro\b/.test(cmd) && /\bquiet\b/.test(cmd) && /regdom=DE/.test(cmd) && !/\binit=/.test(cmd) && !/console=(serial|ttyAMA|ttyS)/.test(cmd) && !/@PTUUID@/.test(cmd), cmd.trim().slice(0, 80));
   add('Einrichtungsvorlage liegt auf der Boot-Partition', existsSync(join(boot, 'dfm-setup.vorlage.txt')) && existsSync(join(boot, 'LIES-MICH.txt')));

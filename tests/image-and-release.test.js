@@ -17,7 +17,7 @@ function fakeImage() {
   mkdirSync(boot); mkdirSync(data);
   w('etc/passwd', 'root:x:0:0::/root:/bin/false\ndfm-hub:x:990:990::/nonexistent:/usr/sbin/nologin\n'); w('etc/shadow', 'root:!:19000:0:99999:7:::\ndfm-hub:!*:19000::::::\n');
   w('etc/machine-id', ''); w('etc/dfm/update-key.pub', '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAabc\n-----END PUBLIC KEY-----\n'); w('etc/dfm/version', '1.0.0');
-  w('etc/fstab', 'PARTUUID=abcd-02 / ext4 defaults,ro,noatime 0 1\n/data/state/machine-id /etc/machine-id none bind 0 0\n/data/journal /var/log/journal none bind 0 0\n');
+  w('etc/fstab', 'PARTUUID=abcd-02 / ext4 defaults,ro,noatime 0 1\n/data/state/machine-id /etc/machine-id none bind 0 0\n/data/log /var/log none bind 0 0\n');
   w('etc/systemd/journald.conf.d/dfm.conf', '[Journal]\nSystemMaxUse=50M\n'); w('etc/NetworkManager/conf.d/dfm.conf', '[connection]\nwifi.powersave=2\n');
   for (const u of ['dfm-firstboot.service', 'dfm-mode.service']) w('etc/systemd/system/multi-user.target.wants/' + u); w('etc/systemd/system/local-fs.target.wants/dfm-data.service');
   mkdirSync(join(root, 'etc/systemd/system'), { recursive: true }); for (const u of ['ssh.service', 'getty@tty1.service']) symlinkSync('/dev/null', join(root, 'etc/systemd/system', u));

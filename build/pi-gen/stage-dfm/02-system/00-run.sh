@@ -7,6 +7,7 @@ cp "${DFM_BOOT_ASSETS}/logo.png" "${DFM_BOOT_ASSETS}/bar.png" "${ROOTFS_DIR}/usr
 install -m 644 "${DFM_UPDATE_PUBKEY}" "${ROOTFS_DIR}/etc/dfm/update-key.pub"
 echo "${DFM_VERSION}" > "${ROOTFS_DIR}/etc/dfm/version"
 printf 'URL=http://127.0.0.1:8081/\n' > "${ROOTFS_DIR}/usr/lib/dfm/kiosk-setup.env"
+rm -rf "${ROOTFS_DIR}/etc/systemd/system.conf.d/dfm-watchdog.conf"   # Watchdog ist nur optional (build/optional)
 chmod +x "${ROOTFS_DIR}"/usr/lib/dfm/*
 
 on_chroot << 'CHEOF'

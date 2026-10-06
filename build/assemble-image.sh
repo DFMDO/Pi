@@ -21,7 +21,7 @@ rm -f "$BOOT"/{ssh,ssh.txt,userconf,userconf.txt,custom.toml,dfm-setup.txt,dfm-s
 mkdir -p "$ROOT/data"   # Einhängepunkt
 
 echo "== Prüfung (vor dem Packen) =="
-mkdir -p "$TMP/data/state/nm" "$TMP/data/state/nm-lib" "$TMP/data/state/chrony" "$TMP/data/journal" "$TMP/data/hub" "$TMP/data/agent" "$TMP/data/tmp"
+mkdir -p "$TMP/data/state/nm" "$TMP/data/state/nm-lib" "$TMP/data/state/chrony" "$TMP/data/log" "$TMP/data/hub" "$TMP/data/agent" "$TMP/data/tmp"
 : > "$TMP/data/state/fake-hwclock"; chmod 700 "$TMP/data/state/nm"; chown -R 990:990 "$TMP/data/hub"; chown -R 991:991 "$TMP/data/agent"; chmod 755 "$TMP/data"
 set +e; node "$B/check-image.mjs" --rootfs "$ROOT" --boot "$BOOT" --data "$TMP/data" --max-gb 2.5 | tee "$OUT/check.txt"; CHECK=${PIPESTATUS[0]}; set -e
 
