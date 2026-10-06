@@ -44,7 +44,22 @@ Ehrlichkeitsregel dieses Berichts: *Was ich gemessen oder getestet habe, steht a
 **Nicht messbar ohne Hardware:** Startzeit bis QR-Code (Ziel < 90 s auf Pi 3), RAM Chromium/mpv, CPU/Temperatur, WLAN-Durchsatz, Dekodierleistung je Modell → `hardware-checkliste.md` (Messblatt) und `tools/diagnose.sh` / Oberfläche „Diagnose …“.
 
 ## 4. Image-Bau
-IMAGE_STATUS_PLATZHALTER
+**Das Image wurde tatsächlich gebaut** (in dieser Sitzung, `build/build-image.sh` auf x86 mit qemu-user für arm64; pi-gen-Zweig `bookworm-arm64`, Commit in `image-build-info-0.1.0.txt`).
+
+| Eigenschaft | Ergebnis |
+|---|---|
+| Datei | `dfm-signage-arm64-0.1.0.img.xz` + `.sha256` + `.sig` (Ed25519) |
+| Größe | ≈ **553 MB** komprimiert, **2,38 GB** entpackt (Ziel < 2,5 GB ✅); Root-Inhalt 2,01 GB |
+| Partitionen | p1 `DFMBOOT` FAT32 96 MB · p2 `DFMROOT` ext4 (nur lesbar) · p3 `DFMDATA` ext4 128 MB (wächst beim ersten Start) |
+| Prüfprotokoll | `image-pruefung-0.1.0.txt`: **alle 27 Prüfungen bestanden** (kein Standardbenutzer/-passwort, SSH aus und maskiert, keine Hostschlüssel, `machine-id` leer, keine privaten Schlüssel, keine WLAN-Profile, Datenpartition leer, Root `ro`, ruhiger Start, Vorlage vorhanden, keine externen Hosts in den Oberflächen, …) |
+| Dateisysteme | `e2fsck -fn` auf Root und Daten ohne Fehler; Prüfsumme und Signatur mit `build/verify-release.sh` bestätigt |
+| arm64-Funktionstest (Root-Dateisystem unter qemu-user, `chroot`) | **Hub startet** auf aarch64 (HTTPS, Admin-Oberfläche mit CSP), `better-sqlite3`, `argon2`, `sharp` laden als **ARM64-Binärdateien**, `firstboot.js` erzeugt Geräte-ID und `geraeteinfo.txt`; Chromium, mpv, ffmpeg, cage, nftables, chrony, NetworkManager, Avahi, poppler, zbar vorhanden |
+| QEMU-Start (`raspi3b`) | Kernel 6.12 bootet, Root wird **schreibgeschützt** eingebunden, systemd 252 startet, Hostname `dfm-signage`, `dfm-data.service` startet. Danach friert der Emulator ein (bekannte Grenzen von QEMU-raspi3b: SD-/SDIO-Emulation) – **kein Nachweis der vollständigen Startkette**. Beobachtung: `RuntimeWatchdogSec` löste im Emulator eine Neustart-Schleife aus → der Watchdog ist **nicht** im Image (nur Vorlage `build/optional/`). |
+
+**Wichtig:** Das hier gebaute Image ist mit einem **Wegwerf-Schlüssel** signiert (nur für diese Sitzung) und liegt nur im Container (ca. 550 MB, kann nicht im Git liegen). Es ist **kein Release**. Für den Einsatz: `build/gen-release-key.sh`, eigenes Logo/Farben eintragen und `build/build-image.sh` ausführen (≈ 40 Minuten auf dem Entwicklungsrechner).
+
+Beim Bau entdeckte und behobene Fehler (nur durch den echten Bau aufgefallen): fehlendes Paket `crda` in Bookworm; pi-gen-Variablen müssen exportiert werden; Loop-Partitionen im Container nicht verfügbar → Zusammenbau jetzt ohne Loop-Geräte (`assemble-image.sh`); Entwicklungswerkzeuge/Firmware/Übersetzungen entfernt (2,57 → 2,01 GB); `sshswitch`/`regenerate_ssh_host_keys` waren aktiv (jetzt maskiert); Journal/`/var/log` und Datenpartition-Erweiterung (online statt Offline-`resize2fs`) korrigiert.
+
 
 ## 5. Entscheidungen, die ich ohne Rückfrage getroffen habe
 (Sie hatten Phase 1 nicht ausdrücklich freigegeben und die offenen Punkte nicht beantwortet; ich bin den im Konzept empfohlenen Weg gegangen. Alles ist leicht änderbar.)
