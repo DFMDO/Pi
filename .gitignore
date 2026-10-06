@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.img
+*.img.xz
+/build/out/
+/build/work/
+*.key
+!/hub/test/*.key
+.env
