@@ -16,6 +16,7 @@ export function deviceWarnings(d, st, now, cfg = {}) {
   if (st.diskFreeMB != null && st.diskFreeMB < 200) w.push({ kind: 'speicher', level: 'warn', text: `„${name}“ hat nur noch ${st.diskFreeMB} MB freien Speicher. Bitte nicht benötigte Medien entfernen.` });
   const weak = cfg.warnDbm ?? -72;
   if (st.signalDbm != null && st.signalDbm < weak) w.push({ kind: 'wlan', level: 'warn', text: `WLAN bei „${name}“ ist ${signalQuality(st.signalDbm).label.toLowerCase()}. Bitte den Bildschirm näher an den Access Point stellen.` });
+  if (st.wifiSwitch && st.wifiSwitch.ok === false && now - st.wifiSwitch.ts < 7 * 86400000) w.push({ kind: 'wlan_wechsel', level: 'warn', text: `Der Wechsel von „${name}“ auf das WLAN „${st.wifiSwitch.ssid}“ hat nicht geklappt (${{ auth: 'Passwort falsch', verbindung: 'keine Verbindung', hub_nicht_erreichbar: 'Hub darüber nicht erreichbar', config: 'ungültige Angaben' }[st.wifiSwitch.reason] ?? 'unbekannt'}). Der Bildschirm ist im alten WLAN geblieben.` });
   if (st.timeSynced === false) w.push({ kind: 'uhrzeit', level: 'warn', text: `Die Uhr von „${name}“ ist nicht abgeglichen.` });
   return w;
 }

@@ -93,3 +93,44 @@ Beim Bau entdeckte und behobene Fehler (nur durch den echten Bau aufgefallen): f
 2. Auf einem Pi 4 (Hub) und einem Pi 3 / Zero 2 W (Player) die **Hardware-Checkliste** abarbeiten; Fehler/Messwerte zurückmelden.
 3. Nutzertest durchführen, Texte anpassen.
 4. Sicherheits-Review durch eine zweite Person (Schwerpunkt: Einrichtungsmodus, `privd`, systemd-Härtung).
+
+
+---
+
+# Nachtrag: Erweiterung (Version 0.2) – Stand und Messwerte
+
+Umgesetzt wurde der komplette Erweiterungsauftrag: Logo, Teil A (A1–A7), Teil B (Z.1–Z.15) und – nach dem Auftrag „Einbauen bitte“ – die vier optionalen Punkte aus Teil E.
+
+## Testergebnisse
+Siehe Abschnitt „Testlauf“ am Ende dieses Nachtrags (wird bei jedem Lauf aktualisiert). Neue Testdateien: `hub/test/erweiterung.test.js` (Entwurf/Veröffentlichen, Konten, Live), `phase9.test.js` (Übersteuerung, Szenen, Gesundheit, Ersetzen, WLAN, CSV, Rechte/Wandmodus), `phase10.test.js` (Vorlagen, QR, Sondertage, Zonen, Inbetriebnahme, Import, Datenschutz, Wochenvorlagen, Passwort-Reset), `teilE.test.js` (Hochkant, Lizenz, gestaffelte Updates), `tests/simulator.test.js` (Simulator-Player), `setup/test/wifi-switch.test.js`, Erweiterungen in `firstboot.test.js` und `e2e-ui.test.js`.
+
+## Abnahmekriterien (Teil C) – was bewiesen ist und was nicht
+| Kriterium | Ergebnis |
+|---|---|
+| Zeitplan: Sondertage, Übersteuerung (auch offline), neue Auflösungsreihenfolge | ✔ getestet (`phase9`, `phase10`): Übersteuerung wirkt aus dem Plan des Players und läuft **ohne Hub** von selbst ab |
+| Live: Kachelansicht mit 10 Bildschirmen < 3 s | ✔ **113 ms** (Chromium, E2E-Test, Entwicklungsrechner) |
+| Live: Hub dauerhaft < 25 % CPU auf Pi 4 | ⚠ nicht auf Hardware messbar. Messung: `GET /live` mit 10 Geräten und 60 Terminen **59 ms je Aufruf** auf dem Entwicklungsrechner (bei 10-s-Abfrage ≈ 0,6 %); auf einem Pi 4 erwarte ich das 3–4-Fache ≈ 2–3 %. Prüfschritt E2 in der Hardware-Checkliste |
+| Pi 3 spielt bei offener Einzelansicht ruckelfrei (Videotest) | ⚠ nicht auf Hardware messbar. Konstruktion: Screenshots nur bei Betrachtern, Lite und Überlast Stufe 1, Pi-3-Screenshot nur alle 5 s (Einzelansicht). Prüfschritt E1 |
+| Inhaltswechsel in der Live-Ansicht ≤ 2 s (Stufe 1) | ✔ im Simulator-Test gemessen (Wechsel ≤ 2,5 s inkl. 100-ms-Abfrage-Raster des Tests); der Weg ist eine WS-Nachricht, in der Praxis < 1 s |
+| Offline nach ≤ 60 s markiert | ✔ Schwelle 65 s (Heartbeat 30 s) – getestet |
+| Zugriff ohne Anmeldung / falsches Token / fremde Gruppe abgelehnt | ✔ getestet (401 / 401 / 404) |
+| Handy: Schrift ≥ 16 px, kein Querscrollen | ✔ im Chromium-Handy-Emulator (390 px); ⚠ iOS Safari/Android Chrome real: Prüfschritt E12 |
+| Entwurfsmodus: Entwurf erscheint nie auf Player/Live; Veröffentlichen, Verwerfen, Wiederherstellen auch bei offline-Playern | ✔ getestet (Player kennen nur veröffentlichte Stände; Veröffentlichen wirkt beim Wiederverbinden über den 14-Tage-Plan) |
+| QR: jeder Code dekodiert (Längen, Umlaute, Sonderzeichen), Schemas abgelehnt | ✔ getestet mit jsQR, 7 Eingabearten; Mehrverbrauch auf Pi 3/Lite: keiner, der Code ist ein vorgerendertes Bild |
+| Inbetriebnahme-Test erkennt Netzteil/Uhr/blockierten Hub | ✔ simuliert getestet; ⚠ „läuft auf Pi 3, Zero 2 W, Pi 4, Pi 5 durch“ nur auf Hardware (E4) |
+| WLAN-Aufstellmodus < 3 s, keine Bildaussetzer | ✔ 2-s-Takt, 1 kleine Nachricht; ⚠ Videotest auf Hardware (E5) |
+| Fern-Einstellung: Rückfall nach 60 s | ✔ Logik im Agent (Ausrichtung) implementiert; ⚠ Auflösung/Overscan per Fernbefehl gibt es im System nicht – nur Ausrichtung und Sicherheitsrand (Hub-seitig) |
+| Rollen: Anzeige kann nichts ändern (je Route); letzter Admin geschützt | ✔ getestet (jede Route je Rolle; 409 beim letzten Admin) |
+
+## Abweichungen und offene Punkte (ehrlich)
+- **Simulator-Player im Browser:** als Node-Werkzeug umgesetzt (siehe Handbuch 29), weil ein Browser-WebSocket keinen `Authorization`-Header senden kann und ein Zusatzweg die Sicherheit schwächen würde.
+- **Grundriss je Etage (Z.15, optional):** nicht umgesetzt (im Auftrag „optional“); die Empfangsübersicht als Liste/Kacheln mit Etage/Ort ist vorhanden.
+- **Foto im Geräteprofil (Z.3):** nicht umgesetzt (Standort, Etage, Seriennummer, Einbaudatum, Notizen und Anleitungs-Link sind da).
+- **Wochenbericht:** als Seite zum Drucken/„Als PDF speichern“ (Browser-Druckdialog); kein serverseitig erzeugtes PDF.
+- **Fern-Auflösung/Overscan:** Das System kennt keinen Fernbefehl für Auflösung; Overscan wird über den **Sicherheitsrand** gelöst (Hub-Einstellung je Bildschirm). Ausrichtung hat den 60-s-Rückfall.
+- **Aufstellmodus auf dem Bildschirm selbst (sehr groß):** nicht umgesetzt (nur im Panel). Beim Verschieben des Bildschirms hilft das Handy-Panel.
+- **Hinweis auf überfüllte 2,4-GHz-Kanäle:** nur als Hinweis „mehrere Bildschirme nutzen denselben Kanal“; ein Kanalscan ist unprivilegiert nicht möglich.
+- **RAM-Budget der Zonen (Z.7)** und alle Hardware-Punkte: nur auf Geräten messbar → Hardware-Checkliste E1–E12.
+- **Feiertage-Aktualisierung per Update-Paket:** die Feiertage sind aus der Osterformel berechnet (immer 4 Jahre voraus) – kein Datenpaket nötig; eigene Regeln ändern sich im Hub.
+- **USB-Stick/Netzwerkfreigabe (Import):** der Hub liest nur Ordner unter `/media` und `/mnt`; das Einbinden (Automount) macht die IT – im Image ist kein Automount-Dienst.
+- **Image:** Das veröffentlichte Image muss neu gebaut werden (GitHub-Workflow „Image bauen“), damit es Logo und Erweiterung enthält.

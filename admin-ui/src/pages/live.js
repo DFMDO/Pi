@@ -27,16 +27,18 @@ function tile(r, open) {
 }
 
 export async function livePage({ route }, opts = {}) {
-  let rows = await get('/live'), cols = Number(pref('cols', '3')), group = pref('group', ''), wall = !!opts.wall, timer = null;
+  let rows = await get('/live'), cols = Number(pref('cols', '3')), group = pref('group', ''), place = pref('place', ''), wall = !!opts.wall, timer = null;
   const root = h('div', { class: wall ? 'wall' : '' }), grid = h('div', {}), bar = h('div', { class: 'row', style: 'margin:10px 0' });
   const groups = () => [...new Map(rows.filter((r) => r.groupId).map((r) => [r.groupId, r.groupName])).entries()];
+  const places = () => [...new Set(rows.map((r) => r.location).filter(Boolean))].sort();
   const detailDlg = (r) => detail(r, route);
   function draw() {
-    const shown = rows.filter((r) => !group || r.groupId === group), n = wall ? Math.min(4, Math.max(1, Math.ceil(Math.sqrt(shown.length)))) : cols;
+    const shown = rows.filter((r) => (!group || r.groupId === group) && (!place || r.location === place)), n = wall ? Math.min(4, Math.max(1, Math.ceil(Math.sqrt(shown.length)))) : cols;
     grid.style.cssText = `display:grid;gap:14px;grid-template-columns:repeat(${n},minmax(0,1fr))`; grid.className = 'livegrid';
     grid.replaceChildren(...(shown.length ? shown.map((r) => tile(r, wall ? () => {} : detailDlg)) : [empty('Keine Bildschirme', 'Hier erscheinen verbundene Bildschirme.')]));
     bar.replaceChildren(h('span', { class: 'hint' }, 'Spalten: '), ...[1, 2, 3, 4].map((x) => h('button', { class: 'chip', 'aria-pressed': cols === x, onclick: () => { cols = x; setPref('cols', x); draw(); } }, String(x))),
       groups().length ? h('select', { class: 'inline', 'aria-label': 'Gruppe wählen', onchange: (e) => { group = e.target.value; setPref('group', group); draw(); } }, h('option', { value: '' }, 'Alle Gruppen'), groups().map(([id, nm]) => h('option', { value: id, selected: id === group }, nm))) : null,
+      places().length ? h('select', { class: 'inline', 'aria-label': 'Etage oder Standort wählen', onchange: (e) => { place = e.target.value; setPref('place', place); draw(); } }, h('option', { value: '' }, 'Alle Etagen/Orte'), places().map((x) => h('option', { value: x, selected: x === place }, x))) : null,
       h('span', { class: 'sp' }), h('span', { class: 'hint' }, 'Aktualisiert sich selbst'), can('overrides.write') ? h('button', { class: 'btn sec', onclick: async () => { try { await post('/overrides/end-all'); toast('Alles läuft wieder nach Plan.'); rows = await get('/live'); draw(); } catch (e) { toast(e.message, 'err'); } } }, 'Zurück zum normalen Plan') : null,
       h('button', { class: 'btn sec', onclick: () => { wall = !wall; root.classList.toggle('wall', wall); if (wall) root.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.().catch(() => {}); draw(); } }, wall ? 'Wandmodus beenden' : 'Wandmodus'));
   }
@@ -67,6 +69,8 @@ async function detail(r0, route) {
     return h('div', { class: 'row', style: 'margin-top:10px' }, h('b', {}, 'Schnellaktion:'), sel, h('span', {}, 'für'), dur, h('button', { class: 'btn', onclick: async () => { if (!sel.value) return toast('Bitte wähle einen Inhalt.', 'err'); const [type, id] = sel.value.split(':'); try { const x = await post('/overrides', { scope: 'device', targetId: dev.id, content: { type, id }, ...(dur.value === 'eod' ? { endOfDay: true } : { minutes: Number(dur.value) }) }); toast(x.text); r = await get(`/live/${dev.id}`); draw(); } catch (e) { toast(e.message, 'err'); } } }, 'Zeigen'));
   }
   const acts = [{ text: 'Schließen', cls: 'sec' }];
+  acts.unshift({ text: 'Jetzt aktualisieren', cls: 'sec', fn: async () => { try { const x = await post(`/live/${r.id}/refresh`); toast(x.text); setTimeout(async () => { r = await get(`/live/${r.id}`).catch(() => r); draw(); }, 2500); } catch (e) { toast(e.message, 'err'); } return false; } });
+  if (can('devices.manage')) acts.unshift({ text: 'Bild speichern', cls: 'sec', fn: async () => { try { await post(`/devices/${r.id}/screenshot/save`); toast('Das Bild wurde gespeichert (Admin-Aktion, wird protokolliert).'); } catch (e) { toast(e.message, 'err'); } return false; } });
   if (can('devices.manage')) acts.unshift({ text: r.maintenance ? 'Wartungsmodus beenden' : 'Wartungsmodus', cls: 'sec', fn: async () => { await post(`/devices/${r.id}/maintenance`, { on: !r.maintenance }); toast(r.maintenance ? 'Wartungsmodus aus.' : 'Wartungsmodus an.'); route?.(); }, },
     { text: 'Testbild', cls: 'sec', fn: async () => { await act('testpattern', { on: true }, 'Das Testbild läuft 2 Minuten.'); return false; } }, { text: 'Neu laden', cls: 'sec', fn: async () => { await act('reload', {}, 'Der Bildschirm lädt neu.'); return false; } },
     { text: 'Erkennen', cls: 'sec', fn: async () => { await act('identify', { location: r.location ?? '', number: r.id.slice(0, 4).toUpperCase() }, 'Der Bildschirm zeigt 10 Sekunden seinen Namen.'); return false; } });

@@ -1,5 +1,5 @@
 import { h, dialog, confirmDlg, toast, field, statusEl, empty, fmtDate, help } from '../ui.js';
-import { get, post, patch, del, api, state, can } from '../api.js';
+import { get, post, put, patch, del, api, state, can } from '../api.js';
 import { shot } from './home.js';
 import { commissioning } from './betrieb.js';
 
@@ -71,10 +71,21 @@ function editDlg(d, groups, route) {
   const name = h('input', { value: d.name, maxlength: 60 }), grp = h('select', {}, h('option', { value: '' }, 'keine Gruppe'), groups.map((g) => h('option', { value: g.id, selected: g.id === d.groupId }, g.name)));
   const prof = h('select', {}, Object.entries(ROLES).map(([k, v]) => h('option', { value: k, selected: k === d.profile }, v)));
   const off = h('input', { type: 'checkbox', checked: !!d.display?.off }), from = h('input', { type: 'time', class: 'inline', value: d.display?.off?.from ?? '22:00', 'aria-label': 'Aus ab' }), to = h('input', { type: 'time', class: 'inline', value: d.display?.off?.to ?? '07:00', 'aria-label': 'An ab' });
-  dialog('Bildschirm bearbeiten', h('div', {}, field('Name', name), field('Gruppe', grp, 'Bildschirme in einer Gruppe können gemeinsam geplant werden.'),
+  const dlg0 = dialog('Bildschirm bearbeiten', h('div', {}, field('Name', name), field('Gruppe', grp, 'Bildschirme in einer Gruppe können gemeinsam geplant werden.'),
     h('div', { class: 'card' }, h('label', {}, off, ' Bildschirm automatisch ausschalten'), h('p', {}, 'von ', from, ' bis ', to, ' Uhr'), h('p', { class: 'hint' }, 'Wenn sich der Bildschirm nicht abschalten lässt (kein HDMI-CEC), zeigt er in dieser Zeit stattdessen ein schwarzes Bild.'), d.state?.displayPower === 'nicht möglich' ? h('p', { class: 'bad' }, '⚠ Dieser Bildschirm lässt sich nicht abschalten – er zeigt ein schwarzes Bild.') : null),
+    h('details', {}, h('summary', {}, 'Hochkant und Seitenverhältnis'), h('div', { id: 'fitbox' }, h('p', { class: 'hint' }, 'Wird geladen …'))),
     h('details', {}, h('summary', {}, 'Erweitert'), field('Leistungsprofil', prof, 'Wird automatisch passend zum Gerät gewählt. Ändere es nur, wenn du genau weißt, warum.'), h('p', { class: 'hint' }, `Fingerabdruck des Hubs, den dieser Bildschirm kennt: ${d.spki ?? '–'}`))),
     [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await patch(`/devices/${d.id}`, { name: name.value, groupId: grp.value || null, profile: prof.value, display: off.checked ? { off: { from: from.value, to: to.value } } : null }); toast('Gespeichert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
+  fitSection(d, dlg0.querySelector('#fitbox')).catch(() => {});
+}
+async function fitSection(d, root) {
+  const c = await get(`/devices/${d.id}/fit-check`), fit = h('select', { 'aria-label': 'Darstellung' }, h('option', { value: 'contain', selected: c.fit === 'contain' }, 'Einpassen (ganzes Bild, evtl. schwarze Ränder)'), h('option', { value: 'cover', selected: c.fit === 'cover' }, 'Füllen (Bild füllt alles, Rand wird abgeschnitten)')), safe = h('input', { type: 'number', min: 0, max: 10, value: c.safe, 'aria-label': 'Sicherheitsrand in Prozent' });
+  const warn = h('div', {}), prev = h('div', {}); const media = await get('/media'); const imgs = media.filter((m) => m.kind === 'image').slice(0, 6);
+  const draw = () => { warn.replaceChildren(c.text ? h('p', { class: 'notice' }, c.text) : null, ...c.warnings.slice(0, 5).map((w) => h('p', { class: 'hint warnline' }, `▲ „${w.name}“: ${w.text}`)));
+    prev.replaceChildren(h('p', { class: 'hint' }, c.portrait ? 'So sieht es auf Hochkant aus:' : 'Vorschau:'), h('div', { class: 'row' }, imgs.map((m) => h('img', { alt: `Vorschau ${m.name}`, style: 'height:140px;border:1px solid #888', src: `/api/v1/media/${m.id}/preview?deviceId=${d.id}&fit=${fit.value}&safe=${safe.value || 0}` })))); };
+  fit.onchange = safe.onchange = draw; draw();
+  root.replaceChildren(h('p', {}, h('b', {}, c.portrait ? 'Dieser Bildschirm steht hochkant.' : 'Dieser Bildschirm steht quer.')), field('Darstellung', fit), field('Sicherheitsrand gegen abgeschnittene Ränder (Overscan), Prozent', safe, 'Hält Inhalte vom Rand fern, wenn der Fernseher den Rand beschneidet.'), warn, prev,
+    h('button', { class: 'btn', type: 'button', onclick: async () => { try { await put(`/devices/${d.id}/fit`, { fit: fit.value, safe: Number(safe.value) || 0 }); toast('Darstellung gespeichert.'); const n = await get(`/devices/${d.id}/fit-check`); c.warnings = n.warnings; c.text = n.text; draw(); } catch (e) { toast(e.message, 'err'); } } }, 'Darstellung speichern'));
 }
 function groupDlg(route) {
   const n = h('input', { maxlength: 60 }), l = h('input', { maxlength: 100 }), c = h('input', { type: 'color', value: '#c8102e' });

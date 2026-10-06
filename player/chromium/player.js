@@ -11,6 +11,7 @@ async function refresh() {
   [plan, manifest, health] = await Promise.all([j('/plan.json'), j('/manifest.json'), j('/health')]);
   document.body.classList.toggle('black', !!health.displayOff || (resolvePlaylist(plan, Date.now()).off === true));
   if (typeof applyLayout === 'function') applyLayout();
+  const fit = plan?.fit ?? { fit: 'contain', safe: 0 }; stage.style.setProperty('--fit', fit.fit === 'cover' ? 'cover' : 'contain'); stage.style.setProperty('--safe', (fit.safe ?? 0) + '%'); // Hochkant/Seitenverhältnis, Sicherheitsrand gegen Overscan
   const deg = health.orientation ?? 0; stage.className = deg ? 'r' + deg : ''; stage.style.setProperty('--rot', deg + 'deg');
 }
 function el(tag, cls, ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }

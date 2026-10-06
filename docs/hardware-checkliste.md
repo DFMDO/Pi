@@ -61,3 +61,19 @@ Je Modell 10 Minuten Testvideo (`tools/diagnose.sh --testvideo`), Werte eintrage
 
 ## E. Phasen-Messwerte auf dem schwächsten Gerät (Zero 2 W)
 RAM, CPU, WLAN-Durchsatz, Startzeit nach jeder größeren Änderung mit `tools/diagnose.sh` erfassen und in `docs/messwerte.md` eintragen.
+
+## Erweiterung (Version 0.2) – zusätzliche Abnahme auf Hardware
+| # | Prüfung | Soll | Pi 3 | Zero 2 W | Pi 4 | Pi 5 |
+|---|---|---|---|---|---|---|
+| E1 | Live-Ansicht Einzelansicht offen, Videotest 15 min | keine zusätzlichen verlorenen Bilder gegenüber ohne Live-Ansicht (Messung mit `mpv`/Diagnose) | ☐ | ☐ (Stufe 1) | ☐ | ☐ |
+| E2 | Hub (Pi 4): 10 Kacheln offen, `top` über 10 min | < 25 % CPU im Mittel, Seite öffnet < 3 s | – | – | ☐ | ☐ |
+| E3 | Zonen-Layout (Laufband + Uhr) 30 min mit Video | RAM-Budget des Profils nicht überschritten (`free -m`), Bilder flüssig | ☐ | n. v. | ☐ | ☐ |
+| E4 | Inbetriebnahme-Test durchlaufen; absichtlich schwaches Netzteil / falsche Uhrzeit / blockierter Hub | Fehler werden erkannt, Hinweise verständlich | ☐ | ☐ | ☐ | ☐ |
+| E5 | Aufstellmodus: Signal ändert sich in < 3 s sichtbar, Video ohne Aussetzer | ✔ | ☐ | ☐ | ☐ | ☐ |
+| E6 | Fern-Ausrichtung ohne Bestätigung | nach 60 s alte Ausrichtung | ☐ | ☐ | ☐ | ☐ |
+| E7 | WLAN ändern mit falschem Passwort | Bildschirm bleibt im alten WLAN, Hinweis im Hub | ☐ | ☐ | ☐ | ☐ |
+| E8 | GPIO-3-Taster 3 s | Einrichtungsmodus, Inhalte bleiben | ☐ | ☐ | ☐ | ☐ |
+| E9 | 5× kurz Strom aus/ein | Einrichtungsmodus | ☐ | ☐ | ☐ | ☐ |
+| E10 | QR-Code (WLAN + Adresse) mit iPhone/Android aus 2 m scannen | wird gelesen | ☐ | ☐ | ☐ | ☐ |
+| E11 | Nächtlicher Neustart 03:30 | Bildschirm nach < 2 min wieder da | ☐ | ☐ | ☐ | ☐ |
+| E12 | iOS Safari / Android Chrome: Live, Startseite, Kalender | Schrift ≥ 16 px, nichts läuft über | ☐ | – | – | – |

@@ -129,3 +129,44 @@ test('Oberfläche responsiv: iPad hochkant und Handy – kein horizontales Scrol
   }
   await browser.close(); await h.cleanup();
 });
+
+test('Zusatzseiten (Live mit 10 Bildschirmen, Betrieb, Szenen, Vorlage, QR, Wandmodus): schnell, ≥16 px, ≥44 px, keine externen Anfragen, Handy ohne Querscrollen', { skip, timeout: 180000 }, async () => {
+  const h = await makeHub({ useTls: true }); await h.app.listen({ port: 0, host: '127.0.0.1' }); const base = `https://127.0.0.1:${h.app.server.address().port}`;
+  h.db.prepare("INSERT OR REPLACE INTO settings VALUES('wizard.done','true')").run();
+  for (let i = 0; i < 10; i++) h.db.prepare("INSERT INTO devices(id,name,profile,status,last_seen,model,created_at) VALUES(?,?,?,'active',?,?,?)").run(randomUUID(), `Bildschirm ${i + 1}`, 'standard', Date.now(), 'Raspberry Pi 4', Date.now());
+  const browser = await chromium.launch({ executablePath: EXE, args: ARGS }); const ctx = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1280, height: 900 } }); const page = await ctx.newPage(); const w = watch(page);
+  await page.goto(base); await page.getByLabel('Benutzername').fill('admin'); await page.getByLabel('Passwort').fill(PW); await page.getByRole('button', { name: 'Anmelden' }).click(); await page.getByRole('heading', { name: 'Startseite' }).waitFor();
+  assert.ok(await page.getByText('Schnellaktionen').count(), 'Schnellaktionen auf der Startseite');
+  const t0 = Date.now(); await page.getByRole('link', { name: /Live/ }).click(); await page.getByRole('heading', { name: 'Live' }).waitFor(); await page.locator('.livetile').nth(9).waitFor(); const ms = Date.now() - t0;
+  assert.equal(await page.locator('.livetile').count(), 10); assert.ok(ms < 3000, `Kachelansicht mit 10 Bildschirmen in ${ms} ms (< 3000)`); console.log(`# Live-Kachelansicht (10 Bildschirme) in ${ms} ms`);
+  await page.locator('.livetile').first().click(); await page.getByRole('dialog').getByText('Herkunft').waitFor(); await page.keyboard.press('Escape');
+  const small = await page.$$eval('button, a.btn, select', (els) => els.filter((e) => { const r = e.getBoundingClientRect(); return r.width && r.height && r.height < 43.5 && !e.closest('dialog:not([open])'); }).map((e) => e.textContent.slice(0, 30)));
+  assert.deepEqual(small, [], 'Klickflächen auf der Live-Seite mindestens 44 px hoch');
+  for (const [link, head] of [[/Betrieb/, 'Betrieb'], [/Szenen/, 'Szenen']]) { await page.getByRole('link', { name: link }).click(); await page.getByRole('heading', { name: head, exact: true }).waitFor(); }
+  await page.getByRole('link', { name: /Bilder & Videos/ }).click(); await page.getByRole('button', { name: /Vorlage verwenden/ }).click(); await page.getByRole('dialog').getByText('Lesbarkeit in Ordnung').waitFor(); await page.getByRole('button', { name: 'Abbrechen' }).click();
+  await page.getByRole('button', { name: /QR-Code erstellen/ }).click(); await page.getByLabel('Adresse (http/https)').fill('javascript:alert(1)'); await page.getByRole('dialog').getByText('Nur Adressen mit http').waitFor();
+  await page.getByLabel('Adresse (http/https)').fill('https://dfm.example/tickets'); await page.getByRole('dialog').getByText('Gegenprobe bestanden').waitFor(); await page.keyboard.press('Escape');
+  // Wandmodus: Token, keine Anmeldung nötig
+  const tk = (await (await ctx.request.post(`${base}/api/v1/live-tokens`, { data: { name: 'Technikraum' }, headers: { 'x-csrf-token': await page.evaluate(() => fetch('/api/v1/auth/me').then((r) => r.json()).then((x) => x.csrf)) } })).json()).token; assert.ok(tk);
+  const wall = await (await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1280, height: 720 } })).newPage(); const w2 = watch(wall); await wall.goto(`${base}/#/wand`); await wall.getByLabel('Zugangs-Token').fill(tk); await wall.getByRole('button', { name: 'Öffnen' }).click(); await wall.locator('.livetile').nth(9).waitFor();
+  assert.equal(await wall.getByRole('link', { name: 'Benutzer' }).count(), 0, 'Wandmodus ohne Navigation');
+  // Handy
+  const ph = await (await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 390, height: 844 }, isMobile: true })).newPage(); const w3 = watch(ph); await ph.goto(base); await ph.getByLabel('Benutzername').fill('admin'); await ph.getByLabel('Passwort').fill(PW); await ph.getByRole('button', { name: 'Anmelden' }).click(); await ph.getByRole('heading', { name: 'Startseite' }).waitFor();
+  await ph.goto(`${base}/#/live`); await ph.locator('.livetile').first().waitFor(); assert.equal(await ph.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true, 'Handy: kein horizontales Scrollen');
+  const fs = await ph.$$eval('.livetile .now, .livetile b', (els) => Math.min(...els.map((e) => parseFloat(getComputedStyle(e).fontSize)))); assert.ok(fs >= 16, `Schrift ≥ 16 px (ist ${fs})`);
+  assert.deepEqual([...w.bad, ...w2.bad, ...w3.bad], [], 'keine externen Anfragen'); assert.deepEqual([...w.errors, ...w2.errors, ...w3.errors], [], 'keine Konsolenfehler');
+  await browser.close(); await h.cleanup();
+});
+
+test('Playerseite: Erkennen, Testbild, Laufband, Uhr – und „aus“ am Schließtag (schwarz)', { skip, timeout: 120000 }, async () => {
+  const h = await makeHub({ useTls: true }); const { createLocalServer } = await import('../player/agent/lib/localserver.js');
+  const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  let plan = { segments: [], playlists: {}, defaultPlaylistId: null, tickers: [{ text: 'Heute Familientag im Museum' }], layout: { preset: 'ticker-clock' }, specialDays: [] };
+  const srv = createLocalServer({ getPlan: () => plan, getManifest: () => ({ items: [] }), getHealth: () => ({ cached: [] }), mediaDir: tmpdir(), port: 0 }); const port = await srv.listen();
+  const browser = await chromium.launch({ executablePath: EXE, args: ARGS }); const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage(); const w = watch(page);
+  await page.goto(`http://127.0.0.1:${port}/player/`); await page.locator('.ticker span').waitFor(); assert.match(await page.locator('.ticker').innerText(), /Familientag/); assert.ok(await page.locator('.clock b').innerText());
+  srv.emit('identify', { name: 'Shop-Screen', location: 'Shop · EG', number: 'A1B2', seconds: 10 }); await page.locator('.ident h1').waitFor(); assert.equal(await page.locator('.ident h1').innerText(), 'Shop-Screen'); assert.equal(await page.locator('.ident .num').innerText(), 'A1B2');
+  srv.emit('testpattern', { on: true }); await page.locator('.pattern .arrow').waitFor(); assert.match(await page.locator('.pattern .res').innerText(), /1280 × 720/); srv.emit('testpattern', { on: false }); await page.locator('#overlay').waitFor({ state: 'hidden' });
+  plan = { ...plan, specialDays: [{ from: day, to: day, rule: 'off', playlistId: null, name: 'Geschlossen' }] }; srv.emit('plan'); await page.waitForFunction(() => document.body.classList.contains('black'), null, { timeout: 8000 });
+  assert.deepEqual(w.bad, []); assert.deepEqual(w.errors, []); await browser.close(); await srv.close(); await h.cleanup();
+});

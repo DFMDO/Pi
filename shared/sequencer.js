@@ -42,6 +42,7 @@ export function playableItems(plan, playlistId, manifest, { profile = 'standard'
     if (it.validFrom && today < it.validFrom) continue;
     if (it.validTo && today > it.validTo) continue;
     if (!m) { skipped.push({ mediaId: it.mediaId, reason: 'nicht im Manifest' }); continue; }
+    if (m.validUntil && today > m.validUntil) { skipped.push({ mediaId: it.mediaId, reason: 'Lizenz abgelaufen' }); continue; } // Ablaufdatum gilt auch offline
     if (m.pending) { skipped.push({ mediaId: it.mediaId, reason: 'wird noch vorbereitet' }); continue; }
     const kind = m.kind === 'text' && !m.text ? 'text-image' : m.kind; // Lite: Text kommt als Bild
     if (!RENDERABLE[profile]?.has(kind)) { skipped.push({ mediaId: it.mediaId, reason: 'für dieses Gerät nicht darstellbar' }); continue; }

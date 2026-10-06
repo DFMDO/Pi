@@ -8,6 +8,7 @@ import { deviceWarnings, signalQuality } from './health.js';
 import { deviceStatus } from './devices.js';
 import { can } from './permissions.js';
 
+const since = (ms) => { const m = Math.max(1, Math.round(ms / 60000)); return m < 120 ? `${m} Minuten` : m < 2880 ? `${Math.round(m / 60)} Stunden` : `${Math.round(m / 1440)} Tagen`; };
 const hhmm = (ms) => new Date(ms).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
 const csvCell = (v) => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[;"\n]/.test(s) ? '"' + s.replaceAll('"', '""') + '"' : s; };
 
@@ -102,6 +103,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
   });
 
   // ======================= Live-Ansicht (Z.1) =======================
+  const refreshAt = new Map();
   /** Herkunft des gerade Laufenden in Klartext */
   function origin(plan, r) {
     if (r.source === 'uebersteuerung') { const o = r.override; return o.label ? `Szene „${o.label}“ von ${o.by}, bis ${hhmm(o.until)} Uhr` : o.scope === 'all' ? `Schnellaktion für alle Bildschirme von ${o.by}, bis ${hhmm(o.until)} Uhr` : `Schnellaktion von ${o.by}, bis ${hhmm(o.until)} Uhr`; }
@@ -120,7 +122,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
     const online = status.level === 'ok', held = ['wartung', 'nicht_bereit', 'schliesstag'].includes(r.source);
     const mismatch = online && !held && !!ist?.current && soll.mediaIds.length > 0 && !soll.mediaIds.includes(ist.current.mediaId);
     const nextSeg = plan.segments.find((s) => s.start > t && s.source); const warns = deviceWarnings(d, st, t, { warnDbm: Number(settings()['wifi.warnDbm'] ?? -72) });
-    if (!online && d.last_seen && !d.maintenance_since) warns.unshift({ kind: 'offline', level: 'bad', text: `Offline seit ${Math.max(1, Math.round((t - d.last_seen) / 60000))} Minuten, zeigt den zwischengespeicherten Inhalt.` });
+    if (!online && d.last_seen && !d.maintenance_since) warns.unshift({ kind: 'offline', level: 'bad', text: `Offline seit ${since(t - d.last_seen)}, zeigt den zwischengespeicherten Inhalt.` });
     const cur = ist?.current, endsIn = cur?.since && cur?.duration ? Math.max(0, Math.round((cur.since + cur.duration * 1000 - t) / 1000)) : null;
     const row = { id: d.id, name: d.name, location: [d.floor, d.location].filter(Boolean).join(' · ') || null, groupId: d.group_id, groupName: g?.name ?? null, profile: d.profile, status, lastSeen: d.last_seen, soll, ist, endsInS: endsIn,
       next: nextSeg ? { at: nextSeg.start, atText: hhmm(nextSeg.start), name: plan.playlists?.[nextSeg.source.content.id]?.name ?? 'Inhalt' } : null, mismatch,
@@ -137,6 +139,11 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
   app.get('/api/v1/live/:id', { config: { perm: 'live.read' } }, async (req, reply) => {
     const d = dv().getDevice(req.params.id); if (!d || d.status !== 'active' || !mayDevice(req.user, d)) return reply.code(404).send({ error: 'Diesen Bildschirm gibt es nicht oder du darfst ihn nicht sehen.' });
     dv().viewers.detail.set(d.id, now()); return liveRow(d, now(), true);
+  });
+  app.post('/api/v1/live/:id/refresh', { config: { perm: 'live.read' } }, async (req, reply) => { // „Jetzt aktualisieren“ (höchstens alle 2 s, nicht für Lite/überlastete Geräte)
+    const d = dv().getDevice(req.params.id); if (!d || d.status !== 'active' || !mayDevice(req.user, d)) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
+    if (dv().reduced(d, stOf(d))) return { ok: true, simplified: true, text: 'Vorschau vereinfacht, damit der Bildschirm flüssig bleibt.' };
+    const last = refreshAt.get(d.id) ?? 0; if (now() - last < 2000) return { ok: true, text: 'Gerade erst aktualisiert.' }; refreshAt.set(d.id, now()); dv().sendTo(d.id, 'command', { id: 'auto-' + randomUUID(), command: 'screenshot' }); return { ok: true, text: 'Neues Vorschaubild kommt in wenigen Sekunden.' };
   });
   app.get('/api/v1/live/:id/media', { config: { perm: 'live.read' } }, async (req, reply) => { // Vorschau-Info (Stufe 1)
     const d = dv().getDevice(req.params.id); if (!d || !mayDevice(req.user, d)) return reply.code(404).send({ error: 'Nicht gefunden.' });

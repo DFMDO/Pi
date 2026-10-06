@@ -140,3 +140,13 @@ Hub auf Pi 3/Zero 2 W: Warnung in der Einrichtung; Richtwert höchstens ~5 Playe
 
 ## 12. Datenmodell
 Tabellen: `users, sessions, roles, permissions, devices, device_groups, media, media_variants, playlists, playlist_items, schedules, settings, audit_log, pairing_codes, commands, trash, setup_state` (`hub/migrations/001_init.sql`). Termine speichern **lokale Zeit + Regel** (`startLocal`, `endLocal`, RRULE-Teilmenge DAILY/WEEKLY/MONTHLY mit INTERVAL/BYDAY/UNTIL/COUNT, `exdates`, Priorität 1–10, Gültig-von/bis).
+
+## Erweiterung (Version 0.2)
+- **Migrationen** `003_erweiterung.sql` (Rollen, Entwurf/Veröffentlicht, Versionen) und `004_erweiterung2.sql` (Geräteprofil, Szenen, Übersteuerungen, Sondertage, Vorlagen, Prüfprotokolle, WLAN-/Ereignisverlauf, Lese-Token).
+- **Auflösung im Player** (`shared/sequencer.js`): Halt → Übersteuerung → Termin → Sondertag → Standard → Standby. Der 14-Tage-Plan enthält `overrides`, `specialDays`, `hold`, `tickers`, `layout`; abgelaufene Übersteuerungen ignoriert der Player selbst (offline-fähig).
+- **Live:** `status`-Nachricht des Players (Chromium-Seite → `POST /status` auf 127.0.0.1 → WSS). Screenshots nur bei Betrachtern (`devices.js: screenshotTick`), JPEG ~640 px im RAM. Lite und überlastete Geräte (Temperatur > 78 °C, < 100 MB RAM frei) bleiben bei Stufe 1.
+- **Wartungsdienste:** `dfm-netwatch` (Netzwächter + GPIO-Taster, `DFM_BUTTON_GPIO`, Standard 3, per `pinctrl`), `dfm-powercounter-reset` (nach 120 s Laufzeit; 5 kurze Starts in Folge = Einrichtungsmodus), nächtlicher Neustart durch den Agent (`maintenance.rebootAt`).
+- **WLAN-Wechsel:** privd-Aktion `wifi-switch` → `/usr/lib/dfm/launch wifi-switch` → `setup/wifi-switch-main.js`; Ergebnis in `/data/state/wifi-switch-result.json` (wird im Heartbeat gemeldet).
+- **Import:** `DFM_IMPORT_ROOTS` (Standard `/media:/mnt:/data/import`). USB-Sticks/Freigaben muss die IT einbinden (z. B. `/etc/fstab` mit `nofail,ro,nosuid,nodev,noexec`).
+- **Datenpflege:** täglich (`extras2.js: retentionTick`), manuell über *Erweitert → Alte Daten jetzt aufräumen*.
+- **Feiertage** werden aus der Osterformel berechnet (4 Jahre voraus, ohne Datendatei); eigene Regeln/Tage in `special_days`.

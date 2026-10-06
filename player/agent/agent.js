@@ -115,7 +115,7 @@ export class Agent {
   }
   async sendHeartbeat() {
     this.nightlyReboot(); const np = this.nowPlayingInfo();
-    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, reconnects: this.reconnects ?? 0, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
+    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, wifiSwitch: readJson(join(this.dataDir, 'state', 'wifi-switch-result.json')), reconnects: this.reconnects ?? 0, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
   }
   /** Aufstellmodus (Z.15): alle 2 s Signal melden, höchstens 15 Minuten */
   startSignalWatch(seconds) {
@@ -211,8 +211,9 @@ export class Agent {
         return done(true, { revertInS: args.seconds ?? 60 });
       }
       if (command === 'rotate') { this.cfg.orientation = args.degrees; writeJson(this.cfgFile, this.cfg); privRequest(this.privdDir, 'display-rotate', { degrees: args.degrees }); this.server.emit('reload'); this.renderer?.restart?.(); return done(true); }
-      if (command === 'wifi_change') { done(true); privRequest(this.privdDir, 'wifi-connect', { ssid: args.ssid, password: args.password }); return; }
+      if (command === 'wifi_change') { done(true); privRequest(this.privdDir, 'wifi-switch', { ssid: args.ssid, password: args.password }); return; }
       if (command === 'factory_reset') { done(true); privRequest(this.privdDir, 'factory-reset'); return; }
+      if (command === 'rollback') { if (!rollback(join(this.dataDir, 'app'))) return done(false, null, 'Es gibt keine vorherige Version.'); done(true); privRequest(this.privdDir, 'restart-agent'); return; }
       if (command === 'update') return done(...(await this.runUpdate()));
       if (command === 'diagnose') return done(true, await this.runDiagnose(args));
       done(false, null, 'Unbekannter Befehl');

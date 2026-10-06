@@ -264,6 +264,10 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     }
   }
 
+  /** Befehl für ein Gerät einreihen und zustellen (auch für interne Abläufe wie gestaffelte Updates) */
+  const queueCommand = (deviceId, command, args = {}) => { const id = randomUUID(); db.prepare('INSERT INTO commands(id,device_id,type,args_json,created_at) VALUES(?,?,?,?,?)').run(id, deviceId, command, JSON.stringify(args), now()); deliverQueued(deviceId); return id; };
+  app.devices.queueCommand = queueCommand;
+
   // ---------- WebSocket (ein Socket je Player) ----------
   app.get('/api/v1/ws', { ...dev, websocket: true }, (socket, req) => {
     const d = req.device; let alive = true;
@@ -280,7 +284,8 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
         db.prepare('UPDATE devices SET model=COALESCE(?,model), hw_json=COALESCE(?,hw_json) WHERE id=?').run(m.model ?? null, m.hw ? JSON.stringify(m.hw) : null, d.id);
         pushPlan(getDevice(d.id)); deliverQueued(d.id);
       } else if (m.type === 'heartbeat') {
-        db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify(m.state).slice(0, 20000), d.id);
+        let keep = {}; if (m.state.playerStatus === undefined) { try { keep = { playerStatus: JSON.parse(getDevice(d.id).state_json ?? '{}').playerStatus }; } catch {} } // „Ist“ aus der letzten status-Meldung bleibt erhalten
+        db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...keep, ...m.state }).slice(0, 20000), d.id);
       } else if (m.type === 'status') {
         let st = {}; try { st = JSON.parse(getDevice(d.id).state_json ?? '{}'); } catch {}
         db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...st, playerStatus: { current: m.current, next: m.next ?? null, source: m.source ?? null, scheduleId: m.scheduleId ?? null, ts: now() } }).slice(0, 20000), d.id);

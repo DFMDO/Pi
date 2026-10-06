@@ -13,6 +13,7 @@ import devicesPlugin from './lib/devices.js';
 import contentPlugin from './lib/content.js';
 import extrasPlugin from './lib/extras.js';
 import extras2Plugin from './lib/extras2.js';
+import extras3Plugin from './lib/extras3.js';
 import systemPlugin from './lib/system.js';
 import { createVariantQueue } from './lib/variants.js';
 import { createLimiter } from './lib/ratelimit.js';
@@ -63,6 +64,7 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   await app.register(contentPlugin, { db, audit, mediaDir, variants, now });
   await app.register(extrasPlugin, { db, audit, now });
   await app.register(extras2Plugin, { db, audit, mediaDir, dataDir, variants, now });
+  await app.register(extras3Plugin, { db, audit, mediaDir, now });
   await app.register(systemPlugin, { db, audit, dataDir, mediaDir, tls, updateKeyPem, appDir: appDir ?? join(dataDir, 'app'), baseDir, onRestart });
 
   // ---------- Ersteinrichtung des Hubs ----------

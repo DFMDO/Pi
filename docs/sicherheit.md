@@ -48,3 +48,16 @@ TLS-Schlüssel, Hub-Master-Schlüssel, Geräte-ID, Hostname, machine-id, Hotspot
 - Das **Löschen der Konfigurationsdatei** auf der FAT-Boot-Partition ist wegen Wear-Leveling der SD-Karte nicht forensisch sicher (Datei wird überschrieben und gelöscht). Deshalb: Einmalcode läuft nach 10 Minuten ab; für das WLAN ein eigenes Signage-Netz ohne Internet verwenden.
 - Die Startkarte (QR) enthält – wenn so gewählt – das WLAN-Passwort im Klartext; Karte nach Gebrauch vernichten.
 - Zeit: Der Hub hat keine Batterieuhr. Ohne richtige Zeit starten Termine zur falschen Stunde. Die Oberfläche warnt und bietet „Uhr mit diesem Computer abgleichen“ an; ein IT-NTP-Server oder ein Pi 5 mit RTC-Batterie ist besser.
+
+## Erweiterung (Version 0.2)
+- **Rolle „Anzeige“** darf ausschließlich `live.read` (Test über jede API-Route). Konten lassen sich auf Bildschirmgruppen einschränken; fremde Gruppen liefern 404 (kein Hinweis auf Existenz).
+- **Letzter Admin:** Löschen und Herabstufen des letzten Admins wird mit 409 verweigert. Passwort-Reset durch Admin oder mit einmaligem Wiederherstellungscode (Rate-Limit, Sitzungen werden beendet, Audit „Sicherheit“).
+- **Wandmodus:** Lese-Token (nur Hash gespeichert, nur `GET`-Routen mit `live.read`, Widerruf sofort). Cookie `__Host-` mit `HttpOnly; Secure; SameSite=Strict`.
+- **Live-Screenshots:** nur im Arbeitsspeicher, nur für angemeldete Nutzer, Übertragung per WSS mit Pinning; Aufrufe nicht protokolliert, Aktionen schon.
+- **Übersteuerungen/Schnellaktionen** brauchen eigene Bestätigung (alle Bildschirme), sind begrenzt (höchstens 24 h) und im Audit-Log.
+- **QR-Codes:** nur `http(s)`, WLAN, Kontakt, Text. `javascript:`, `data:`, `file:`, `vbscript:` u. a. werden abgelehnt; WLAN-/Kontakt-Felder werden maskiert. Admins können erlaubte Adressen für Redakteure einschränken. Die Erzeugung ist lokal (gebündelte Bibliothek), mit Gegenprobe durch Dekodieren.
+- **Massenimport:** nur Ordner unter `/media`, `/mnt` und `/data/import` (realpath-geprüft, keine Symlinks, Pfade aus der Vorschau werden beim Übernehmen erneut gegen den Wurzelordner geprüft); Dateityp per Magic-Bytes; nichts ohne bestätigte Vorschau.
+- **Datenaufbewahrung:** automatische Löschung; das Audit-Log wird nur durch eine Wartungsfunktion mit mindestens 30 Tagen Aufbewahrung gekürzt (Ankerhash), sonst bleiben Trigger gegen Ändern/Löschen aktiv.
+- **WLAN-Wechsel:** getestet, mit Rückfall; Passwort nur kurz in der privd-Anfrage (Datei mit `0600`, wird nach Ausführung überschrieben und gelöscht).
+- Datenschutz: [`datenschutz.md`](datenschutz.md).
+- **Teil E:** Gestaffelte Updates verlangen `update.manage` (Admin), jeder Start und jeder Rückfall steht im Audit-Log (Sicherheitsereignis); der Rückfall nutzt die bestehende signierte Update-Struktur (`previous`-Link). Der Simulator-Player nutzt denselben Pairing-/Pinning-Weg wie echte Player – es gibt keinen Sonderzugang.

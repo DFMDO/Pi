@@ -50,12 +50,12 @@ test('Sync-Zeitfenster', async () => {
 
 test('privd: nur erlaubte Aktionen, Argumente streng geprüft, keine Shell', async () => {
   assert.throws(() => plan({ action: 'rm', args: {} }), /nicht erlaubt/);
-  assert.throws(() => plan({ action: 'wifi-connect', args: { ssid: 'x'.repeat(33), password: '12345678' } }));
-  assert.throws(() => plan({ action: 'wifi-connect', args: { ssid: 'ok', password: 'kurz' } }));
+  assert.throws(() => plan({ action: 'wifi-switch', args: { ssid: 'x'.repeat(33), password: '12345678' } }));
+  assert.throws(() => plan({ action: 'wifi-switch', args: { ssid: 'ok', password: 'kurz' } }));
   assert.throws(() => plan({ action: 'display-rotate', args: { degrees: 45 } }));
   const inj = '"; reboot; echo "';
-  const cmds = plan({ action: 'wifi-connect', args: { ssid: inj, password: 'abcdefgh' } }); const [cmd, ...args] = cmds[1];
-  assert.equal(cmd, 'nmcli'); assert.ok(args.includes(inj), 'SSID bleibt EIN Argument'); assert.equal(args.filter((a) => a === inj).length, 1);
+  const cmds = plan({ action: 'wifi-switch', args: { ssid: inj, password: 'abcdefgh' } }); const [cmd, ...args] = cmds[0];
+  assert.equal(cmd, '/usr/lib/dfm/launch'); assert.ok(args.includes(inj), 'SSID bleibt EIN Argument'); assert.equal(args.filter((a) => a === inj).length, 1);
   const dir = tmp(), ran = []; privReq(dir, 'reboot'); privReq(dir, 'hack'); writeFileSync(join(dir, 'x.req'), '{kaputt');
   await processDir(dir, async (c, a) => ran.push([c, ...a]), () => {});
   assert.deepEqual(ran, [['systemctl', 'reboot']]); assert.equal(readdirSync(dir).filter((f) => f.endsWith('.req')).length, 0);

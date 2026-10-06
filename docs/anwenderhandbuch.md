@@ -138,8 +138,8 @@ Im **Kalender** (Tag / Woche / Monat) klickst du ein Feld an oder ziehst über e
 | Ein Video ist zu schwer für einen schwachen Bildschirm | Das Element wird übersprungen | Hinweis in der Oberfläche |
 
 ## 10. WLAN ändern, Gerät zurücksetzen
-- **Im Hub:** Bildschirme → *Weitere Aktionen* → **WLAN ändern**.
-- **Am Gerät ohne Tastatur:** Lege auf der SD-Karte eine **leere Datei `dfm-reset-wifi`** ab *oder* schalte das Gerät **5× nacheinander aus und wieder ein** (jeweils nach höchstens 30 Sekunden). Danach startet der Einrichtungsmodus „Nur WLAN ändern“ – Rolle und Daten bleiben erhalten.
+- **Im Hub:** Bildschirme → *Weitere Aktionen* → **WLAN ändern**. Das neue WLAN wird erst übernommen, wenn die Verbindung getestet wurde. Klappt es nicht, bleibt der Bildschirm im alten WLAN, und du bekommst einen Hinweis in „Betrieb“.
+- **Am Gerät ohne Tastatur:** Lege auf der SD-Karte eine **leere Datei `dfm-reset-wifi`** ab *oder* schalte das Gerät **5× kurz hintereinander aus und wieder ein** (jeweils bevor der Bildschirm 2 Minuten lief) *oder* einen **Taster am GPIO 3 für 3 Sekunden** halten. Alle drei Wege starten nur den Einrichtungsmodus und löschen keine Inhalte. Danach startet der Einrichtungsmodus „Nur WLAN ändern“ – Rolle und Daten bleiben erhalten.
 - **Werksreset:** Bildschirme → *Auf Werkseinstellungen zurücksetzen* (löscht alle Daten des Geräts, danach muss es neu eingerichtet werden).
 
 ## 11. Hilfe in der Oberfläche
@@ -148,7 +148,7 @@ Im **Kalender** (Tag / Woche / Monat) klickst du ein Feld an oder ziehst über e
 ![Hilfe](bilder/10-hilfe.png)
 
 ## 12. Für Admins
-- **Benutzer & Rollen:** Admin (alles), Redakteur (Inhalte und Termine), Betrachter (nur ansehen). Passwort mindestens 12 Zeichen; optional zusätzliche Sicherheit mit Code aus einer App.
+- **Benutzer & Rollen:** Admin (alles), Redakteur (Inhalte, Termine, Schnellaktionen), Anzeige (nur die Live-Ansicht – für Kasse, Info, Aufsicht). Der letzte Admin kann nicht gelöscht oder herabgestuft werden. Passwort vergessen? Ein Admin setzt es zurück (Benutzer → Passwort zurücksetzen) oder du nutzt einen Wiederherstellungscode. Passwort mindestens 12 Zeichen; optional zusätzliche Sicherheit mit Code aus einer App.
 - **Protokoll:** Wer hat wann was getan (nicht veränderbar), Sicherheitsereignisse getrennt filterbar, Export als CSV.
 - **Erweitert:** Backup (Passphrase gut aufbewahren – sie wird nirgends gespeichert!), Updates (nur signierte Dateien), Diagnose, Zeitfenster für den Medien-Abgleich.
   ![Erweitert](bilder/11-erweitert.png)
@@ -164,3 +164,85 @@ Im **Kalender** (Tag / Woche / Monat) klickst du ein Feld an oder ziehst über e
 | Bildschirm zeigt „Einen Moment bitte“ | Die Uhr ist noch nicht gestellt. Im Hub „Uhr abgleichen“ klicken. |
 | Bildschirm läuft nicht mehr | Strom und WLAN prüfen; im Hub „Mit dem Hub neu verbinden“ oder „Neu starten“. |
 | Alles schiefgegangen | Bildschirm auf Werkseinstellungen zurücksetzen und neu einrichten; Inhalte liegen im Hub. |
+
+
+---
+
+# Zusatzfunktionen
+
+## 14. Live: Was läuft gerade?
+Im Menü **Live** siehst du alle Bildschirme als Kacheln (1 bis 4 Spalten, auf dem Handy eine). Jede Kachel zeigt Name, Ort, Ampel, das aktuelle Bild, den Namen des Inhalts, „läuft noch 0:23 Min“ und „als Nächstes: … um … Uhr“.
+- **Klick auf die Kachel** öffnet die Einzelansicht: großes Bild, **Herkunft** („Termin …“, „Standard-Abspielliste“, „Schnellaktion von Max, bis 15:30“), die nächsten 5 Elemente und Schnellaktionen für genau diesen Bildschirm. Dort gibt es auch **Erkennen**, **Neu laden**, **Testbild** und **Wartungsmodus**.
+- **Lesezeichen:** `https://dfm-signage.local/#/live/<Bildschirm>` öffnet direkt einen Bildschirm.
+- **Vorschau-Stufen:** Immer sichtbar ist der *Status* (was läuft, wie lange noch). Ein echtes Bild (klein, alle 30 s bzw. 5 s in der Einzelansicht) gibt es nur, solange jemand zuschaut – 60 Sekunden nach dem Schließen hört das auf. Bei schwachen Geräten (Lite), hoher Temperatur oder knappem Speicher bleibt es beim Status („Vorschau vereinfacht, damit der Bildschirm flüssig bleibt“). Bilder liegen nur im Arbeitsspeicher des Hubs; es gibt keine Aufzeichnung. Nur Admins können bewusst ein Bild speichern.
+- **Warnhinweise** stehen in Klartext an der Kachel („Offline seit 12 Minuten, zeigt den zwischengespeicherten Inhalt“, „Laut Plan sollte jetzt ‚Eröffnung‘ laufen, der Bildschirm zeigt aber ‚Standard‘“). Offline-Bildschirme erscheinen grau mit „zuletzt gesehen vor …“.
+- **Wandmodus** (Monitor im Technikraum): Admins erzeugen unter *Benutzer → Wandmodus* ein Zugangs-Token, das nur die Live-Ansicht erlaubt. Auf dem Monitor `https://dfm-signage.local/#/wand` öffnen, Token einmal eingeben – die Ansicht bleibt dauerhaft offen.
+- **Rolle „Anzeige“:** Nur-Lesen-Zugang für Personal. Pro Konto lassen sich die sichtbaren Bildschirmgruppen einschränken (Benutzer → Rolle ändern).
+
+![Live-Ansicht](bilder/12-live.png)
+
+## 15. Schnellaktionen und Szenen
+Auf der **Startseite**: *Jetzt auf allen Bildschirmen zeigen* oder *Auf einem Bildschirm zeigen* – für 30 Minuten, 1 oder 2 Stunden oder bis Tagesende. Danach springt der Bildschirm automatisch zum normalen Plan zurück. „Alle Bildschirme“ übersteuert alle Termine und Szenen und fragt vorher nach.
+- **Szenen** (Menü *Szenen*) legen für mehrere Bildschirme oder Gruppen fest, was läuft – z. B. „Eröffnung“, „Schulklassen-Tag“. Starten und beenden mit einem Klick.
+- Jede Übersteuerung steht mit Ablaufzeit auf der Startseite und im Live-Bereich, im Protokoll (wer, wann, bis wann) und hat den Knopf **Zurück zum normalen Plan**.
+- Übersteuerungen wirken auch bei Bildschirmen, die den Hub gerade nicht erreichen, sobald sie wieder verbunden sind – solange die Zeit nicht abgelaufen ist.
+- Schnellaktionen sind sofortige Handlungen und laufen **nicht** über den Entwurfsmodus.
+
+## 16. Entwurf und Veröffentlichen
+Neue Termine, Abspiellisten und Szenen starten als **Entwurf**. Entwürfe siehst du im Kalender gestrichelt und mit **✎** (nie nur über die Farbe); sie laufen aber **nie** auf einem Bildschirm und erscheinen nicht in der Live-Ansicht.
+- **Veröffentlichen** zeigt eine Zusammenfassung („Ab sofort zeigt ‚Shop-Screen‘ am Samstag von 10:00 bis 12:00 Uhr ‚Sommer-Aktion‘.“) und prüft Konflikte und fehlende Medien.
+- Änderungen an etwas Veröffentlichtem entstehen als **Entwurfsversion**. Die veröffentlichte Fassung läuft weiter, bis du die neue veröffentlichst – oder den Entwurf verwirfst.
+- Startseite: „3 Entwürfe warten auf Veröffentlichung“. Entwürfe älter als 30 Tage werden angemahnt, nicht gelöscht.
+- **Frühere Stände** (90 Tage) lassen sich im Termin über „Frühere Stände“ als Entwurf wiederherstellen.
+- Admins können unter *Erweitert* festlegen, dass Redakteure nur Entwürfe anlegen dürfen.
+- **Duplizieren:** *Kalender → Woche kopieren / Vorlage* kopiert eine ganze Woche in eine andere und speichert **Wochenvorlagen** – immer zunächst als Entwürfe.
+
+## 17. Betrieb: Gesundheit, Wartung, Empfang
+Menü **Betrieb**:
+- **Gesundheit:** Netzteil zu schwach, Temperatur, SD-Karte, freier Speicher, WLAN – jeweils als Satz in Klartext („Netzteil zu schwach bei ‚Foyer‘. Bitte das Original-Netzteil verwenden“).
+- **Profil & Verlauf:** Standort, Etage, Seriennummer, Einbaudatum, Notizen, Link zur Anleitung; Verfügbarkeit (30 Tage) und Ausfallliste.
+- **Wartungsmodus:** Der Bildschirm zeigt ein neutrales Bild, Warnungen sind stumm. Vergessen? Nach 24 Stunden erscheint eine Erinnerung.
+- **WLAN-Empfang:** Liste mit Signalstufe („Sehr gut / Gut / Schwach / Zu schwach“), Verlauf (24 Stunden / 7 Tage), Wiederverbindungen, Aussetzer, Access Point (Name, Kanal, Band), schlechtester Empfang zuerst. Das ist eine **Übersicht aus den Meldungen der Bildschirme, keine Funkmessung.** Der **Aufstellmodus** zeigt das Signal alle 2 Sekunden (15 Minuten lang) – zum Verschieben des Bildschirms.
+- **Wochenbericht:** Ausfälle, Warnungen, Speicherstand – drucken oder als PDF speichern. Die Geräteliste gibt es als Excel/CSV (Bildschirme → *Liste als Excel/CSV*) für die Inventarisierung.
+- Ein **nächtlicher Neustart** (Standard 03:30 Uhr) hält die Bildschirme frisch; einstellbar unter *Erweitert*.
+
+![Betrieb](bilder/13-betrieb.png)
+
+## 18. Bildschirm ersetzen
+Bildschirme → **Bildschirm ersetzen**. Neuen Pi einschalten, wie gewohnt mit Code/Startkarte verbinden, in der Liste bestätigen und dabei wählen, welchen alten Bildschirm er ersetzt. Name, Gruppe, Termine und Einstellungen wandern zum neuen Gerät, der alte wird gesperrt (Token ungültig). Einstellungen (Ausrichtung, Ausschaltzeiten, Layout) lassen sich außerdem über *Weitere Aktionen → Einstellungen auf andere kopieren* verteilen.
+
+## 19. Vorlagen und Lesbarkeit
+*Bilder & Videos → Vorlage verwenden*: Tagesprogramm, Öffnungszeiten, Führungen, Willkommen für Gruppen, Hinweis/Sperrung, Danke, Countdown, Uhr/Datum. Du füllst nur Felder aus. Der Hub prüft **immer** die Lesbarkeit auf der Auflösung des Ziel-Bildschirms: „Der Text ist für 3 m Abstand zu klein“, „Es ist zu viel Text“, „Der Kontrast ist zu schwach“. Countdown und Datum werden jede Nacht neu berechnet. Eigene Vorlagen und Layoutänderungen sind Admins vorbehalten.
+
+## 20. QR-Code
+*Bilder & Videos → QR-Code erstellen*: Adresse, WLAN-Zugang, Kontakt oder Text, mit Überschrift und Kurztext. Der Code entsteht **lokal** im Hub (keine Kurzlinks, kein Tracking), die Adresse steht zusätzlich im Klartext darunter. Der Hub liest den Code zur Gegenprobe selbst wieder aus und warnt bei Abweichung, bei zu kleinen Punkten und beim Betrachtungsabstand. Erlaubt sind nur `http://` und `https://` – `javascript:`, `file:` & Co. werden abgelehnt. Zeigt die Adresse ins interne Netz, warnt der Hub: Besucher erreichen nur öffentliche Adressen. Admins können die erlaubten Adressen für Redakteure einschränken.
+
+## 21. Feiertage, Schließtage, Sondertage
+*Kalender → Feiertage & Sondertage*. Die Feiertage Nordrhein-Westfalens sind eingebaut (ohne Internet). Du legst eine Regel für alle Feiertage fest („diese Abspielliste statt der normalen“ oder „Bildschirme aus“) und trägst eigene Tage oder Betriebsferien ein. Ein **aktiver Termin schlägt** einen Sondertag; ein Sondertag **ersetzt** die Standard-Abspielliste. Die Terminvorschau zeigt Sondertage mit an.
+
+## 22. Laufband und Zonen
+*Betrieb → Laufband & Zonen*. Layouts mit 2 bis 4 Zonen (Hauptbereich, Laufband, Uhr/Datum, Infospalte) gibt es auf Standard- und Pro-Geräten. **Lite-Geräte zeigen immer den Inhalt im Vollbild.** Laufband-Meldungen haben „gültig von/bis“.
+
+## 23. Bildschirm erkennen, Testbild, Prüfung
+- **Erkennen** (Weitere Aktionen): 10 Sekunden lang Name, Ort und Gerätenummer sehr groß.
+- **Testbild:** Farben, Raster, Auflösung, Pfeil „OBEN“ (läuft 2 Minuten oder bis zum Beenden).
+- **Ausrichtung ändern** hat einen **Rückfall**: ohne Bestätigung innerhalb von 60 Sekunden stellt der Bildschirm die alte Einstellung wieder her.
+- **Bildschirm prüfen** (nach dem Verbinden automatisch, jederzeit unter *Betrieb*): Verbindung, WLAN, Uhrzeit, Netzteil/Temperatur/Speicher, Videotest, Bildtest (Ja/Nein-Frage, während der Bildschirm das Testbild zeigt), Ton (falls vorhanden), Synchronisation. Jeder Punkt hat ✔ / ▲ / ✖ mit Handlungshinweis. Das **Protokoll** ist druckbar und bleibt im Geräteprofil. Ein neuer Bildschirm zeigt nur das Standby-Bild, bis die Prüfung bestanden ist oder ein Admin sie bewusst überspringt (wird protokolliert).
+
+## 24. Ordner importieren (Massenimport)
+*Bilder & Videos → Ordner importieren*: Ordner von USB-Stick oder Netzwerkfreigabe (z. B. aus Yodeck) einlesen. Du siehst vorab eine **Vorschau** mit Duplikaterkennung, Namensvorschlägen und Hinweisen je Gerätetyp – **nichts wird übernommen, bevor du bestätigst.** Der Hub liest nur Ordner unter `/media` und `/mnt`; die IT bindet Stick oder Freigabe dort ein.
+
+## 25. Datenschutz und Aufbewahrung
+Siehe [`datenschutz.md`](datenschutz.md). Unter *Erweitert → Betrieb, Veröffentlichen und Datenschutz* stellst du ein, wie lange Verlaufsdaten und das Protokoll aufbewahrt werden; Altes wird automatisch gelöscht.
+
+## 26. Hochkant und Seitenverhältnisse
+*Bildschirme → Bearbeiten → Hochkant und Seitenverhältnis*: Wähle **Einpassen** (ganzes Bild, evtl. schwarze Ränder) oder **Füllen** (füllt alles, der Rand wird abgeschnitten) und einen **Sicherheitsrand** gegen Overscan. Du siehst sofort „So sieht es auf Hochkant aus“ als Vorschau und bekommst Warnungen in Klartext, z. B. „Beim Füllen werden etwa 68 % des Bildes abgeschnitten“ oder „Das Bild füllt nur etwa 32 % des Bildschirms“. Die Ausrichtung selbst stellst du unter *Weitere Aktionen → Ausrichtung* ein (mit 60-Sekunden-Rückfall).
+
+## 27. Gestaffeltes Update
+*Erweitert → Gestaffeltes Update*: Das Update (Datei oben einspielen) geht zuerst auf einen **Test-Bildschirm**. Läuft er nach der Beobachtungszeit (Standard 5 Minuten) stabil, folgen die übrigen Bildschirme in **Gruppen** (Standard 2). Schlägt etwas fehl – der Befehl scheitert, der Bildschirm meldet sich nach 15 Minuten nicht wieder –, geht **automatisch jeder schon aktualisierte Bildschirm zur vorherigen Version zurück**. Du kannst jederzeit abbrechen. Alles steht im Protokoll.
+
+## 28. Lizenz und Ablaufdatum bei Medien
+*Bilder & Videos → Umbenennen & Lizenz*: Urheber, Lizenz und **Gültig bis**. **14 Tage vorher** erscheint eine Warnung auf der Startseite. Nach dem Ablaufdatum wird das Medium **automatisch nicht mehr gezeigt** – auch auf Bildschirmen, die den Hub gerade nicht erreichen (das Datum steht im Plan des Bildschirms). Die Datei bleibt in der Bibliothek.
+
+## 29. Simulator-Player (für Techniker)
+`node tools/simulator.js --hub https://dfm-signage.local --code ABCD-1234 --count 5 --profile standard` startet virtuelle Bildschirme, die sich wie echte anmelden (Code, Fingerabdruck, WSS), den Plan abspielen und in **Live** erscheinen. Jeder Simulator muss im Hub bestätigt werden. Er dient dem Testen von Pairing, Zeitplan, Live-Ansicht und Konflikten ohne echte Pis (siehe `tests/simulator.test.js`). *Er läuft nicht im Browser:* Ein Browser kann beim WebSocket keinen Anmelde-Header senden, und ein zusätzlicher Anmeldeweg würde die Sicherheit des Hubs schwächen.

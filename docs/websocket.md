@@ -11,14 +11,16 @@ eine falsche Version beenden die Verbindung (Code 1008). Hub und Player nutzen d
 |---|---|---|
 | Player → Hub | `hello` | `version`, `profile?`, `model?`, `hw?` – sofort nach dem Verbinden |
 | Player → Hub | `heartbeat` | `state{…}` alle 30 s: Temperatur, RAM, WLAN-Signal (dBm), Sync-Stand, „zeigt gerade“, Zeit synchron |
-| Hub → Player | `schedule_update` | `generatedAt, from, to, segments[], playlists{}, defaultPlaylistId, orientation` – **Zeitplan der nächsten 14 Tage als fertige Zeitfenster** |
+| Hub → Player | `schedule_update` | `generatedAt, from, to, segments[], playlists{}, defaultPlaylistId, orientation, overrides[], specialDays[], hold, tickers[], layout, maintenance` – Auflösung: Halt (Wartung/nicht bereit) → Übersteuerung → Termine → Sondertag → Standard → Standby; nur veröffentlichte Stände – **Zeitplan der nächsten 14 Tage als fertige Zeitfenster** |
 | Hub → Player | `media_manifest` | `generatedAt, items[]` – nur Medien der Variante des Geräteprofils (id, sha256, size, url) |
-| Hub → Player | `command` | `id, command, args?` – `reload, reboot, screenshot, rotate, wifi_change, reconnect, update, factory_reset` |
+| Hub → Player | `command` | `id, command, args?` – `reload, reboot, screenshot, rotate (mit `rollback`: 60-s-Rückfall), confirm_display, identify, testpattern, signal_watch, wifi_change (getesteter Wechsel mit Rückfall), reconnect, update, factory_reset, diagnose` |
 | Player → Hub | `command_result` | `id, ok, result?, error?` |
-| Player → Hub | `screenshot` | `png` (Base64, höchstens 4 MB) |
+| Player → Hub | `screenshot` | `png` (Base64, höchstens 4 MB); der Hub wandelt ihn in ein JPEG (~640 px) und hält es nur im Arbeitsspeicher |
+| Player → Hub | `status` | `current{mediaId,name,kind,since,duration}, next?, source?, scheduleId?` – bei jedem Wechsel (Live-Ansicht Stufe 1) |
+| Player → Hub | `signal` | `dbm, wifi?` – alle 2 s im Aufstellmodus (höchstens 15 Minuten) |
 
 ## Verhalten
-- **Heartbeat** 30 s. Der Hub wertet ein Gerät als *läuft* bei Meldung < 90 s, *keine Verbindung* < 10 min, danach *nicht erreichbar*.
+- **Heartbeat** 30 s. Der Hub wertet ein Gerät als *läuft* bei Meldung < 65 s, *keine Verbindung* < 10 min, danach *nicht erreichbar*.
 - **Polling-Fallback:** Ist WSS nicht erreichbar, holt der Player alle 60 s `GET /api/v1/device/schedule` und `/manifest` (gepinntes HTTPS).
 - **Wiederverbindung:** Backoff 1 s … 60 s mit Jitter. Reihenfolge der Adressen: gespeicherte URL → aufgelöster Name → zuletzt bekannte IP → mDNS (`_dfm-signage._tcp`).
 - **Sperre:** Der Hub schließt die Verbindung mit Code `4001`, das Token ist sofort ungültig; der Player löscht sein Token und wechselt in die Einrichtung.

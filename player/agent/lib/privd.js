@@ -12,7 +12,7 @@ const WPA = (p) => typeof p === 'string' && ((p.length >= 8 && p.length <= 63 &&
 /** Whitelist: Aktion → (Argumente prüfen) → Befehlsliste [[cmd,...args], ...] */
 export const ACTIONS = {
   reboot: () => [['systemctl', 'reboot']],
-  'wifi-connect': (a) => { if (!SSID(a.ssid) || !WPA(a.password)) throw new Error('ungültige WLAN-Daten'); return [soft(['nmcli', 'connection', 'delete', 'dfm-wifi']), ['nmcli', 'connection', 'add', 'type', 'wifi', 'ifname', 'wlan0', 'con-name', 'dfm-wifi', 'ssid', a.ssid, 'connection.autoconnect', 'yes', 'wifi.powersave', '2', 'wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', a.password], ['nmcli', '--wait', '40', 'connection', 'up', 'dfm-wifi']]; },
+  'wifi-switch': (a) => { if (!SSID(a.ssid) || !(a.password === '' || WPA(a.password))) throw new Error('ungültige WLAN-Daten'); return [['/usr/lib/dfm/launch', 'wifi-switch', a.ssid, a.password ?? '']]; }, // getesteter Wechsel mit Rückfall (A1)
   'wifi-reset': () => [soft(['nmcli', 'connection', 'delete', 'dfm-wifi']), ['systemctl', 'start', 'dfm-setup.service']],
   'display-rotate': (a) => { if (![0, 90, 180, 270].includes(a.degrees)) throw new Error('ungültiger Winkel'); return [['/usr/lib/dfm/set-rotation', String(a.degrees)]]; },
   'display-power': (a) => { if (!['on', 'off'].includes(a.state)) throw new Error('ungültiger Zustand'); return [['/usr/lib/dfm/display-power', a.state]]; },

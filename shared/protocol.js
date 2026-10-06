@@ -6,14 +6,14 @@ const num = (x) => typeof x === 'number' && Number.isFinite(x);
 const obj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const opt = (f) => (x) => x === undefined || f(x);
 
-export const COMMANDS = ['identify', 'testpattern', 'signal_watch', 'confirm_display', 'reload', 'reboot', 'screenshot', 'rotate', 'wifi_change', 'reconnect', 'update', 'factory_reset', 'diagnose'];
+export const COMMANDS = ['rollback', 'identify', 'testpattern', 'signal_watch', 'confirm_display', 'reload', 'reboot', 'screenshot', 'rotate', 'wifi_change', 'reconnect', 'update', 'factory_reset', 'diagnose'];
 
 const SCHEMAS = {
   hello: { profile: opt(str(20)), version: str(40), model: opt(str(100)), hw: opt(obj) },
   heartbeat: { state: obj },
   schedule_update: { generatedAt: num, from: num, to: num, segments: Array.isArray, playlists: obj,
     defaultPlaylistId: (x) => x === null || typeof x === 'string', orientation: opt(num), display: opt((x) => x === null || obj(x)), sync: opt(obj),
-    overrides: opt(Array.isArray), specialDays: opt(Array.isArray), hold: opt((x) => x === null || str(20)(x)), tickers: opt(Array.isArray), layout: opt((x) => x === null || obj(x)), maintenance: opt(obj) },
+    fit: opt((x) => x === null || obj(x)), overrides: opt(Array.isArray), specialDays: opt(Array.isArray), hold: opt((x) => x === null || str(20)(x)), tickers: opt(Array.isArray), layout: opt((x) => x === null || obj(x)), maintenance: opt(obj) },
   media_manifest: { generatedAt: num, items: Array.isArray },
   command: { id: str(64), command: (x) => COMMANDS.includes(x), args: opt(obj) },
   command_result: { id: str(64), ok: (x) => typeof x === 'boolean', result: opt(obj), error: opt(str(500)) },

@@ -81,3 +81,11 @@ test('Hub aus Backup per Konfigurationsdatei wiederherstellen: gleicher Fingerab
   assert.throws(() => restoreHubFromBackup({ bootDir, file: 'dfm-backup.dfmbak', passphrase: 'falsch-falsch-falsch', hubDataDir: join(dataDir, 'x') }), /Passphrase stimmt nicht/);
   assert.throws(() => restoreHubFromBackup({ bootDir, file: 'nicht-da.dfmbak', passphrase: 'x', hubDataDir: join(dataDir, 'y') }), /liegt nicht auf der SD-Karte/);
 });
+
+import { createButtonWatcher, parsePinctrl } from '../lib/button.js';
+test('Taster: erst nach 3 Sekunden Halten, nur einmal je Druck; kurzes Drücken löst nichts aus', async () => {
+  let t = 0, pressed = false, fired = 0; const w = createButtonWatcher({ read: () => pressed, now: () => t, onHold: () => fired++ });
+  pressed = true; for (t = 0; t < 2900; t += 300) await w(); assert.equal(fired, 0, 'unter 3 s nichts'); pressed = false; await w(); pressed = true; t = 5000; await w();
+  assert.equal(fired, 0, 'Loslassen setzt zurück'); for (t = 5000; t <= 8400; t += 300) await w(); assert.equal(fired, 1); for (t = 8700; t < 12000; t += 300) await w(); assert.equal(fired, 1, 'kein erneutes Auslösen beim Halten');
+  assert.equal(parsePinctrl(' 3: ip    pu | lo // GPIO3 = input'), true); assert.equal(parsePinctrl(' 3: ip    pu | hi // GPIO3 = input'), false);
+});

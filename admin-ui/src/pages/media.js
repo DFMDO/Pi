@@ -10,9 +10,10 @@ export async function mediaPage({ route }) {
   const grid = h('div', { class: 'mediaGrid' });
   const draw = () => { const q = search.value.toLowerCase(); grid.replaceChildren(...items.filter((m) => !q || m.name.toLowerCase().includes(q) || m.folder.toLowerCase().includes(q) || m.tags.join(' ').includes(q)).map(card)); };
   const card = (m) => h('div', { class: 'card mediaCard' }, h('div', { class: 'shot' }, thumb(m)), h('b', {}, m.name), h('div', { class: 'hint' }, `${KIND[m.kind]}${m.size ? ' · ' + fmtBytes(m.size) : ''}${m.folder ? ' · ' + m.folder : ''}`),
+    m.expired ? h('div', { class: 'notice bad' }, '⛔ Abgelaufen – wird nicht mehr gezeigt') : m.validUntil ? h('div', { class: 'hint' }, `Gültig bis ${m.validUntil.split('-').reverse().join('.')}${m.license ? ' · ' + m.license : ''}`) : null,
     ...m.hints.map((t) => h('div', { class: 'hint warn' }, 'ℹ ' + t)), ...m.variants.filter((v) => v.status === 'failed').map((v) => h('div', { class: 'hint bad' }, '⚠ Dieses Medium konnte nicht für alle Bildschirme vorbereitet werden.')),
     m.variants.some((v) => v.status === 'pending' || v.status === 'running') ? h('div', { class: 'hint' }, '⏳ Wird für die Bildschirme vorbereitet …') : null,
-    can('media.write') ? h('div', { class: 'row' }, h('button', { class: 'btn link', onclick: () => rename(m, route) }, 'Umbenennen'), h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: () => remove(m, route) }, 'Löschen')) : null);
+    can('media.write') ? h('div', { class: 'row' }, h('button', { class: 'btn link', onclick: () => rename(m, route) }, 'Umbenennen & Lizenz'), h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: () => remove(m, route) }, 'Löschen')) : null);
   draw();
   return h('div', {}, h('h1', {}, 'Bilder & Videos'), h('p', { class: 'lead' }, 'Lade Bilder, Videos oder PDFs hoch und lege Text-Ankündigungen an. Danach kannst du sie in Abspiellisten und Termine einbauen.'),
     storage?.warn ? h('div', { class: 'notice' }, '⚠ ' + storage.text) : null,
@@ -39,8 +40,9 @@ function textDlg(route) {
     [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await post('/media/text', { name: name.value || title.value, title: title.value, body: body.value, template: tpl.value }); toast('Die Ankündigung wurde gespeichert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
 }
 function rename(m, route) {
-  const n = h('input', { value: m.name, maxlength: 100 });
-  dialog('Umbenennen', field('Neuer Name', n), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { await patch(`/media/${m.id}`, { name: n.value }); route(); } }]);
+  const n = h('input', { value: m.name, maxlength: 100 }), au = h('input', { value: m.author ?? '', maxlength: 120, placeholder: 'z. B. Foto: Max Mustermann' }), li = h('input', { value: m.license ?? '', maxlength: 200, placeholder: 'z. B. CC BY 4.0, Agenturvertrag' }), vu = h('input', { type: 'date', value: m.validUntil ?? '' });
+  dialog('Umbenennen und Lizenz', h('div', {}, field('Neuer Name', n), field('Urheber', au), field('Lizenz', li), field('Gültig bis', vu, 'Zwei Wochen vorher gibt es eine Warnung. Nach diesem Tag wird das Medium automatisch nicht mehr gezeigt – auch auf Bildschirmen ohne Verbindung zum Hub.')),
+    [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await patch(`/media/${m.id}`, { name: n.value, author: au.value || null, license: li.value || null, validUntil: vu.value || null }); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
 }
 async function remove(m, route) {
   try { await del(`/media/${m.id}`); toast(`„${m.name}“ liegt jetzt im Papierkorb.`, 'ok'); route(); }

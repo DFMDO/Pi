@@ -43,6 +43,9 @@ await page.getByRole('link', { name: /Kalender/ }).click(); await page.getByRole
 await page.getByRole('button', { name: /Neuer Termin/ }).click(); const dlg = page.getByRole('dialog'); await dlg.getByLabel('Datum').fill(day(5)); await dlg.getByRole('button', { name: 'Vorschau ansehen' }).click(); await dlg.getByText(/So sieht der Bildschirm/).waitFor(); await snap('09-termin-planen'); await page.keyboard.press('Escape');
 await page.getByRole('link', { name: /Hilfe/ }).click(); await page.getByRole('heading', { name: /Hilfe/ }).waitFor(); await snap('10-hilfe');
 await page.getByRole('link', { name: 'Erweitert' }).click(); await page.getByRole('heading', { name: 'Erweitert' }).waitFor(); await snap('11-erweitert', { fullPage: true });
+await page.getByRole('link', { name: /Live/ }).click(); await page.getByRole('heading', { name: 'Live' }).waitFor(); await page.waitForTimeout(600); await snap('12-live', { fullPage: true });
+await page.getByRole('link', { name: /Betrieb/ }).click(); await page.getByRole('heading', { name: 'Betrieb', exact: true }).waitFor(); await snap('13-betrieb', { fullPage: true });
+await page.getByRole('link', { name: /Szenen/ }).click(); await page.getByRole('heading', { name: 'Szenen', exact: true }).waitFor(); await snap('14-szenen');
 // Handy-Einrichtung + Bildschirmanzeige
 let t = 1e6; const nm = { scan: async () => [{ ssid: 'Museum-Signage', signal: 82, secure: true }, { ssid: 'Museum-Gast', signal: 55, secure: true }, { ssid: 'FRITZ!Box 7590', signal: 31, secure: true }], startHotspot: async () => true, stopHotspot: async () => {}, connect: async () => ({ ok: true }), disconnect: async () => {}, wifiConnected: async () => false, stations: async () => 0 };
 const ctl = createController({ nm, suffix: 'k7m4', now: () => t, hashPassword, policy: checkPasswordPolicy, hw: { model: 'Raspberry Pi 4 Model B', profile: 'pro' }, writeConfig: async () => {}, discoverHub: async () => null });

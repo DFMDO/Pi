@@ -11,6 +11,7 @@ const monday = (d) => addDays(d, -((dowOf(d) + 6) % 7));
 const nice = (d) => { const [y, m, dd] = d.split('-'); return `${DN[(dowOf(d) + 6) % 7]}, ${dd}.${m}.${y}`; };
 
 export async function calendarPage({ route }) {
+  const ovl = await get('/overrides').catch(() => []);
   const [devices, groups, lists, media, scheds, drafts] = await Promise.all([get('/devices'), get('/groups'), get('/playlists'), get('/media'), get('/schedules?drafts=1'), get('/drafts')]);
   const free = PALETTE.filter((c) => !groups.some((g) => g.color.toLowerCase() === c)); // Bildschirm-Farben: nie dieselbe wie eine Gruppe
   const targets = [...groups.map((g) => ({ key: 'group:' + g.id, name: 'Gruppe: ' + g.name, color: g.color })), ...devices.filter((d) => d.status.level !== 'pending').map((d, i) => ({ key: 'device:' + d.id, name: d.name, color: free[i % free.length] }))];
@@ -56,6 +57,7 @@ export async function calendarPage({ route }) {
       m.append(h('div', { class: 'd' + (d.slice(0, 7) === first.slice(0, 7) ? '' : ' out'), tabindex: 0, role: 'button', 'aria-label': `${nice(d)}, ${es.length} Termine`, onclick: () => open(null, d), onkeydown: (e) => { if (e.key === 'Enter') open(null, d); } }, d.slice(8), ...es.slice(0, 3).map((e) => h('small', { class: e.state === 'draft' ? 'draft' : '', style: `background:${colorOf(e.targetType, e.targetId)}`, onclick: (x) => { x.stopPropagation(); open(scheds.find((z) => z.id === e.scheduleId), d); } }, (e.state === 'draft' ? '✎ ' : '') + content(e.content))), es.length > 3 ? h('small', { style: 'color:inherit' }, `+${es.length - 3} weitere`) : null)); }
     return m;
   }
+  root.append(...ovl.map((o) => h('div', { class: 'notice' }, '⚡ ', o.text, ' (übersteuert den Plan bis dahin)')));
   root.append(drafts.schedules + drafts.playlists ? h('div', { class: 'notice' }, `✎ ${drafts.schedules + drafts.playlists} Entwürfe warten auf Veröffentlichung. Sie sind gestrichelt dargestellt und laufen noch nicht auf den Bildschirmen.`, drafts.old ? ` ${drafts.old} davon sind älter als 30 Tage.` : '') : null, can('schedules.write') && targets.length ? h('p', { class: 'row' }, h('button', { class: 'btn big', 'data-tour': 'newsched', onclick: () => open(null, today()) }, '➕ Neuer Termin'), h('button', { class: 'btn sec', onclick: () => specialDaysDlg(route) }, '🎄 Feiertage & Sondertage'), h('button', { class: 'btn sec', onclick: () => weekDlg(route, monday(anchor)) }, '🗓 Woche kopieren / Vorlage')) : null, bar, legend, cal);
   await draw(); return root;
 }

@@ -29,7 +29,8 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   const present = (m) => ({ id: m.id, name: m.name, kind: m.kind, size: m.size, durationS: m.duration_s, width: m.width, height: m.height,
     tags: m.tags ? m.tags.split(',') : [], folder: m.folder, createdAt: m.created_at, text: m.text_json ? JSON.parse(m.text_json) : undefined,
     variants: db.prepare('SELECT profile,status,error FROM media_variants WHERE media_id=?').all(m.id),
-    hints: mediaHints(m.kind, m.width, m.height) });
+    hints: mediaHints(m.kind, m.width, m.height), author: m.author, license: m.license, validUntil: m.valid_until,
+    expired: !!m.valid_until && m.valid_until < new Date(now()).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }) });
 
   app.get('/api/v1/media', { config: { perm: 'media.read' } }, async () => db.prepare('SELECT * FROM media ORDER BY created_at DESC').all().map(present));
 
@@ -90,9 +91,11 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   });
 
   app.patch('/api/v1/media/:id', { config: { perm: 'media.write' }, schema: { body: { type: 'object', additionalProperties: false, properties: {
-    name: { type: 'string', minLength: 1, maxLength: 100 }, tags: { type: 'array', items: { type: 'string', maxLength: 30, pattern: '^[^,]+$' }, maxItems: 20 }, folder: { type: 'string', maxLength: 60 } } } } }, async (req, reply) => {
+    name: { type: 'string', minLength: 1, maxLength: 100 }, tags: { type: 'array', items: { type: 'string', maxLength: 30, pattern: '^[^,]+$' }, maxItems: 20 }, folder: { type: 'string', maxLength: 60 },
+    author: { type: ['string', 'null'], maxLength: 120 }, license: { type: ['string', 'null'], maxLength: 200 }, validUntil: { type: ['string', 'null'], pattern: DATE } } } } }, async (req, reply) => {
     const m = db.prepare('SELECT * FROM media WHERE id=?').get(req.params.id); if (!m) return reply.code(404).send({ error: 'Medium nicht gefunden.' });
-    db.prepare('UPDATE media SET name=?, tags=?, folder=? WHERE id=?').run(req.body.name ?? m.name, req.body.tags ? req.body.tags.join(',') : m.tags, req.body.folder ?? m.folder, m.id);
+    db.prepare('UPDATE media SET name=?, tags=?, folder=?, author=?, license=?, valid_until=? WHERE id=?').run(req.body.name ?? m.name, req.body.tags ? req.body.tags.join(',') : m.tags, req.body.folder ?? m.folder, 'author' in req.body ? req.body.author : m.author, 'license' in req.body ? req.body.license : m.license, 'validUntil' in req.body ? req.body.validUntil : m.valid_until, m.id);
+    if ('validUntil' in req.body) app.pushAll();
     A(req, 'medium.geaendert', m.id); return { ok: true };
   });
 

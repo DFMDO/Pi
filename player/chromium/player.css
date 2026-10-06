@@ -3,10 +3,10 @@
 html, body { margin:0; height:100%; background:#000; overflow:hidden; cursor:none; }
 #stage { position:fixed; left:50%; top:50%; width:100vw; height:100vh; transform:translate(-50%,-50%) rotate(var(--rot,0deg)); transform-origin:center; }
 #stage.r90, #stage.r270 { width:100vh; height:100vw; }
-.layer { position:absolute; inset:0; opacity:0; transition:opacity .6s ease; background:#000; display:flex; align-items:center; justify-content:center; }
+.layer { position:absolute; top:var(--safe,0); left:var(--safe,0); right:var(--safe,0); bottom:var(--safe,0); opacity:0; transition:opacity .6s ease; background:#000; display:flex; align-items:center; justify-content:center; }
 .layer.cut { transition:none; }
 .layer.on { opacity:1; }
-.layer img, .layer video { width:100%; height:100%; object-fit:contain; }
+.layer img, .layer video { width:100%; height:100%; object-fit:var(--fit,contain); }
 .text { width:100%; height:100%; box-sizing:border-box; padding:6vw; display:flex; flex-direction:column; justify-content:center; gap:3vh; background:var(--dfm-secondary); color:#fff; border-left:2vw solid var(--dfm-primary); }
 .text h1 { margin:0; font-size:7vw; line-height:1.1; overflow-wrap:anywhere; } .text p { margin:0; font-size:3.4vw; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
 .text.hinweis { background:var(--dfm-accent); color:#1a1a1a; border-color:#1a1a1a; } .text.highlight { background:var(--dfm-primary); border-color:#fff; }
@@ -16,7 +16,7 @@ html, body { margin:0; height:100%; background:#000; overflow:hidden; cursor:non
 body.black #stage, body.black #overlay { visibility: hidden; } /* Bildschirm „aus“, wenn die Hardware sich nicht abschalten lässt */
 
 /* Zonen */
-#stage.zones .layer { bottom:9vh; }
+#stage.zones .layer { bottom:calc(9vh + var(--safe,0%)); }
 #stage.zones.side .layer { right:24vw; }
 .bar { position:absolute; left:0; right:0; bottom:0; height:9vh; background:var(--dfm-secondary); color:#fff; display:flex; align-items:center; overflow:hidden; border-top:.6vh solid var(--dfm-primary); z-index:3; }
 .ticker { flex:1; overflow:hidden; white-space:nowrap; font-size:4vh; } .ticker span { display:inline-block; padding-left:100%; animation:run linear infinite; }
