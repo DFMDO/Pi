@@ -13,5 +13,7 @@ growpart "$DISK" "$PART" >/dev/null 2>&1 || true
 resize2fs "$DEV" >/dev/null 2>&1 || true
 # Verzeichnisse, die per Bind-Mount in das schreibgeschützte System eingeblendet werden (siehe /etc/fstab)
 mkdir -p /data/state/nm /data/state/nm-lib /data/state/chrony /data/log /data/hub /data/agent /data/tmp
+mkdir -p /data/agent/home/config /data/agent/home/cache
+chown 990:990 /data/hub; chown 991:991 /data/agent /data/agent/home /data/agent/home/config /data/agent/home/cache   # nicht rekursiv: Medien-Cache kann groß sein
 chmod 700 /data/state/nm; [ -e /data/state/fake-hwclock ] || : > /data/state/fake-hwclock
 chmod 755 /data
