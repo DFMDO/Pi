@@ -25,7 +25,7 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
   const authed = (t) => typeof t === 'string' && s.sessions.has(t);
 
   async function tick() { // alle 2 s
-    s.lan = await nm.hasLan().then(async (ok) => (ok ? { ip: await nm.lanAddress?.().catch(() => null) } : null)).catch(() => null);
+    s.lan = await Promise.resolve(nm.hasLan?.() ?? false).then(async (ok) => (ok ? { ip: await Promise.resolve(nm.lanAddress?.() ?? null).catch(() => null) } : null)).catch(() => null);
     if (s.phase === 'step1' || s.phase === 'step2') {
       if (now() - s.last > IDLE_MS) { log('15 Minuten ohne Aktivität – Modus wird neu gestartet'); return startMode(); }
       s.stations = await nm.stations().catch(() => 0);
