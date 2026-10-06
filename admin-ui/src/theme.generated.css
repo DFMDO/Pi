@@ -1,0 +1,17 @@
+/* Zentrale Design-Variablen. Platzhalterwerte – hier das echte DFM-Corporate-Design eintragen.
+   Wird von Admin-UI, Einrichtungsseite, Playerseite und Bildschirmen gemeinsam genutzt. */
+:root {
+  --dfm-primary: #c8102e;   /* Hauptfarbe (Buttons, Akzente) */
+  --dfm-secondary: #1a1a1a; /* Zweitfarbe (Kopfzeile, dunkle Flächen) */
+  --dfm-accent: #f2a900;    /* Akzent (Fokus, Hinweise) */
+  --dfm-bg: #f5f5f3;
+  --dfm-text: #1a1a1a;
+  --dfm-card: #ffffff;
+  --dfm-line: #d6d6d0;
+  --dfm-ok: #1b7f3b; --dfm-warn: #8a5a00; --dfm-bad: #b00020;
+  --dfm-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --dfm-bg: #141414; --dfm-text: #f1f1ee; --dfm-card: #1f1f1f; --dfm-line: #3a3a38; --dfm-ok: #5fd085; --dfm-warn: #f2b84b; --dfm-bad: #ff7a8e; --dfm-primary: #ff3b57; }
+}
+:root[data-theme="dark"] { --dfm-bg: #141414; --dfm-text: #f1f1ee; --dfm-card: #1f1f1f; --dfm-line: #3a3a38; --dfm-ok: #5fd085; --dfm-warn: #f2b84b; --dfm-bad: #ff7a8e; --dfm-primary: #ff3b57; }

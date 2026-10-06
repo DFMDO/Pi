@@ -7,6 +7,7 @@ import { formatFingerprint } from './tls.js';
 import { schedulePayload, manifestPayload, PROFILES } from './plan.js';
 import { validateMessage, msg, COMMANDS } from '../../shared/protocol.js';
 import { createLimiter } from './ratelimit.js';
+import QRCode from 'qrcode';
 
 const CODE_TTL = 10 * 60000, MAX_ATTEMPTS = 5, PENDING_TTL = 3600000;
 
@@ -91,6 +92,10 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const id = randomUUID(); db.prepare('INSERT INTO device_groups(id,name,location,color) VALUES(?,?,?,?)').run(id, req.body.name, req.body.location ?? null, req.body.color ?? '#c8102e');
     audit.log({ user: req.user, action: 'gruppe.angelegt', target: req.body.name, ip: req.ip }); return reply.code(201).send({ id });
   });
+
+  // QR-Code als SVG (lokal erzeugt, keine externe Bibliothek im Browser nötig)
+  app.post('/api/v1/qr', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', required: ['text'], additionalProperties: false, properties: { text: { type: 'string', minLength: 1, maxLength: 1200 } } } } },
+    async (req, reply) => reply.header('Content-Type', 'image/svg+xml').send(await QRCode.toString(req.body.text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' })));
 
   // ---------- Pairing (Admin-Seite) ----------
   app.post('/api/v1/pairing', { config: { perm: 'devices.manage' }, schema: { body: { type: ['object', 'null'], additionalProperties: false, properties: { wifi: { type: 'object', required: ['ssid'], additionalProperties: false,

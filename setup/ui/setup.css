@@ -21,3 +21,5 @@ input, select { width: 100%; min-height: 52px; padding: 0 14px; font: inherit; c
 body.display { background: var(--dfm-secondary); color: #fff; font-size: 2.2vw; } .display main { max-width: none; padding: 4vh 5vw; } .big { font-size: 4vw; font-weight: 800; }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4vw; align-items: center; } .qr { background: #fff; padding: 1.5vw; border-radius: 1.5vw; } .qr svg { width: 100%; height: auto; display: block; }
 .pin { font-size: 8vw; font-weight: 800; letter-spacing: .2em; font-family: ui-monospace, monospace; } .display ol { font-size: 2.4vw; line-height: 1.6; padding-left: 1.2em; }
+
+.display .logo { height: 10vh; }

@@ -4,10 +4,20 @@
   "private": true,
   "description": "DFM Signage – lokales Digital-Signage-System für Raspberry Pi",
   "type": "module",
-  "engines": { "node": ">=22" },
-  "workspaces": ["hub", "player/agent", "setup", "admin-ui"],
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "hub",
+    "player/agent",
+    "setup",
+    "admin-ui"
+  ],
   "scripts": {
     "test": "node --test --test-concurrency=1 \"shared/**/*.test.js\" \"hub/**/*.test.js\" \"player/**/*.test.js\" \"setup/**/*.test.js\" \"tests/**/*.test.js\"",
     "build:ui": "npm run build -w admin-ui"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56"
   }
 }

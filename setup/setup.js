@@ -26,6 +26,7 @@ export function createServers(ctl, { toSvg = (t) => QRCode.toString(t, { type: '
 
   const portal = http.createServer(async (req, res) => {
     const p = new URL(req.url, 'http://x').pathname;
+    if (p === '/favicon.ico') { res.writeHead(404, HEAD).end(); return; }
     if (isProbe(p)) { res.writeHead(302, { ...HEAD, Location: PORTAL_URL }).end(); return; }
     if (req.method === 'GET' && FILES.has(p)) return sendFile(res, FILES, p);
     if (p.startsWith('/api/')) {

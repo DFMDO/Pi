@@ -230,7 +230,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   });
 
   // ---------- Einstellungen ----------
-  const DEFAULTS = { 'site.name': 'Deutsches Fußballmuseum', 'feature.weburl': 'false', 'feature.rss': 'false', 'feature.weather': 'false', 'mail.enabled': 'false', 'ssh.enabled': 'false', 'sync.window': '', 'sync.bandwidthKbps': '0', 'demo.enabled': 'true', 'backup.extraDir': '' };
+  const DEFAULTS = { 'site.name': 'Deutsches Fußballmuseum', 'feature.weburl': 'false', 'feature.rss': 'false', 'feature.weather': 'false', 'mail.enabled': 'false', 'ssh.enabled': 'false', 'sync.window': '', 'sync.bandwidthKbps': '0', 'demo.enabled': 'true', 'backup.extraDir': '', 'wizard.done': 'false' };
   const getSettings = () => ({ ...DEFAULTS, ...Object.fromEntries(db.prepare('SELECT key,value FROM settings').all().map((r) => [r.key, r.value])) });
   app.decorate('settings', getSettings);
   app.get('/api/v1/settings', { config: { perm: 'settings.manage' } }, async () => getSettings());
