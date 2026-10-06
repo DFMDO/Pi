@@ -19,3 +19,5 @@ case "$MODE" in
        systemctl start --no-block dfm-player.target ;;
   *) : > /run/dfm/chrony.d/dfm.conf; nft -f /usr/share/dfm/nft-setup.conf 2>/dev/null || true; systemctl start --no-block dfm-setup.target ;;
 esac
+# Grüne LED: im Betrieb (Hub/Player) dauerhaft an = bereit; im Einrichtungsmodus blinkt dfm-setup (3× kurz = wartet)
+[ "$MODE" = setup ] || { LED=/sys/class/leds/ACT; [ -e $LED ] || LED=/sys/class/leds/led0; [ -e $LED ] && { echo none > $LED/trigger; echo 1 > $LED/brightness; } || true; }

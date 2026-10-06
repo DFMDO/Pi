@@ -9,6 +9,7 @@ const j = (u) => fetch(u, { cache: 'no-store' }).then((r) => r.json());
 
 async function refresh() {
   [plan, manifest, health] = await Promise.all([j('/plan.json'), j('/manifest.json'), j('/health')]);
+  document.body.classList.toggle('black', !!health.displayOff);
   const deg = health.orientation ?? 0; stage.className = deg ? 'r' + deg : ''; stage.style.setProperty('--rot', deg + 'deg');
 }
 function el(tag, cls, ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
@@ -57,6 +58,7 @@ async function main() {
   }
 }
 const ev = new EventSource('/events');
+ev.addEventListener('black', () => document.body.classList.add('black')); ev.addEventListener('unblack', () => document.body.classList.remove('black'));
 ev.addEventListener('plan', refresh); ev.addEventListener('manifest', refresh); ev.addEventListener('reload', () => location.reload());
 setInterval(() => refresh().catch(() => {}), 30000);
 main();

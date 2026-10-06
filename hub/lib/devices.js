@@ -49,7 +49,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   const present = (d) => {
     const st = d.state_json ? JSON.parse(d.state_json) : null;
     const g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id) : null;
-    return { id: d.id, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, orientation: d.orientation,
+    return { id: d.id, display: d.display_json ? JSON.parse(d.display_json) : null, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, orientation: d.orientation,
       status: deviceStatus(d), summary: summary(d, st), lastSeen: d.last_seen, state: st, hw: d.hw_json ? JSON.parse(d.hw_json) : null,
       spki: d.spki_seen ? formatFingerprint(d.spki_seen) : null, online: sockets.has(d.id) };
   };
@@ -63,12 +63,14 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const d = getDevice(req.params.id); return d ? present(d) : reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
   });
   app.patch('/api/v1/devices/:id', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', additionalProperties: false,
-    properties: { name: { type: 'string', minLength: 1, maxLength: 60 }, groupId: { type: ['string', 'null'] }, profile: { enum: PROFILES }, orientation: { enum: [0, 90, 180, 270] } } } } }, async (req, reply) => {
+    properties: { name: { type: 'string', minLength: 1, maxLength: 60 }, groupId: { type: ['string', 'null'] }, profile: { enum: PROFILES }, orientation: { enum: [0, 90, 180, 270] },
+      display: { type: ['object', 'null'], additionalProperties: false, properties: { off: { type: 'object', required: ['from', 'to'], additionalProperties: false, properties: { from: { type: 'string', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }, to: { type: 'string', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' } } } } } } } } }, async (req, reply) => {
     const d = getDevice(req.params.id); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
     const b = req.body;
     if (b.groupId && !db.prepare('SELECT 1 FROM device_groups WHERE id=?').get(b.groupId)) return reply.code(400).send({ error: 'Diese Gruppe gibt es nicht.' });
-    db.prepare('UPDATE devices SET name=?, group_id=?, profile=?, orientation=? WHERE id=?').run(b.name ?? d.name,
-      'groupId' in b ? b.groupId : d.group_id, b.profile ?? d.profile, b.orientation ?? d.orientation, d.id);
+    db.prepare('UPDATE devices SET name=?, group_id=?, profile=?, orientation=?, display_json=? WHERE id=?').run(b.name ?? d.name,
+      'groupId' in b ? b.groupId : d.group_id, b.profile ?? d.profile, b.orientation ?? d.orientation, 'display' in b ? (b.display ? JSON.stringify(b.display) : null) : d.display_json, d.id);
+    if (b.profile && b.profile !== d.profile) app.variants?.ensureAll(); // neues Profil → fehlende Medienvarianten erzeugen
     audit.log({ user: req.user, action: 'bildschirm.geaendert', target: d.id, ip: req.ip, detail: b });
     pushPlan(getDevice(d.id)); return { ok: true };
   });
@@ -175,9 +177,13 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   const dev = { config: { device: true } };
   app.get('/api/v1/device/schedule', dev, async (req) => ({ v: 1, type: 'schedule_update', ...schedulePayload(db, req.device, now()) }));
   app.get('/api/v1/device/manifest', dev, async (req) => ({ v: 1, type: 'media_manifest', ...manifestPayload(db, req.device, now()) }));
+  let activeDownloads = 0; const MAX_DOWNLOADS = 4; // Hub schont sich: höchstens 4 gleichzeitige Medien-Downloads
   app.get('/api/v1/device/media/:id', dev, async (req, reply) => {
+    if (activeDownloads >= MAX_DOWNLOADS) return reply.code(503).header('Retry-After', String(5 + Math.floor(Math.random() * 10))).send({ error: 'Der Hub ist gerade ausgelastet. Bitte später erneut versuchen.' });
     const v = db.prepare("SELECT v.path, m.kind FROM media_variants v JOIN media m ON m.id=v.media_id WHERE v.media_id=? AND v.profile=? AND v.status='ready'").get(req.params.id, req.device.profile);
     if (!v) return reply.code(404).send({ error: 'Medium nicht gefunden.' });
+    activeDownloads++; let freed = false; const free = () => { if (!freed) { freed = true; activeDownloads--; } };
+    reply.raw.once('close', free); reply.raw.once('finish', free);
     return sendFile(req, reply, join(mediaDir, 'variants', v.path));
   });
   // Diagnose: Durchsatz messen (8 MB) und Testvideo im Profil des Geräts

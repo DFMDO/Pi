@@ -17,6 +17,7 @@ function playlistItems(db, id) {
 
 /** Paket für einen Player: Zeitplan der nächsten 14 Tage + benötigte Abspiellisten. */
 export function schedulePayload(db, device, now = Date.now(), days = 14) {
+  const st = Object.fromEntries(db.prepare("SELECT key,value FROM settings WHERE key IN ('sync.window','sync.bandwidthKbps')").all().map((r) => [r.key, r.value]));
   const from = now - 3600000, to = now + days * DAY;
   const tl = buildTimeline(loadSchedules(db), { deviceId: device.id, groupId: device.group_id }, from, to);
   const playlists = {};
@@ -32,7 +33,8 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   };
   const segments = tl.map((s) => ({ start: s.start, end: s.end, source: s.source ? { ...s.source, content: use(s.source.content) } : null }));
   if (def) playlists[def] = { name: db.prepare('SELECT name FROM playlists WHERE id=?').get(def).name, items: playlistItems(db, def) };
-  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation };
+  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation,
+    display: device.display_json ? JSON.parse(device.display_json) : null, sync: { window: st['sync.window'] ?? '', bandwidthKbps: Number(st['sync.bandwidthKbps'] ?? 0) } };
 }
 
 /** Alle Medien, die dieser Player braucht (nur Variante seines Profils). */

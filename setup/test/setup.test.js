@@ -162,3 +162,30 @@ test('„Nur WLAN ändern“ (Reset ohne Tastatur): keine Rolle/Konten nötig, M
   assert.equal((await ctl.finish(s, {})).ok, true); await new Promise((r) => setTimeout(r, 1500));
   assert.deepEqual(done, [{ wifiOnly: true }]); assert.equal(cleared.length, 1); assert.equal(ctl.state.phase, 'done');
 });
+
+import { scanOnce, startCameraLoop } from '../lib/camera.js';
+import { createLed, PATTERNS } from '../lib/led.js';
+
+test('Kamera: WLAN-QR wird gelesen, als Vorschlag angeboten, Passwort verlässt das Gerät nicht', async () => {
+  const run = async (c, a) => (c === 'ffmpeg' ? { code: 0, stdout: '' } : { code: 0, stdout: 'irgendein anderer Code\nWIFI:T:WPA;S:Museum-Signage;P:kamerapasswort;;\n' });
+  assert.deepEqual(await scanOnce({ run }), { ssid: 'Museum-Signage', password: 'kamerapasswort', hidden: false });
+  assert.equal(await scanOnce({ run: async () => ({ code: 1, stdout: '' }) }), null, 'keine Kamera/kein Bild');
+  assert.equal(await scanOnce({ run: async (c) => ({ code: 0, stdout: c === 'zbarimg' ? 'http://evil\n' : '' }) }), null, 'fremde QR-Codes ignorieren');
+  assert.deepEqual(startCameraLoop({ run, exists: () => false, onWifi() {} }).stop(), undefined, 'ohne Kamera passiert nichts');
+  let found; const loop = startCameraLoop({ run, exists: () => true, intervalMs: 10, onWifi: (w) => { found = w; } }); await new Promise((r) => setTimeout(r, 60)); loop.stop(); assert.equal(found.ssid, 'Museum-Signage');
+  const { ctl, nm, flush } = await makeCtl(); ctl.useCameraWifi(found); const s = ctl.enterPin(ctl.state.pin).session;
+  assert.deepEqual(ctl.info(s).cameraWifi, { ssid: 'Museum-Signage' }, 'Passwort wird nicht an das Handy gesendet'); assert.ok(!JSON.stringify(ctl.info(s)).includes('kamerapasswort'));
+  assert.match((await ctl.display()).camera, /Museum-Signage/);
+  assert.equal((await ctl.testWifi(s, { useCamera: true })).ok, true); await flush(); assert.equal(ctl.result(s).state, 'wifi-ok'); assert.ok(nm.log.some((l) => l[0] === 'connect' && l[1] === 'Museum-Signage'));
+});
+
+test('Hub-Einrichtung zeigt den Fingerabdruck sofort (Handy und Bildschirm); LED-Blinkmuster', async () => {
+  let t = 1e6; const nm = fakeNm(); const leds = []; const ctl = createController({ nm, suffix: 'ab12', now: () => t, rnd: fakeRnd, hashPassword, policy: checkPasswordPolicy, hw: { model: 'Raspberry Pi 4', profile: 'pro' }, writeConfig: async () => {}, prepareHub: async () => 'A3F2 91C0 7B44 D8E1', led: { set: (n) => leds.push(n) } });
+  await ctl.startMode(); assert.deepEqual(leds, ['waiting']); const s = ctl.enterPin(ctl.state.pin).session;
+  await ctl.testWifi(s, { ssid: 'Signage', password: 'wlanpasswort' }); await new Promise((r) => setTimeout(r, 1500));
+  await ctl.finish(s, { role: 'hub', admin: { name: 'Chefin', password: 'Ein-gutes-langes-Passwort' }, site: 'DFM' }); await new Promise((r) => setTimeout(r, 1500));
+  assert.equal(ctl.result(s).hub.fingerprint, 'A3F2 91C0 7B44 D8E1'); assert.deepEqual(await ctl.display().then((d) => [d.phase, d.fingerprint]), ['done', 'A3F2 91C0 7B44 D8E1']); assert.equal(leds.at(-1), 'ready');
+  const w = []; const fake = { set: (fn) => ({ fn }), clear() {} }; const led = createLed({ write: (v) => w.push(v), timers: { set: (fn, ms) => { w.push('t' + ms); return 1; }, clear() {} } });
+  led.set('waiting'); assert.deepEqual(w, [1, 't150']); led.set('ready'); assert.equal(w.at(-1), 1); led.set('off'); assert.equal(w.at(-1), 0);
+  assert.equal(PATTERNS.waiting.filter(([on]) => on === 150).length, 3, '3× kurz = wartet auf Einrichtung');
+});

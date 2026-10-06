@@ -7,7 +7,7 @@ import { readFileSync, existsSync, mkdirSync, createWriteStream, writeFileSync }
 import { randomInt } from 'node:crypto';
 import { pinnedAgent, request, PinError } from './lib/pinned.js';
 import { writeJson, readJson } from './lib/store.js';
-import { syncMedia } from './lib/sync.js';
+import { syncMedia, inSyncWindow } from './lib/sync.js';
 import { hubCandidates } from './lib/discovery.js';
 import { collect, timeSynced, parseDrops, powerSave } from './lib/sysinfo.js';
 import { execFile } from 'node:child_process';
@@ -19,6 +19,7 @@ import { stage, activate } from '../../hub/lib/update.js';
 import { pairWithHub, PairError } from './lib/pair.js';
 import { shred } from '../../setup/lib/firstboot.js';
 
+const readText = (f) => { try { return readFileSync(f, 'utf8').trim(); } catch { return null; } };
 export const backoff = (n, rnd = Math.random) => Math.min(60000, 1000 * 2 ** Math.min(n, 6)) * (0.75 + rnd() * 0.5); // 1 s … 60 s mit Jitter
 
 export class Agent {
@@ -28,15 +29,16 @@ export class Agent {
     mkdirSync(this.mediaDir, { recursive: true });
     this.cfg = readJson(this.cfgFile); this.plan = readJson(join(dataDir, 'cache', 'plan.json')); this.manifest = readJson(join(dataDir, 'cache', 'manifest.json'));
     this.syncState = { total: 0, done: 0 }; this.connected = false; this.ws = null; this.stopped = false; this.attempt = 0; this.syncing = false;
-    this.nowPlaying = null;
+    this.nowPlaying = null; this.displayOff = false; this.displayRule = null;
     this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health() });
   }
-  health() { return { pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
+  health() { return { displayOff: !!this.displayOff, pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
     cacheEmpty: !(this.manifest?.items?.length), offlineSince: this.offlineSince ?? null }; }
 
   async start() {
     this.boundPort = await this.server.listen();            // 1) sofort anzeigen, was im Cache liegt (kein Hub nötig)
-    this.timeOk = await timeSynced(); this.timeTimer = setInterval(async () => { this.timeOk = await timeSynced(); }, 30000).unref();
+    if (this.plan) this.applyHubSettings(this.plan);        // Bildschirm-Zeiten/Sync-Einstellungen gelten auch nach Neustart ohne Hub
+    this.timeOk = await timeSynced(); this.timeTimer = setInterval(async () => { this.timeOk = await timeSynced(); this.checkDisplay(); }, 30000).unref();
     this.renderer?.start?.();
     if (!this.cfg?.token && this.cfg?.pairing) await this.pairNow();   // Erstverbindung mit dem Hub (Einmalcode)
     if (!this.cfg?.token) throw new Error('Dieses Gerät ist noch nicht mit einem Hub verbunden.');
@@ -59,7 +61,7 @@ export class Agent {
       }
     }
   }
-  async stop() { this.stopped = true; clearInterval(this.timeTimer); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
+  async stop() { this.stopped = true; clearInterval(this.timeTimer); clearTimeout(this.retryT); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
 
   async loop() {
     while (!this.stopped) {
@@ -105,7 +107,7 @@ export class Agent {
   send(type, body) { if (this.ws?.readyState === 1) this.ws.send(msg(type, body)); }
   async sendHeartbeat() {
     const np = this.nowPlayingInfo();
-    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0 } }) });
+    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
   }
   nowPlayingInfo() { // reine Anzeige für „zeigt gerade …“
     const r = resolvePlaylist(this.plan, Date.now()); if (!r.playlistId) return null;
@@ -116,7 +118,7 @@ export class Agent {
   async onMessage(raw) {
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (validateMessage(m)) return;
-    if (m.type === 'schedule_update') { const { v, type, ...plan } = m; this.plan = plan; writeJson(join(this.dataDir, 'cache', 'plan.json'), plan, 0o644); this.server.emit('plan'); this.renderer?.notify?.(); }
+    if (m.type === 'schedule_update') { const { v, type, ...plan } = m; this.plan = plan; this.applyHubSettings(plan); writeJson(join(this.dataDir, 'cache', 'plan.json'), plan, 0o644); this.server.emit('plan'); this.renderer?.notify?.(); }
     else if (m.type === 'media_manifest') { const { v, type, ...mf } = m; this.manifest = mf; writeJson(join(this.dataDir, 'cache', 'manifest.json'), mf, 0o644); this.runSync(); }
     else if (m.type === 'command') this.runCommand(m);
   }
@@ -135,12 +137,26 @@ export class Agent {
   };
   activeBase() { return `https://${this.cfg.lastIp ?? new URL(this.cfg.hubUrl).hostname}${new URL(this.cfg.hubUrl).port ? ':' + new URL(this.cfg.hubUrl).port : ''}`; }
 
+  /** Einstellungen aus dem Hub: Sync-Zeitfenster, Bandbreite, Bildschirm aus/an (lokal gespeichert, wirkt auch ohne Hub) */
+  applyHubSettings(plan) {
+    if (plan.sync) { this.cfg.syncWindow = plan.sync.window ?? ''; this.cfg.bandwidthKbps = plan.sync.bandwidthKbps ?? 0; }
+    this.displayRule = plan.display?.off ?? null; this.checkDisplay();
+  }
+  /** „Bildschirm von 22:00 bis 07:00 aus“: zuerst HDMI-CEC/wlr-randr/vcgencmd (privd), sonst schwarzes Bild + klare Meldung im Hub */
+  checkDisplay(now = Date.now()) {
+    const off = !!this.displayRule && inSyncWindow(`${this.displayRule.from}-${this.displayRule.to}`, now);
+    if (off === this.displayOff) return; this.displayOff = off;
+    try { privRequest(this.privdDir, 'display-power', { state: off ? 'off' : 'on' }); } catch {}
+    this.server.emit(off ? 'black' : 'unblack'); // Fallback: schwarzes Bild, falls die Hardware nicht abschaltbar ist
+  }
+
   async runSync() {
     if (this.syncing) { this.resync = true; return; } this.syncing = true;
     try {
       const st = await syncMedia({ manifest: this.manifest, dir: this.mediaDir, fetchRange: this.fetchRange, jitterMs: this.cfg.syncJitterMs ?? 3000, window: this.cfg.syncWindow ?? '', bandwidthKbps: this.cfg.bandwidthKbps ?? 0,
         onProgress: (s) => { this.syncState = { done: s.done, total: s.total }; } });
       this.syncState = { done: st.done, total: st.total, failed: st.failed.length }; this.server.emit('manifest'); this.sendHeartbeat();
+      if (st.failed.length || st.skippedWindow) { clearTimeout(this.retryT); this.retryT = setTimeout(() => this.runSync(), st.skippedWindow ? 5 * 60000 : 20000 + Math.random() * 40000); this.retryT.unref?.(); } // Hub ausgelastet / Fenster geschlossen → später erneut
     } catch (e) { this.log('Sync-Fehler', e.message); }
     finally { this.syncing = false; if (this.resync) { this.resync = false; this.runSync(); } }
   }

@@ -11,6 +11,7 @@ async function tick() {
     h('div', {}, h('p', {}, 'Mit dem Handy scannen'), h('p', {}, 'Netzwerk: ', h('b', {}, s.ssid)), h('p', {}, 'Passwort: ', h('b', {}, s.password)), h('ol', {}, s.steps.map((x) => h('li', {}, x))))));
   else if (s.phase === 'step2') app.replaceChildren(logo(), h('h1', { class: 'big' }, 'Schritt 2: Einrichtung öffnen'), h('div', { class: 'cols' }, qr(s.qrSvg),
     h('div', {}, h('p', {}, 'Scanne diesen Code oder öffne ', h('b', {}, s.url), ' im Browser.'), h('p', {}, 'Gib dort diese PIN ein:'), h('p', { class: 'pin' }, s.pin))));
-  else app.replaceChildren(logo(), h('h1', { class: 'big' }, s.phase === 'done' ? 'Fertig!' : 'Einen Moment bitte …'), h('p', {}, s.message ?? 'Der Bildschirm wird vorbereitet …'));
+  else app.replaceChildren(logo(), h('h1', { class: 'big' }, s.phase === 'done' ? 'Fertig!' : 'Einen Moment bitte …'), h('p', {}, s.message ?? 'Der Bildschirm wird vorbereitet …'), s.fingerprint ? h('div', {}, h('p', {}, 'Adresse im Browser: ', h('b', {}, s.url)), h('p', {}, 'Fingerabdruck – bitte mit der Anzeige im Browser vergleichen:'), h('p', { class: 'fp' }, s.fingerprint)) : null);
 }
-setInterval(tick, 1000); tick();
+const origTick = tick;
+setInterval(async () => { await origTick(); const old = document.getElementById('cam'); old?.remove(); if (last.includes('"camera"')) { const c = h('p', { id: 'cam' }, JSON.parse(last).camera); app.append(c); } }, 1000); origTick();

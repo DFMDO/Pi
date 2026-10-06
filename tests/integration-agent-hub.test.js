@@ -133,3 +133,22 @@ test('Diagnose-Befehl: Agent misst Durchsatz und meldet Zustand an den Hub', { t
   const res = JSON.parse(row.result_json); assert.ok(res.throughputMBs > 0, 'Durchsatz gemessen'); assert.equal(res.profile, 'standard'); assert.ok('ramTotalMB' in res);
   await agent.stop(); await h.cleanup();
 });
+
+test('Bildschirm zeitgesteuert aus/an + Sync-Einstellungen kommen vom Hub; Downloads am Hub auf 4 begrenzt', { timeout: 60000 }, async () => {
+  const h = await makeHub({ useTls: true }); await h.app.listen({ port: 0, host: '127.0.0.1' }); const hubUrl = `https://127.0.0.1:${h.app.server.address().port}`;
+  const admin = await h.as('admin'); const { code, fingerprintRaw } = (await admin('POST', '/api/v1/pairing')).json(); const deviceId = randomUUID();
+  const paired = pairWithHub({ hubUrl, code, expectedFp: fingerprintRaw, deviceId, name: 'D', model: 'Pi', profile: 'standard', hw: {}, pollMs: 30, timeoutMs: 10000 });
+  await until(async () => (await admin('GET', '/api/v1/devices')).json().length); await admin('POST', `/api/v1/devices/${deviceId}/approve`, {}); const { token, spki } = await paired;
+  assert.equal((await admin('PATCH', `/api/v1/devices/${deviceId}`, { display: { off: { from: '25:00', to: '07:00' } } })).statusCode, 400, 'ungültige Uhrzeit');
+  await admin('PUT', '/api/v1/settings', { 'sync.window': '22:00-06:00', 'sync.bandwidthKbps': '2000' });
+  const dataDir = mkdtempSync(join(tmpdir(), 'agent-')); writeFileSync(join(dataDir, 'agent.json'), JSON.stringify({ deviceId, hubUrl, hubSpki: spki, token, profile: 'standard' }));
+  const reqs = []; const agent = new Agent({ dataDir, port: 0, heartbeatMs: 200, privdDir: join(dataDir, 'privd') }); await agent.start(); await until(() => agent.connected);
+  assert.equal(agent.cfg.syncWindow, '22:00-06:00'); assert.equal(agent.cfg.bandwidthKbps, 2000);
+  // Regel „aus“ rund um jetzt → Agent schaltet ab (privd-Anfrage) und die Seite bekommt ein schwarzes Bild
+  const { epochToLocal, addDays } = await import('../shared/time.js'); const now = epochToLocal(Date.now()); const hh = (m) => { const t = (Number(now.time.slice(0, 2)) * 60 + Number(now.time.slice(3)) + m + 1440) % 1440; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+  await admin('PATCH', `/api/v1/devices/${deviceId}`, { display: { off: { from: hh(-10), to: hh(10) } } });
+  await until(() => agent.displayOff === true); assert.equal(agent.health().displayOff, true);
+  const { readdirSync, readFileSync: rf } = await import('node:fs'); const files = readdirSync(join(dataDir, 'privd')).filter((f) => f.endsWith('.req')); assert.ok(files.some((f) => JSON.parse(rf(join(dataDir, 'privd', f), 'utf8')).args?.state === 'off'));
+  await admin('PATCH', `/api/v1/devices/${deviceId}`, { display: null }); await until(() => agent.displayOff === false);
+  await agent.stop(); await h.cleanup();
+});

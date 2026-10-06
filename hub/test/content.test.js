@@ -245,3 +245,17 @@ test('Diagnose: Testvideo je Profil wird erzeugt (720p/Baseline für Lite) und S
   assert.equal(p.height, 720); assert.match(p.profile, /Baseline/);
   await h.cleanup();
 });
+
+test('Hub begrenzt gleichzeitige Medien-Downloads auf 4 (5. bekommt „später erneut“)', { timeout: 60000 }, async () => {
+  const h = await makeHub(); await h.app.listen({ port: 0, host: '127.0.0.1' }); const port = h.app.server.address().port;
+  const dv = addDevice(h, 'standard'); const { sha256hex } = await import('../lib/crypto.js'); const token = 'e'.repeat(40);
+  h.db.prepare('UPDATE devices SET token_hash=? WHERE id=?').run(sha256hex(token), dv);
+  const mid = randomUUID(); h.db.prepare("INSERT INTO media(id,name,kind,created_at) VALUES(?,?,?,?)").run(mid, 'gross', 'video', Date.now());
+  const f = `${mid}-standard.mp4`; writeFileSync(join(h.dataDir, 'media', 'variants', f), Buffer.alloc(64 * 1024 * 1024, 1));
+  h.db.prepare("INSERT INTO media_variants(id,media_id,profile,path,status) VALUES(?,?,?,?,'ready')").run('v1', mid, 'standard', f);
+  const { default: http } = await import('node:http'); const open = () => new Promise((res) => { const r = http.get({ port, host: '127.0.0.1', path: `/api/v1/device/media/${mid}`, headers: { authorization: `Bearer ${token}` } }, (resp) => { resp.pause(); res({ resp, r }); }); });
+  const held = []; for (let i = 0; i < 4; i++) held.push(await open());
+  assert.ok(held.every((x) => x.resp.statusCode === 200)); const fifth = await open(); assert.equal(fifth.resp.statusCode, 503); assert.ok(fifth.resp.headers['retry-after']);
+  held[0].r.destroy(); await new Promise((r) => setTimeout(r, 300)); const again = await open(); assert.equal(again.resp.statusCode, 200, 'Platz wieder frei');
+  for (const x of [...held, fifth, again]) x.r.destroy(); await h.cleanup();
+});

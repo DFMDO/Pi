@@ -38,10 +38,15 @@ function mount(content, active) {
   const nav = h('nav', { class: 'side', 'aria-label': 'Hauptnavigation' }, h('img', { src: '/logo.svg', alt: 'Deutsches Fußballmuseum' }),
     ...[...NAV, ...ADMIN.filter((a) => can(a[4]))].map(([href, label, icon]) => h('a', { href, 'aria-current': href === active ? 'page' : null, 'data-tour': href }, h('span', { 'aria-hidden': 'true' }, icon), label)),
     h('div', { class: 'grow' }), h('button', { class: 'btn sec', style: 'color:#fff;border-color:#fff', onclick: () => startTour() }, 'Zeig mir, wie das geht'),
+    h('button', { class: 'btn sec', style: 'color:#fff;border-color:#fff', 'aria-label': 'Hell oder dunkel umschalten', onclick: toggleTheme }, '🌓 Hell / Dunkel'),
     h('div', { class: 'who' }, `Angemeldet: ${state.user.name} (${{ admin: 'Admin', editor: 'Redakteur', viewer: 'Betrachter' }[state.user.role]})`),
     h('button', { class: 'btn sec', style: 'color:#fff;border-color:#fff', onclick: async () => { await post('/auth/logout'); state.user = null; location.hash = '#/login'; route(); } }, 'Abmelden'));
   app.replaceChildren(h('div', { class: 'shell' }, nav, h('main', { id: 'main' }, content)));
 }
+/** Hell/Dunkel: folgt dem Gerät, kann aber umgeschaltet werden (wird nur lokal im Browser gemerkt) */
+function applyTheme() { try { const t = localStorage.getItem('dfm-theme'); if (t) document.documentElement.dataset.theme = t; } catch {} }
+function toggleTheme() { const cur = document.documentElement.dataset.theme ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); const n = cur === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = n; try { localStorage.setItem('dfm-theme', n); } catch {} }
+applyTheme();
 window.addEventListener('hashchange', route);
 // Abmeldung nach 30 Minuten ohne Aktivität (der Server prüft zusätzlich)
 let idle; const bump = () => { clearTimeout(idle); idle = setTimeout(() => { if (state.user) { state.user = null; toast('Du wurdest aus Sicherheitsgründen abgemeldet.', 'err'); route(); } }, 30 * 60000); };

@@ -11,15 +11,15 @@ export const randPin = (rnd = randomInt) => String(rnd(1000000)).padStart(6, '0'
 
 export const IDLE_MS = 15 * 60000, MAX_PIN_FAILS = 5;
 
-export function createController({ nm, suffix, now = () => Date.now(), rnd = randomInt, writeConfig, hashPassword, policy, hw = {}, onDone = () => {}, discoverHub = async () => null, log = () => {}, serialPin = null, headless = false, wifiOnly = false, onWifiOnlyDone = async () => {} }) {
-  const s = { phase: 'welcome', ssid: `DFM-Setup-${suffix}`, password: '', pin: '', fails: 0, sessions: new Set(), started: 0, last: 0, stations: 0, draft: {}, result: { state: 'idle' }, networks: [], hubFound: null };
+export function createController({ nm, suffix, now = () => Date.now(), rnd = randomInt, writeConfig, hashPassword, policy, hw = {}, onDone = () => {}, discoverHub = async () => null, log = () => {}, serialPin = null, headless = false, wifiOnly = false, onWifiOnlyDone = async () => {}, prepareHub = async () => null, led = { set() {} } }) {
+  const s = { phase: 'welcome', ssid: `DFM-Setup-${suffix}`, password: '', pin: '', fails: 0, sessions: new Set(), started: 0, last: 0, stations: 0, draft: {}, result: { state: 'idle' }, networks: [], hubFound: null, cameraWifi: null };
 
   async function startMode() { // (Neu-)Start: neues Passwort + neue PIN, nur hier gültig
     s.password = randPassword(12, rnd); s.pin = serialPin ?? randPin(rnd); s.fails = 0; s.sessions.clear(); s.draft = {}; s.result = { state: 'idle' };
     s.started = s.last = now(); s.stations = 0;
     s.networks = await nm.scan().catch(() => []);              // Scan VOR dem Hotspot (AP-only: danach nicht mehr möglich)
     const ok = await nm.startHotspot({ ssid: s.ssid, password: s.password });
-    s.phase = ok ? 'step1' : 'error'; return ok;
+    s.phase = ok ? 'step1' : 'error'; led.set(ok ? 'waiting' : 'error'); return ok;
   }
   const touch = () => { s.last = now(); };
   const authed = (t) => typeof t === 'string' && s.sessions.has(t);
@@ -47,11 +47,12 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
   const api = {
     state: s, startMode, tick, enterPin, authed,
     info(t) { if (!authed(t)) return null; touch(); return { wifiOnly, model: hw.model ?? '', profile: hw.profile ?? 'standard', band24only: !/Pi (4|5|400|500)/.test(hw.model ?? ''), hubWarning: hw.profile && hw.profile !== 'pro' ? 'Dieses Gerät ist eher schwach. Als Hub empfehlen wir einen Raspberry Pi 4 (2 GB) oder besser.' : null,
-      hubFound: s.hubFound, networks: s.networks, suffix, defaultName: `Bildschirm ${suffix}` }; },
+      hubFound: s.hubFound, cameraWifi: s.cameraWifi ? { ssid: s.cameraWifi.ssid } : null, networks: s.networks, suffix, defaultName: `Bildschirm ${suffix}` }; },
 
     /** Schritt 1: WLAN prüfen. Wegen AP-only wird der Hotspot kurz abgeschaltet (Zwei-Phasen-Test). */
     async testWifi(t, w) {
       if (!authed(t)) return { ok: false, status: 401 }; touch();
+      if (w?.useCamera && s.cameraWifi) w = { ...s.cameraWifi }; // WLAN stammt aus dem Kamera-Scan (Passwort bleibt auf dem Gerät)
       const bad = !ssidOk(w?.ssid) ? 'Der WLAN-Name ist ungültig.' : w.enterprise ? null : (w.password && !wpaOk(w.password)) ? 'Das WLAN-Passwort muss 8 bis 63 Zeichen lang sein.' : null;
       if (bad) return { ok: false, error: bad };
       s.draft.wifi = { ssid: w.ssid, password: w.password ?? '', hidden: !!w.hidden, enterprise: w.enterprise };
@@ -65,6 +66,8 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
       }, 1200);
       return { ok: true, testing: true };
     },
+    /** WLAN-QR per Kamera gelesen: wird dem Handy als Vorschlag angeboten */
+    useCameraWifi(w) { s.cameraWifi = w; touch(); },
     result(t) { return authed(t) ? s.result : null; },
     setRole(t, role) { if (!authed(t) || !['hub', 'player'].includes(role)) return false; touch(); s.draft.role = role; return true; },
 
@@ -96,17 +99,19 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
     const extra = {};
     if (draft.role === 'hub') extra.hubBootstrap = { admin: { name: draft.admin.name.trim(), pwHash: await hashPassword(draft.admin.password) }, site: draft.site };
     else extra.agent = { hubUrl: normalizeHubAddress(draft.hubAddress), hubSpki: draft.fingerprint ? draft.fingerprint.replace(/[\s:-]/g, '').toLowerCase() : null, pairing: { code: draft.pairCode.replace('-', '').toUpperCase() }, name: draft.name.trim(), profile: hw.profile ?? 'standard', model: hw.model, hw };
+    let fingerprint = null; if (draft.role === 'hub') fingerprint = await prepareHub(); // Hub-Schlüssel schon jetzt erzeugen → Fingerabdruck kann sofort angezeigt werden
     await writeConfig(cfg, extra); // atomar, erst danach gilt die Einrichtung als fertig
-    s.phase = 'done'; s.result = { state: 'done', role: draft.role, hub: draft.role === 'hub' ? { url: 'https://dfm-signage.local' } : null }; onDone(cfg);
+    s.phase = 'done'; led.set('ready'); s.result = { state: 'done', role: draft.role, hub: draft.role === 'hub' ? { url: 'https://dfm-signage.local', fingerprint } : null }; onDone(cfg);
   }
 
   /** Daten für den Bildschirm. NUR über den Loopback-Server abrufbar (enthält PIN und WLAN-Passwort). */
   api.display = async () => {
     const base = { phase: s.phase, ssid: s.ssid, minutesLeft: Math.max(0, Math.ceil((IDLE_MS - (now() - s.last)) / 60000)) };
+    if (s.cameraWifi && (s.phase === 'step1' || s.phase === 'step2')) base.camera = `WLAN per Kamera erkannt: ${s.cameraWifi.ssid}`;
     if (s.phase === 'step1') return { ...base, password: s.password, qr: wifiQr({ ssid: s.ssid, password: s.password }), steps: ['Kamera-App öffnen', 'Code scannen', '„Verbinden“ tippen'] };
     if (s.phase === 'step2') return { ...base, pin: s.pin, qr: 'http://10.42.0.1/', url: 'http://10.42.0.1/' };
     if (s.phase === 'testing') return { ...base, message: s.result.state === 'wifi-testing' ? 'Das WLAN wird geprüft …' : 'Einrichtung wird abgeschlossen …' };
-    if (s.phase === 'done') return { ...base, message: s.result.role === 'hub' ? 'Fertig! Der Hub startet jetzt neu.' : 'Fertig! Der Bildschirm startet jetzt neu.' };
+    if (s.phase === 'done') return { ...base, message: s.result.role === 'hub' ? 'Fertig! Der Hub startet jetzt neu.' : 'Fertig! Der Bildschirm startet jetzt neu.', fingerprint: s.result.hub?.fingerprint ?? null, url: s.result.hub?.url ?? null };
     return base;
   };
   return api;

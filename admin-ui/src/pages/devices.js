@@ -65,9 +65,11 @@ function wifiDlg(d, run) {
 function editDlg(d, groups, route) {
   const name = h('input', { value: d.name, maxlength: 60 }), grp = h('select', {}, h('option', { value: '' }, 'keine Gruppe'), groups.map((g) => h('option', { value: g.id, selected: g.id === d.groupId }, g.name)));
   const prof = h('select', {}, Object.entries(ROLES).map(([k, v]) => h('option', { value: k, selected: k === d.profile }, v)));
+  const off = h('input', { type: 'checkbox', checked: !!d.display?.off }), from = h('input', { type: 'time', class: 'inline', value: d.display?.off?.from ?? '22:00', 'aria-label': 'Aus ab' }), to = h('input', { type: 'time', class: 'inline', value: d.display?.off?.to ?? '07:00', 'aria-label': 'An ab' });
   dialog('Bildschirm bearbeiten', h('div', {}, field('Name', name), field('Gruppe', grp, 'Bildschirme in einer Gruppe können gemeinsam geplant werden.'),
+    h('div', { class: 'card' }, h('label', {}, off, ' Bildschirm automatisch ausschalten'), h('p', {}, 'von ', from, ' bis ', to, ' Uhr'), h('p', { class: 'hint' }, 'Wenn sich der Bildschirm nicht abschalten lässt (kein HDMI-CEC), zeigt er in dieser Zeit stattdessen ein schwarzes Bild.'), d.state?.displayPower === 'nicht möglich' ? h('p', { class: 'bad' }, '⚠ Dieser Bildschirm lässt sich nicht abschalten – er zeigt ein schwarzes Bild.') : null),
     h('details', {}, h('summary', {}, 'Erweitert'), field('Leistungsprofil', prof, 'Wird automatisch passend zum Gerät gewählt. Ändere es nur, wenn du genau weißt, warum.'), h('p', { class: 'hint' }, `Fingerabdruck des Hubs, den dieser Bildschirm kennt: ${d.spki ?? '–'}`))),
-    [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await patch(`/devices/${d.id}`, { name: name.value, groupId: grp.value || null, profile: prof.value }); toast('Gespeichert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
+    [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await patch(`/devices/${d.id}`, { name: name.value, groupId: grp.value || null, profile: prof.value, display: off.checked ? { off: { from: from.value, to: to.value } } : null }); toast('Gespeichert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
 }
 function groupDlg(route) {
   const n = h('input', { maxlength: 60 }), l = h('input', { maxlength: 100 }), c = h('input', { type: 'color', value: '#c8102e' });

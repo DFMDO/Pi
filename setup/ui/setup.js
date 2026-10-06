@@ -25,6 +25,7 @@
     const list = (info.networks ?? []).map((n) => h('button', { class: 'opt', type: 'button', 'aria-pressed': d.wifi?.ssid === n.ssid, onclick: () => { d.wifi = { ...(d.wifi ?? {}), ssid: n.ssid, enterprise: n.enterprise }; wifiView(); } },
       h('span', {}, n.ssid, n.secure ? ' 🔒' : ''), h('span', { 'aria-label': `Signal ${n.signal} Prozent` }, n.signal >= 70 ? 'sehr gut ' : n.signal >= 45 ? 'gut ' : 'schwach ', '▂▄▆█'.slice(0, Math.max(1, Math.ceil(n.signal / 25))))));
     view(1, 'WLAN wählen', h('p', {}, 'Mit diesem WLAN soll sich das Gerät verbinden.'), info.band24only ? h('p', { class: 'hint' }, 'Dieses Gerät kann nur 2,4-GHz-WLAN. 5-GHz-Netze funktionieren hier nicht.') : null,
+      info.cameraWifi ? h('div', { class: 'card' }, h('p', {}, '📷 Der Bildschirm hat per Kamera ein WLAN erkannt: ', h('b', {}, info.cameraWifi.ssid)), h('button', { class: 'btn', type: 'button', onclick: () => { d.wifi = { useCamera: true, ssid: info.cameraWifi.ssid }; testWifi(); } }, 'Dieses WLAN verwenden')) : null,
       list.length ? list : h('p', { class: 'hint' }, 'Keine Netzwerke gefunden. Du kannst den Namen unten eintippen.'),
       ...field('Oder Netzwerkname eintippen (auch versteckte Netze)', 'ssid', { value: d.wifi?.ssid ?? '', max: 32, set: (v) => { d.wifi = { ...(d.wifi ?? {}), ssid: v }; } }),
       h('label', {}, h('input', { type: 'checkbox', onchange: (e) => { hidden = e.target.checked; } }), 'Das Netzwerk ist versteckt'),
@@ -82,12 +83,12 @@
     view(4, 'Fast fertig …', h('div', { class: 'spin', role: 'status' }), h('p', {}, 'Das Gerät verbindet sich jetzt dauerhaft mit dem WLAN.'));
     for (;;) { await new Promise((res) => setTimeout(res, 2500)); let s; try { s = await api('/result'); } catch { s = null; } // Hotspot geht aus – Fehler sind hier normal
       if (s?.state === 'failed') return detailsView([s.error]);
-      if (s?.state === 'done') break; if (!s && (await Promise.race([new Promise((r) => setTimeout(() => r(true), 12000))]))) break; }
+      if (s?.state === 'done') { d.fingerprintHub = s.hub?.fingerprint; break; } if (!s && (await Promise.race([new Promise((r) => setTimeout(() => r(true), 12000))]))) break; }
     done();
   }
   function done() {
     view(4, 'Fertig!', h('div', { class: 'card' }, h('p', { class: 'ok' }, '✔ Die Einrichtung ist abgeschlossen.'), h('p', {}, 'Der Bildschirm startet jetzt neu und verbindet sich mit dem WLAN. Du kannst das Setup-WLAN jetzt verlassen.')),
-      d.role === 'hub' ? h('div', { class: 'card' }, h('p', {}, 'Später erreichst du den Hub im Browser unter ', h('b', {}, 'https://dfm-signage.local')), h('p', { class: 'hint' }, 'Dein Browser zeigt eine Warnung. Das ist normal – der Assistent erklärt dir, wie du sie sicher bestätigst. Den Fingerabdruck zum Vergleichen siehst du auf dem Bildschirm des Hubs.')) : h('p', {}, 'Bestätige den Bildschirm jetzt im Hub: „Ist das dein Bildschirm?“ → Ja.'));
+      d.role === 'hub' ? h('div', { class: 'card' }, h('p', {}, 'Später erreichst du den Hub im Browser unter ', h('b', {}, 'https://dfm-signage.local')), h('p', { class: 'hint' }, 'Dein Browser zeigt eine Warnung. Das ist normal – vergleiche den Fingerabdruck:'), h('p', { class: 'fp' }, d.fingerprintHub ?? 'wird auf dem Bildschirm des Hubs angezeigt'), h('button', { class: 'btn sec', type: 'button', onclick: () => window.print() }, 'Druckkarte drucken')) : h('p', {}, 'Bestätige den Bildschirm jetzt im Hub: „Ist das dein Bildschirm?“ → Ja.'));
   }
   pinView();
 })();

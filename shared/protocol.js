@@ -12,7 +12,7 @@ const SCHEMAS = {
   hello: { profile: opt(str(20)), version: str(40), model: opt(str(100)), hw: opt(obj) },
   heartbeat: { state: obj },
   schedule_update: { generatedAt: num, from: num, to: num, segments: Array.isArray, playlists: obj,
-    defaultPlaylistId: (x) => x === null || typeof x === 'string', orientation: opt(num) },
+    defaultPlaylistId: (x) => x === null || typeof x === 'string', orientation: opt(num), display: opt((x) => x === null || obj(x)), sync: opt(obj) },
   media_manifest: { generatedAt: num, items: Array.isArray },
   command: { id: str(64), command: (x) => COMMANDS.includes(x), args: opt(obj) },
   command_result: { id: str(64), ok: (x) => typeof x === 'boolean', result: opt(obj), error: opt(str(500)) },
