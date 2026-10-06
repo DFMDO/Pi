@@ -1,0 +1,56 @@
+# Baut das SD-Karten-Image auf GitHub (kein eigener Linux-Rechner nötig) und legt es als Download unter „Releases“ ab.
+# Start: GitHub → Actions → „Image bauen“ → „Run workflow“ (dauert ca. 60–90 Minuten).
+name: Image bauen
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Name des Downloads (Tag), z. B. v0.1.0"
+        default: "v0.1.0"
+permissions:
+  contents: write
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Platz schaffen (Runner hat sonst zu wenig)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af || true
+          df -h /
+      - name: arm64-Emulation einrichten
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-user-static binfmt-support parted xz-utils
+      - name: Signaturschlüssel
+        env:
+          SECRET_KEY: ${{ secrets.DFM_SIGN_KEY }}
+        run: |
+          mkdir -p build/keys
+          if [ -n "$SECRET_KEY" ]; then
+            printf '%s\n' "$SECRET_KEY" > "$RUNNER_TEMP/key.pem"; openssl pkey -in "$RUNNER_TEMP/key.pem" -pubout -out build/keys/update-key.pub
+            echo "Eigener Schlüssel aus dem Geheimnis DFM_SIGN_KEY wird verwendet."
+          else
+            build/gen-release-key.sh "$RUNNER_TEMP/key.pem"
+            echo "::warning::Kein Geheimnis DFM_SIGN_KEY gesetzt: Es wird ein einmaliger Schlüssel erzeugt. Das Image funktioniert, aber spätere Updates lassen sich nicht mit demselben Schlüssel signieren."
+          fi
+          echo "DFM_SIGN_KEY=$RUNNER_TEMP/key.pem" >> "$GITHUB_ENV"
+      - name: Image bauen
+        run: build/build-image.sh
+      - name: Download veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: "DFM Signage ${{ inputs.version }} (SD-Karten-Image)"
+          body: |
+            **Download:** `dfm-signage-arm64-*.img.xz` – mit Raspberry Pi Imager („Eigenes Image verwenden“) oder balenaEtcher auf eine SD-Karte (mind. 16 GB) schreiben. Einstellungen im Imager **nicht** anpassen.
+            Prüfsumme (`.sha256`), Signatur (`.sig`), öffentlicher Schlüssel (`update-key.pub`) und Prüfprotokoll (`check-*.txt`) liegen dabei. Anleitung: `docs/anwenderhandbuch.md`.
+          files: |
+            build/out/dfm-signage-arm64-*.img.xz
+            build/out/dfm-signage-arm64-*.img.xz.sha256
+            build/out/dfm-signage-arm64-*.img.xz.sig
+            build/out/check-*.txt
+            build/out/build-info-*.txt
+            build/keys/update-key.pub
