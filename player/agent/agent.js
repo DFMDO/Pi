@@ -15,6 +15,8 @@ import { request as privRequest } from './lib/privd.js';
 import { resolvePlaylist } from '../../shared/sequencer.js';
 import { validateMessage, msg } from '../../shared/protocol.js';
 import { stage, activate } from '../../hub/lib/update.js';
+import { pairWithHub, PairError } from './lib/pair.js';
+import { shred } from '../../setup/lib/firstboot.js';
 
 export const backoff = (n, rnd = Math.random) => Math.min(60000, 1000 * 2 ** Math.min(n, 6)) * (0.75 + rnd() * 0.5); // 1 s … 60 s mit Jitter
 
@@ -28,15 +30,33 @@ export class Agent {
     this.nowPlaying = null;
     this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health() });
   }
-  health() { return { timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
+  health() { return { pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
     cacheEmpty: !(this.manifest?.items?.length), offlineSince: this.offlineSince ?? null }; }
 
   async start() {
     this.boundPort = await this.server.listen();            // 1) sofort anzeigen, was im Cache liegt (kein Hub nötig)
     this.timeOk = await timeSynced(); this.timeTimer = setInterval(async () => { this.timeOk = await timeSynced(); }, 30000).unref();
     this.renderer?.start?.();
+    if (!this.cfg?.token && this.cfg?.pairing) await this.pairNow();   // Erstverbindung mit dem Hub (Einmalcode)
     if (!this.cfg?.token) throw new Error('Dieses Gerät ist noch nicht mit einem Hub verbunden.');
     this.loop(); return this;
+  }
+  /** Pairing nach der Einrichtung: Code und (optional) Fingerabdruck stammen aus der Einrichtung. Der Code wird danach gelöscht. */
+  async pairNow() {
+    const c = this.cfg; const devFile = process.env.DFM_DEVICE_FILE ?? join(this.dataDir, '..', 'device.json');
+    const dev = readJson(devFile, {}); c.deviceId ??= dev.deviceId ?? (await import('node:crypto')).randomUUID();
+    for (let n = 0; !this.stopped; n++) {
+      try {
+        this.pairing = 'waiting';
+        const r = await pairWithHub({ hubUrl: c.hubUrl, code: c.pairing.code, expectedFp: c.hubSpki, deviceId: c.deviceId, name: c.name, model: c.model, profile: c.profile, hw: c.hw, pollMs: 2000, onStatus: () => {} });
+        Object.assign(c, { token: r.token, hubSpki: r.spki }); delete c.pairing; this.pairing = null; writeJson(this.cfgFile, c); return;
+      } catch (e) {
+        if (e instanceof PairError && ['code', 'fingerprint', 'rejected'].includes(e.code)) { // endgültig: neu einrichten
+          this.log('Pairing endgültig fehlgeschlagen:', e.message); writeFileSync(join(this.dataDir, 'unpaired'), e.message); this.pairing = null; this.exit(0); return;
+        }
+        this.log('Pairing: Hub nicht erreichbar, neuer Versuch', e.message); await new Promise((r) => setTimeout(r, backoff(n)));
+      }
+    }
   }
   async stop() { this.stopped = true; clearInterval(this.timeTimer); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
 

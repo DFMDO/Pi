@@ -103,3 +103,20 @@ test('Agent mit falschem Hub-Schlüssel (Pin) verbindet nie', { timeout: 30000 }
   assert.equal(h.db.prepare("SELECT COUNT(*) n FROM audit_log WHERE action LIKE 'login%'").get().n, 0);
   await agent.stop(); await h.cleanup();
 });
+
+test('Erstverbindung nach der Einrichtung: Agent koppelt sich selbst mit Code + Fingerabdruck, Code wird entfernt', { timeout: 60000 }, async () => {
+  const h = await makeHub({ useTls: true });
+  await h.app.listen({ port: 0, host: '127.0.0.1' }); const hubUrl = `https://127.0.0.1:${h.app.server.address().port}`;
+  const admin = await h.as('admin'); const { code, fingerprintRaw } = (await admin('POST', '/api/v1/pairing')).json();
+  const dataDir = mkdtempSync(join(tmpdir(), 'agent-')); const devFile = join(dataDir, 'device.json'); const deviceId = randomUUID(); writeFileSync(devFile, JSON.stringify({ deviceId }));
+  process.env.DFM_DEVICE_FILE = devFile;
+  writeFileSync(join(dataDir, 'agent.json'), JSON.stringify({ hubUrl, hubSpki: fingerprintRaw, pairing: { code: code.replace('-', '') }, name: 'Shop-Screen', profile: 'standard', model: 'Raspberry Pi 4', hw: {} }));
+  const agent = new Agent({ dataDir, port: 0 }); const started = agent.start();
+  await until(async () => (await admin('GET', '/api/v1/devices')).json().length);
+  assert.equal(agent.health().pairing, 'waiting'); // Bildschirm zeigt „Bitte im Hub bestätigen“
+  assert.equal((await admin('GET', '/api/v1/devices')).json()[0].name, 'Shop-Screen');
+  await admin('POST', `/api/v1/devices/${deviceId}/approve`, {}); await started;
+  await until(() => agent.connected);
+  const saved = JSON.parse(readFileSync(join(dataDir, 'agent.json'), 'utf8')); assert.ok(saved.token); assert.equal(saved.pairing, undefined, 'Einmalcode entfernt'); assert.equal(saved.hubSpki, h.tls.spki);
+  await agent.stop(); await h.cleanup(); delete process.env.DFM_DEVICE_FILE;
+});

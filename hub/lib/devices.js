@@ -93,13 +93,16 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   });
 
   // ---------- Pairing (Admin-Seite) ----------
-  app.post('/api/v1/pairing', { config: { perm: 'devices.manage' } }, async (req) => {
+  app.post('/api/v1/pairing', { config: { perm: 'devices.manage' }, schema: { body: { type: ['object', 'null'], additionalProperties: false, properties: { wifi: { type: 'object', required: ['ssid'], additionalProperties: false,
+    properties: { ssid: { type: 'string', minLength: 1, maxLength: 32 }, password: { type: 'string', maxLength: 64 } } } } } } }, async (req) => {
     db.prepare('DELETE FROM pairing_codes').run(); // genau ein aktiver Code
-    const code = pairingCode(8), id = randomUUID();
+    const code = pairingCode(8), id = randomUUID(), host = hubInfo().host;
     db.prepare('INSERT INTO pairing_codes(id,code_enc,expires_at,created_by) VALUES(?,?,?,?)').run(id, encrypt(key, code), now() + CODE_TTL, req.user.id);
     audit.log({ user: req.user, action: 'pairing.code_erzeugt', ip: req.ip });
-    return { code: `${code.slice(0, 4)}-${code.slice(4)}`, expiresAt: now() + CODE_TTL, fingerprint: formatFingerprint(tls.spki), fingerprintRaw: tls.spki,
-      hub: hubInfo(), card: JSON.stringify({ v: 1, hub: hubInfo().host, fp: tls.spki, code }) };
+    // Startkarte: Link mit allen Angaben. Das Handy ist dabei schon im Setup-WLAN des neuen Bildschirms (Schritt 1).
+    const w = req.body?.wifi, card = { v: 1, h: host, f: tls.spki, c: code, ...(w ? { s: w.ssid, p: w.password ?? '' } : {}) };
+    return { code: `${code.slice(0, 4)}-${code.slice(4)}`, expiresAt: now() + CODE_TTL, fingerprint: formatFingerprint(tls.spki), fingerprintRaw: tls.spki, hub: hubInfo(),
+      card: 'http://10.42.0.1/#c=' + Buffer.from(JSON.stringify(card)).toString('base64url'), cardHasWifi: !!w };
   });
   app.post('/api/v1/devices/:id/approve', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', additionalProperties: false,
     properties: { name: { type: 'string', minLength: 1, maxLength: 60 }, groupId: { type: ['string', 'null'] } } } } }, async (req, reply) => {

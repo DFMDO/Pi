@@ -16,6 +16,7 @@ function el(tag, cls, ...kids) { const e = document.createElement(tag); if (cls)
 // Besucher sehen nie Technikmeldungen über Inhalten. Hinweise erscheinen nur, wenn es gar nichts zu zeigen gibt.
 function standby() {
   const logo = el('img'); logo.src = '/assets/dfm-logo.svg'; logo.alt = 'Deutsches Fußballmuseum';
+  if (health.pairing) return el('div', 'notice', logo, el('p', '', `Bitte bestätige diesen Bildschirm im Hub: „${health.deviceName ?? ''}“ – Ist das dein Bildschirm? → Ja.`));
   if (health.timeSynced === false) return el('div', 'notice', logo, el('p', '', 'Einen Moment bitte – der Bildschirm startet gleich.'));
   const longOffline = health.offlineSince && Date.now() - health.offlineSince > 24 * 3600e3 && health.cacheEmpty;
   return longOffline ? el('div', 'notice', logo, el('p', '', 'Dieser Bildschirm wartet auf Verbindung. Bitte die Museums-IT informieren.')) : el('div', 'standby', logo);

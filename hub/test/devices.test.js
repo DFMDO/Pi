@@ -147,3 +147,12 @@ test('Offline-Erkennung (Ampel) und Klartext', async () => {
   d = (await a('GET', '/api/v1/devices')).json()[0]; assert.equal(d.status.level, 'bad');
   await h.cleanup();
 });
+
+test('Startkarte enthält Hub, Fingerabdruck, Code (und WLAN) und wird vom Setup-Parser gelesen', async () => {
+  const h = await makeHub(); const a = await h.as('admin'); const { parseCard } = await import('../../setup/lib/parse.js');
+  const r = (await a('POST', '/api/v1/pairing', { wifi: { ssid: 'Signage', password: 'wlanpasswort' } })).json();
+  const c = parseCard(r.card); assert.equal(c.wifi.ssid, 'Signage'); assert.equal(c.fingerprint, h.tls.spki); assert.equal(c.pairCode, r.code.replace('-', '')); assert.equal(c.hubAddress, 'https://dfm-signage.local');
+  const noWifi = parseCard((await a('POST', '/api/v1/pairing')).json().card); assert.equal(noWifi.wifi, undefined);
+  assert.equal((await a('POST', '/api/v1/pairing', { wifi: { ssid: '' } })).statusCode, 400);
+  await h.cleanup();
+});
