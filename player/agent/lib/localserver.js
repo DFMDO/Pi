@@ -26,10 +26,14 @@ function sniff(file) {
   if (b.subarray(4, 8).toString() === 'ftyp') return 'video/mp4'; return 'application/octet-stream';
 }
 
-export function createLocalServer({ getPlan, getManifest, getHealth, mediaDir, port = 8080 }) {
+export function createLocalServer({ getPlan, getManifest, getHealth, onStatus = () => {}, mediaDir, port = 8080 }) {
   const clients = new Set();
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1'); const p = url.pathname;
+    if (req.method === 'POST' && p === '/status') { // „Ist“-Meldung der Playerseite (nur Loopback, klein, nur JSON)
+      let n = 0; const chunks = []; req.on('data', (c) => { n += c.length; if (n > 4096) req.destroy(); else chunks.push(c); });
+      req.on('end', () => { try { onStatus(JSON.parse(Buffer.concat(chunks).toString())); res.writeHead(204, HEAD).end(); } catch { res.writeHead(400, HEAD).end(); } }); return;
+    }
     if (req.method !== 'GET') { res.writeHead(405, HEAD).end(); return; }
     if (STATIC.has(p)) { const [f, t] = STATIC.get(p); if (!existsSync(f)) { res.writeHead(404, HEAD).end(); return; } res.writeHead(200, { ...HEAD, 'Content-Type': t }); createReadStream(f).pipe(res); return; }
     if (p === '/plan.json') return json(res, getPlan() ?? { segments: [], playlists: {}, defaultPlaylistId: null });

@@ -2,19 +2,21 @@ import { h, dialog, confirmDlg, toast, field, empty } from '../ui.js';
 import { get, post, put, del, can } from '../api.js';
 
 export async function playlistsPage({ route }) {
-  const [lists, media] = await Promise.all([get('/playlists'), get('/media')]); const byId = Object.fromEntries(media.map((m) => [m.id, m]));
-  const cards = lists.map((p) => h('article', { class: 'card' }, h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, p.name), p.isDefault ? h('span', { class: 'status ok' }, '✔ Standard') : null, h('span', { class: 'sp' }),
-    can('playlists.write') ? [h('button', { class: 'btn', onclick: () => edit(p, media, route) }, 'Bearbeiten'), p.isDefault ? null : h('button', { class: 'btn sec', onclick: async () => { try { await del(`/playlists/${p.id}`); toast(`„${p.name}“ liegt im Papierkorb.`); route(); } catch (e) { if (e.data?.needsConfirm && await confirmDlg('Abspielliste löschen?', e.message, 'Löschen')) { await del(`/playlists/${p.id}?force=1`); route(); } else toast(e.message, 'err'); } } }, 'Löschen')] : null),
+  const [all, media, dr] = await Promise.all([get('/playlists'), get('/media'), get('/drafts')]); const canPub = dr.canPublish;
+  // Entwurf einer veröffentlichten Liste wird bei dieser angezeigt; eigenständige Entwürfe als eigene Karte
+  const draftFor = Object.fromEntries(all.filter((p) => p.draftOf).map((p) => [p.draftOf, p])); const lists = all.filter((p) => !p.draftOf); const byId = Object.fromEntries(media.map((m) => [m.id, m]));
+  const cards = lists.map((p) => h('article', { class: 'card' }, h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, p.name), p.isDefault ? h('span', { class: 'status ok' }, '✔ Standard') : null, p.state === 'draft' ? h('span', { class: 'status warn' }, '✎ Entwurf') : draftFor[p.id] ? h('span', { class: 'status warn' }, '✎ Änderungen als Entwurf') : null, h('span', { class: 'sp' }),
+    can('playlists.write') ? [h('button', { class: 'btn', onclick: () => edit(draftFor[p.id] ?? p, media, route, p.id, canPub) }, 'Bearbeiten'), (p.state === 'draft' || draftFor[p.id]) && canPub ? h('button', { class: 'btn', onclick: async () => { try { await post(`/playlists/${(draftFor[p.id] ?? p).id}/publish`); toast('Veröffentlicht. Die Bildschirme bekommen die Liste gleich.'); route(); } catch (e) { toast(e.message, 'err'); } } }, 'Veröffentlichen') : null, draftFor[p.id] || p.state === 'draft' ? h('button', { class: 'btn sec', onclick: async () => { await post(`/playlists/${(draftFor[p.id] ?? p).id}/discard`); route(); } }, 'Entwurf verwerfen') : null, p.isDefault ? null : h('button', { class: 'btn sec', onclick: async () => { try { await del(`/playlists/${p.id}`); toast(`„${p.name}“ liegt im Papierkorb.`); route(); } catch (e) { if (e.data?.needsConfirm && await confirmDlg('Abspielliste löschen?', e.message, 'Löschen')) { await del(`/playlists/${p.id}?force=1`); route(); } else toast(e.message, 'err'); } } }, 'Löschen')] : null),
     p.isDefault ? h('p', { class: 'hint' }, 'Diese Liste läuft, wenn kein Termin etwas anderes festlegt.') : null,
-    p.items.length ? h('ol', {}, p.items.map((i) => h('li', {}, `${byId[i.mediaId]?.name ?? '(gelöscht)'} – ${i.duration} Sekunden`))) : h('p', { class: 'hint' }, 'Diese Liste ist noch leer. Klicke auf „Bearbeiten“ und füge Bilder oder Videos hinzu.')));
+    (draftFor[p.id] ?? p).items.length ? h('ol', {}, (draftFor[p.id] ?? p).items.map((i) => h('li', {}, `${byId[i.mediaId]?.name ?? '(gelöscht)'} – ${i.duration} Sekunden`))) : h('p', { class: 'hint' }, 'Diese Liste ist noch leer. Klicke auf „Bearbeiten“ und füge Bilder oder Videos hinzu.')));
   return h('div', {}, h('h1', {}, 'Abspiellisten'), h('p', { class: 'lead' }, 'Eine Abspielliste legt fest, welche Bilder und Videos nacheinander gezeigt werden.'),
     can('playlists.write') ? h('p', {}, h('button', { class: 'btn big', onclick: () => nameDlg(route) }, '➕ Neue Abspielliste')) : null, h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, cards));
 }
 function nameDlg(route) {
   const n = h('input', { maxlength: 80 });
-  dialog('Neue Abspielliste', field('Name, z. B. „Sommer-Aktion“', n), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Anlegen', fn: async () => { try { await post('/playlists', { name: n.value }); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
+  dialog('Neue Abspielliste', field('Name, z. B. „Sommer-Aktion“', n), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Anlegen', fn: async () => { try { await post('/playlists', { name: n.value }); toast('Als Entwurf angelegt. Füge Inhalte hinzu und veröffentliche sie.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
 }
-function edit(p, media, route) {
+function edit(p, media, route, origId, canPub) {
   let items = p.items.map((i) => ({ ...i })), def = p.isDefault; const name = h('input', { value: p.name, maxlength: 80 }), box = h('div', {}); let dragFrom = null;
   const nameOf = (id) => media.find((m) => m.id === id)?.name ?? '(gelöscht)';
   const move = (i, d) => { const j = i + d; if (j < 0 || j >= items.length) return; [items[i], items[j]] = [items[j], items[i]]; draw(); };
@@ -28,5 +30,6 @@ function edit(p, media, route) {
   const add = h('select', { 'aria-label': 'Medium hinzufügen', onchange: (e) => { if (e.target.value) { items.push({ mediaId: e.target.value, duration: 10, transition: 'fade' }); e.target.value = ''; draw(); } } }, h('option', { value: '' }, '➕ Bild, Video oder Text hinzufügen …'), media.map((m) => h('option', { value: m.id }, m.name)));
   draw();
   dialog('Abspielliste bearbeiten', h('div', {}, field('Name', name), h('p', { class: 'hint' }, 'Ziehe die Einträge, um die Reihenfolge zu ändern – oder nutze die Pfeile.'), box, add, h('label', {}, h('input', { type: 'checkbox', checked: def, onchange: (e) => { def = e.target.checked; } }), ' Als Standard-Abspielliste verwenden')),
-    [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await put(`/playlists/${p.id}`, { name: name.value, ...(def ? { isDefault: true } : {}), items: items.map(({ mediaId, duration, transition, validFrom, validTo }) => ({ mediaId, duration, transition, validFrom: validFrom ?? null, validTo: validTo ?? null })) }); toast('Gespeichert. Die Bildschirme bekommen die Änderung gleich.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
+    [{ text: 'Abbrechen', cls: 'sec' }, ...(canPub ? [{ text: 'Speichern und veröffentlichen', fn: async () => save(true) }] : []), { text: canPub ? 'Als Entwurf speichern' : 'Speichern', cls: canPub ? 'sec' : '', fn: async () => save(false) }]);
+  async function save(publish) { try { await put(`/playlists/${p.id}`, { name: name.value, publish, ...(def ? { isDefault: true } : {}), items: items.map(({ mediaId, duration, transition, validFrom, validTo }) => ({ mediaId, duration, transition, validFrom: validFrom ?? null, validTo: validTo ?? null })) }); toast(publish ? 'Veröffentlicht. Die Bildschirme bekommen die Änderung gleich.' : 'Als Entwurf gespeichert. Er läuft erst nach dem Veröffentlichen.'); route(); } catch (e) { toast(e.message, 'err'); return false; } }
 }

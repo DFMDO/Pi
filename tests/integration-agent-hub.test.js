@@ -24,7 +24,7 @@ test('Hub + Player: verbinden, synchronisieren, offline weiterlaufen, sperren', 
   const m = multipart('file', 'logo.jpg', img); const imgId = (await admin('POST', '/api/v1/media', m.payload, m.headers)).json().ids[0];
   const txt = (await admin('POST', '/api/v1/media/text', { name: 'Hallo', title: 'Hallo Museum' })).json().id;
   const pl = h.db.prepare('SELECT id FROM playlists WHERE is_default=1').get().id;
-  await admin('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: imgId, duration: 5 }, { mediaId: txt, duration: 5 }] });
+  await admin('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: imgId, duration: 5 }, { mediaId: txt, duration: 5 }], publish: true });
 
   // Pairing
   const { code, fingerprintRaw } = (await admin('POST', '/api/v1/pairing')).json();
@@ -60,7 +60,7 @@ test('Hub + Player: verbinden, synchronisieren, offline weiterlaufen, sperren', 
   assert.match((await admin('GET', `/api/v1/devices/${deviceId}`)).json().summary, /Test-Screen: läuft/);
 
   // Neuer Termin wird live übertragen
-  const sc = await admin('POST', '/api/v1/schedules', { targetType: 'device', targetId: deviceId, content: { type: 'playlist', id: pl }, startLocal: '2030-01-01T10:00', endLocal: '2030-01-01T11:00', priority: 5 });
+  const sc = await admin('POST', '/api/v1/schedules', { publish: true, targetType: 'device', targetId: deviceId, content: { type: 'playlist', id: pl }, startLocal: '2030-01-01T10:00', endLocal: '2030-01-01T11:00', priority: 5 });
   assert.equal(sc.statusCode, 201);
 
   // Hub fällt aus → Player läuft mit Cache weiter (Plan + Medien weiter verfügbar)

@@ -1,15 +1,15 @@
 import { h, dialog, confirmDlg, toast, field, fmtDate, fmtBytes, help } from '../ui.js';
-import { get, post, put, del, api, state } from '../api.js';
+import { get, post, put, del, patch, api, state } from '../api.js';
 
 export async function usersPage({ route }) {
-  const users = await get('/users'); const R = { admin: 'Admin (alles)', editor: 'Redakteur (Inhalte & Termine)', viewer: 'Betrachter (nur ansehen)' };
+  const users = await get('/users'); const R = { admin: 'Admin (alles)', editor: 'Redakteur (Inhalte & Termine)', anzeige: 'Anzeige (nur Live-Ansicht)' };
   return h('div', {}, h('h1', {}, 'Benutzer'), h('p', { class: 'lead' }, 'Wer darf sich am Hub anmelden – und was darf die Person tun?'),
     h('p', {}, h('button', { class: 'btn big', onclick: () => addUser(route) }, '➕ Neue Person')), h('table', {}, h('thead', {}, h('tr', {}, ['Name', 'Rolle', 'Zusätzliche Sicherheit', ''].map((x) => h('th', {}, x)))),
-      h('tbody', {}, users.map((u) => h('tr', {}, h('td', {}, u.name), h('td', {}, R[u.role]), h('td', {}, u.totp ? '✔ Code aus App aktiv' : '–'), h('td', {}, u.id === state.user.id ? h('span', { class: 'hint' }, 'Das bist du') : h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: async () => { if (await confirmDlg('Person löschen?', `„${u.name}“ kann sich danach nicht mehr anmelden.`, 'Löschen')) { await del(`/users/${u.id}`); route(); } } }, 'Löschen')))))),
+      h('tbody', {}, users.map((u) => h('tr', {}, h('td', {}, u.name), h('td', {}, R[u.role]), h('td', {}, u.totp ? '✔ Code aus App aktiv' : '–'), h('td', {}, h('button', { class: 'btn link', onclick: () => roleDlg(u, R, route) }, 'Rolle ändern'), h('button', { class: 'btn link', onclick: () => resetDlg(u, route) }, 'Passwort zurücksetzen'), u.id === state.user.id ? h('span', { class: 'hint' }, ' (Das bist du)') : h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: async () => { if (await confirmDlg('Person löschen?', `„${u.name}“ kann sich danach nicht mehr anmelden.`, 'Löschen')) { try { await del(`/users/${u.id}`); route(); } catch (e) { toast(e.message, 'err'); } } } }, 'Löschen')))))),
     h('h2', {}, 'Mein Konto'), h('div', { class: 'row' }, h('button', { class: 'btn sec', onclick: pwDlg }, 'Passwort ändern'), h('button', { class: 'btn sec', onclick: totpDlg }, 'Zusätzliche Sicherheit (Code aus App)')));
 }
 function addUser(route) {
-  const n = h('input', { maxlength: 60 }), p = h('input', { type: 'password', autocomplete: 'new-password' }), r = h('select', {}, [['editor', 'Redakteur (Inhalte & Termine)'], ['viewer', 'Betrachter (nur ansehen)'], ['admin', 'Admin (alles)']].map(([k, t]) => h('option', { value: k }, t)));
+  const n = h('input', { maxlength: 60 }), p = h('input', { type: 'password', autocomplete: 'new-password' }), r = h('select', {}, [['editor', 'Redakteur (Inhalte & Termine)'], ['anzeige', 'Anzeige (nur Live-Ansicht)'], ['admin', 'Admin (alles)']].map(([k, t]) => h('option', { value: k }, t)));
   dialog('Neue Person', h('div', {}, field('Name', n), field('Passwort (mindestens 12 Zeichen)', p, 'Die Person kann es später selbst ändern.'), field('Rolle', r, 'Redakteure dürfen Inhalte und Termine bearbeiten, aber keine Geräte verwalten oder Einstellungen ändern.')), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Anlegen', fn: async () => { try { await post('/users', { name: n.value, password: p.value, role: r.value }); toast('Die Person wurde angelegt.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
 }
 function pwDlg() {
@@ -59,4 +59,13 @@ export async function settingsPage({ route }) {
 function wifiForm() {
   const n = h('input', { maxlength: 32 }), p = h('input', { type: 'password', autocomplete: 'off' });
   return h('div', {}, field('WLAN-Name', n), field('WLAN-Passwort', p), h('button', { class: 'btn', onclick: async () => { if (!(await confirmDlg('WLAN eintragen?', 'Der Hub verbindet sich mit diesem WLAN. Bitte lasse das Kabel zur Sicherheit zunächst eingesteckt.', 'WLAN eintragen', false))) return; try { await post('/system/wifi', { ssid: n.value, password: p.value }); toast('Das WLAN wurde eingetragen.'); } catch (e) { toast(e.message, 'err'); } } }, 'WLAN eintragen'));
+}
+
+function roleDlg(u, R, route) {
+  const r = h('select', {}, Object.entries(R).map(([k, t]) => h('option', { value: k, selected: k === u.role }, t)));
+  dialog(`Rolle von ${u.name}`, field('Rolle', r, 'Der letzte Admin kann nicht herabgestuft werden, damit immer jemand den Hub verwalten kann.'), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await patch(`/users/${u.id}`, { role: r.value }); toast('Die Rolle wurde geändert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
+}
+function resetDlg(u, route) {
+  const p = h('input', { type: 'password', autocomplete: 'new-password' });
+  dialog(`Passwort von ${u.name} zurücksetzen`, h('div', {}, h('p', {}, 'Die Person wird überall abgemeldet und meldet sich mit dem neuen Passwort an. Gib es ihr persönlich weiter.'), field('Neues Passwort (mindestens 12 Zeichen)', p)), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Zurücksetzen', fn: async () => { try { await post(`/users/${u.id}/password`, { password: p.value }); toast('Das Passwort wurde zurückgesetzt.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
 }

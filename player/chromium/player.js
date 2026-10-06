@@ -48,6 +48,7 @@ async function main() {
     if (!items.length) { await show(standby(), 'fade'); await sleep(5000); continue; }
     const item = items[idx % items.length]; idx++;
     const node = build(item); await show(node, item.transition);
+    const nx = items[idx % items.length]; fetch('/status', { method: 'POST', body: JSON.stringify({ current: { mediaId: item.mediaId, name: item.name, kind: item.kind, duration: item.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null }) }).catch(() => {});
     let ms = item.duration * 1000;
     if (node.tagName === 'VIDEO') { // Video wird immer zu Ende gespielt
       await node.play().catch(() => {}); ms = await new Promise((res) => { node.onended = () => res(0); node.onerror = () => res(0); setTimeout(() => res(0), ((item.durationS ?? 60) + 5) * 1000); });

@@ -30,7 +30,7 @@ export class Agent {
     this.cfg = readJson(this.cfgFile); this.plan = readJson(join(dataDir, 'cache', 'plan.json')); this.manifest = readJson(join(dataDir, 'cache', 'manifest.json'));
     this.syncState = { total: 0, done: 0 }; this.connected = false; this.ws = null; this.stopped = false; this.attempt = 0; this.syncing = false;
     this.nowPlaying = null; this.displayOff = false; this.displayRule = null;
-    this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health() });
+    this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health(), onStatus: (s) => this.onPlayerStatus(s) });
   }
   health() { let cached = []; try { cached = readdirSync(this.mediaDir).filter((f) => !f.endsWith('.part')); } catch {}
     return { cached, displayOff: !!this.displayOff, pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
@@ -108,7 +108,16 @@ export class Agent {
   send(type, body) { if (this.ws?.readyState === 1) this.ws.send(msg(type, body)); }
   async sendHeartbeat() {
     const np = this.nowPlayingInfo();
-    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
+    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
+  }
+  /** Was der Player gerade WIRKLICH zeigt (Ist) – gemeldet von Chromium-Seite oder Lite-Renderer, sofort an den Hub */
+  onPlayerStatus(s) {
+    if (!s || typeof s !== 'object' || typeof s.current !== 'object') return;
+    const cur = s.current && { mediaId: String(s.current.mediaId ?? '').slice(0, 40), name: String(s.current.name ?? '').slice(0, 120), kind: String(s.current.kind ?? '').slice(0, 12), since: Date.now(), duration: Number(s.current.duration) || null };
+    const nxt = s.next ? { mediaId: String(s.next.mediaId ?? '').slice(0, 40), name: String(s.next.name ?? '').slice(0, 120) } : null;
+    const r = resolvePlaylist(this.plan, Date.now());
+    this.playerStatus = { current: cur, next: nxt, source: r.source, scheduleId: r.scheduleId ?? null };
+    this.send('status', this.playerStatus);
   }
   nowPlayingInfo() { // reine Anzeige für „zeigt gerade …“
     const r = resolvePlaylist(this.plan, Date.now()); if (!r.playlistId) return null;
@@ -219,7 +228,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const cfg = readJson(join(dataDir, 'agent.json'));
   const { chromiumRenderer, liteRenderer } = await import('./lib/renderers.js');
   const a = new Agent({ dataDir, log: (...x) => console.error(...x), port: Number(process.env.DFM_PORT ?? 8080) });
-  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getRotation: () => a.cfg?.orientation ?? 0, haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
+  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getRotation: () => a.cfg?.orientation ?? 0, onShow: (s) => a.onPlayerStatus(s), haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
     : chromiumRenderer({ url: 'http://127.0.0.1:8080/player/', profileDir: join(dataDir, 'chromium-profile') });
   await a.start();
   for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => a.stop().then(() => process.exit(0)));

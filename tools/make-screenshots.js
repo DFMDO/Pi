@@ -21,12 +21,12 @@ const mk = async (n, t, b, tpl) => (await admin('POST', '/api/v1/media/text', { 
 const [m1, m2, m3] = [await mk('Sommer-Aktion', 'Sommer-Aktion im Museumsshop', 'Alle Trikots 20 % günstiger – nur diese Woche.', 'highlight'), await mk('Willkommen', 'Willkommen im Deutschen Fußballmuseum', 'Schön, dass du da bist!', 'standard'), await mk('Hinweis Einlass', 'Bitte Tickets bereithalten', 'Der Einlass erfolgt am Haupteingang.', 'hinweis')];
 for (const [c, col] of [['#c8102e', '#c8102e'], ['#1a1a1a', '#1a1a1a']]) { const b = multipart('file', `Stadion-${col.slice(1)}.jpg`, await sharp({ create: { width: 1920, height: 1080, channels: 3, background: c } }).jpeg().toBuffer()); await admin('POST', '/api/v1/media', b.payload, b.headers); }
 const pl = h.db.prepare('SELECT id FROM playlists WHERE is_default=1').get().id;
-await admin('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: m2, duration: 10 }, { mediaId: m3, duration: 8 }] });
-const p2 = (await admin('POST', '/api/v1/playlists', { name: 'Sommer-Aktion' })).json().id; await admin('PUT', `/api/v1/playlists/${p2}`, { items: [{ mediaId: m1, duration: 12 }, { mediaId: m2, duration: 8 }] });
+await admin('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: m2, duration: 10 }, { mediaId: m3, duration: 8 }], publish: true });
+const p2 = (await admin('POST', '/api/v1/playlists', { name: 'Sommer-Aktion' })).json().id; await admin('PUT', `/api/v1/playlists/${p2}`, { items: [{ mediaId: m1, duration: 12 }, { mediaId: m2, duration: 8 }], publish: true });
 const d0 = new Date(); const mon = new Date(d0); mon.setDate(d0.getDate() - ((d0.getDay() + 6) % 7)); const day = (n) => { const x = new Date(mon); x.setDate(mon.getDate() + n); return x.toISOString().slice(0, 10); };
-await admin('POST', '/api/v1/schedules', { targetType: 'device', targetId: shop, content: { type: 'playlist', id: p2 }, startLocal: `${day(1)}T10:00`, endLocal: `${day(1)}T14:00`, priority: 6, rrule: 'FREQ=WEEKLY;BYDAY=TU,TH' });
-await admin('POST', '/api/v1/schedules', { targetType: 'group', targetId: grp, content: { type: 'playlist', id: pl }, startLocal: `${day(2)}T09:00`, endLocal: `${day(2)}T12:00`, priority: 5 });
-await admin('POST', '/api/v1/schedules', { targetType: 'device', targetId: cafe, content: { type: 'media', id: m3 }, startLocal: `${day(4)}T08:00`, endLocal: `${day(4)}T18:00`, priority: 4 });
+await admin('POST', '/api/v1/schedules', { publish: true, targetType: 'device', targetId: shop, content: { type: 'playlist', id: p2 }, startLocal: `${day(1)}T10:00`, endLocal: `${day(1)}T14:00`, priority: 6, rrule: 'FREQ=WEEKLY;BYDAY=TU,TH' });
+await admin('POST', '/api/v1/schedules', { publish: true, targetType: 'group', targetId: grp, content: { type: 'playlist', id: pl }, startLocal: `${day(2)}T09:00`, endLocal: `${day(2)}T12:00`, priority: 5 });
+await admin('POST', '/api/v1/schedules', { publish: true, targetType: 'device', targetId: cafe, content: { type: 'media', id: m3 }, startLocal: `${day(4)}T08:00`, endLocal: `${day(4)}T18:00`, priority: 4 });
 await h.app.variants.idle();
 const browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '--ignore-certificate-errors'] });
 const page = await (await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1280, height: 800 }, locale: 'de-DE', timezoneId: 'Europe/Berlin' })).newPage();

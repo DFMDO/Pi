@@ -49,7 +49,7 @@ test('Admin-UI: Anmelden, Text anlegen, Liste, Termin per Satz, Bedienung per Ta
   await page.getByRole('link', { name: /Kalender/ }).click(); await page.getByRole('button', { name: /Neuer Termin/ }).click();
   const dlg = page.getByRole('dialog'); await dlg.getByLabel('Datum').fill('2030-05-07'); await dlg.getByLabel('Von').fill('10:00'); await dlg.getByLabel('Bis').fill('12:00');
   await dlg.getByRole('button', { name: 'Vorschau ansehen' }).click(); await dlg.getByText(/So sieht der Bildschirm am Dienstag um 10:00 Uhr heute aus/).waitFor();
-  await dlg.getByRole('button', { name: 'Speichern' }).click(); await page.getByText('Termin gespeichert.').waitFor();
+  await dlg.getByRole('button', { name: 'Speichern und veröffentlichen' }).click(); await page.getByText('Jetzt veröffentlichen?').waitFor(); await page.getByRole('dialog').last().getByRole('button', { name: 'Veröffentlichen', exact: true }).click(); await page.getByText(/Veröffentlicht\. Die Bildschirme/).waitFor();
   assert.equal(h.db.prepare('SELECT COUNT(*) n FROM schedules').get().n, 1);
   assert.equal(h.db.prepare('SELECT start_local FROM schedules').get().start_local, '2030-05-07T10:00');
   // Tastatur: Fokus sichtbar, Tab-Reihenfolge erreicht Navigation
@@ -61,11 +61,12 @@ test('Admin-UI: Anmelden, Text anlegen, Liste, Termin per Satz, Bedienung per Ta
   await browser.close(); await h.cleanup();
 });
 
-test('Rechte in der Oberfläche: Betrachter sieht keine Verwaltungsknöpfe', { skip, timeout: 60000 }, async () => {
+test('Rechte in der Oberfläche: Rolle Anzeige sieht nur die Live-Ansicht', { skip, timeout: 60000 }, async () => {
   const h = await makeHub({ useTls: true }); await h.app.listen({ port: 0, host: '127.0.0.1' });
   const browser = await chromium.launch({ executablePath: EXE, args: ARGS }); const page = await (await browser.newContext({ ignoreHTTPSErrors: true })).newPage();
   await page.goto(`https://127.0.0.1:${h.app.server.address().port}`); await page.getByLabel('Benutzername').fill('vera'); await page.getByLabel('Passwort').fill(PW); await page.getByRole('button', { name: 'Anmelden' }).click();
-  await page.getByRole('heading', { name: 'Startseite' }).waitFor();
+  await page.getByRole('heading', { name: 'Live' }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Kalender' }).count(), 0); assert.equal(await page.getByRole('link', { name: 'Bilder & Videos' }).count(), 0);
   assert.equal(await page.getByRole('button', { name: /Neuen Bildschirm verbinden/ }).count(), 0); assert.equal(await page.getByRole('link', { name: 'Benutzer' }).count(), 0); assert.equal(await page.getByRole('link', { name: 'Erweitert' }).count(), 0);
   await browser.close(); await h.cleanup();
 });

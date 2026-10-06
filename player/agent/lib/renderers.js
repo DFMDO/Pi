@@ -29,7 +29,7 @@ export function chromiumRenderer({ url, profileDir, log = () => {} }) {
 }
 
 /** Lite: mpv ohne Browser. Der Agent steuert mpv über den IPC-Socket und wertet den Plan selbst aus. */
-export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth = () => ({}), getRotation = () => 0, profile = 'lite', socket = '/run/dfm/mpv.sock', log = () => {}, now = () => Date.now() }) {
+export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth = () => ({}), getRotation = () => 0, onShow = () => {}, profile = 'lite', socket = '/run/dfm/mpv.sock', log = () => {}, now = () => Date.now() }) {
   const sup = supervise(() => spawn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--no-terminal', '--keep-open=no',
     '--image-display-duration=10', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', `--video-rotate=${getRotation()}`], { stdio: 'ignore' }), log);
   let sock = null, idx = 0, timer = null, current = null, stopped = false;
@@ -49,7 +49,7 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
     if (hs.displayOff) { send(['loadfile', '/usr/share/dfm/schwarz.png', 'replace']); timer = setTimeout(tick, 5000); return; }
     if (special || !items.length) { send(['loadfile', `/usr/share/dfm/${special ?? 'standby'}.png`, 'replace']); timer = setTimeout(tick, 5000); return; }
     idx %= items.length; current = items[idx];
-    send(['loadfile', fileOf(current), 'replace']);
+    send(['loadfile', fileOf(current), 'replace']); const nx = items[(idx + 1) % items.length]; onShow({ current: { mediaId: current.mediaId, name: current.name, kind: current.kind, duration: current.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null });
     let wait = current.kind === 'video' ? (current.durationS ?? 30) * 1000 + 3000 : current.duration * 1000; // Video: end-file löst weiter, Timer nur als Sicherung
     if (r.until) wait = current.kind === 'video' ? wait : Math.min(wait, Math.max(0, r.until - now())); // Bild endet spätestens an der Terminkante; Video wird zu Ende gespielt
     timer = setTimeout(() => { next(); }, Math.max(500, wait));

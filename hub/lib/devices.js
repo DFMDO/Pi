@@ -4,6 +4,7 @@ import { createReadStream, statSync, existsSync, mkdirSync, writeFileSync } from
 import { join } from 'node:path';
 import { randomToken, sha256hex, safeEqual, pairingCode, encrypt, decrypt } from './crypto.js';
 import { formatFingerprint } from './tls.js';
+import { resolvePlaylist } from '../../shared/sequencer.js';
 import { schedulePayload, manifestPayload, PROFILES } from './plan.js';
 import { validateMessage, msg, COMMANDS } from '../../shared/protocol.js';
 import { createLimiter } from './ratelimit.js';
@@ -65,6 +66,19 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   app.get('/api/v1/devices', { config: { perm: 'devices.read' } }, async () => {
     db.prepare("DELETE FROM devices WHERE status='pending' AND created_at < ?").run(now() - PENDING_TTL);
     return db.prepare('SELECT * FROM devices ORDER BY name').all().map(present);
+  });
+  /** Live-Ansicht (Z.1): Ist (vom Player gemeldet) gegen Soll (aus dem veröffentlichten Plan) */
+  app.get('/api/v1/live', { config: { perm: 'live.read' } }, async () => {
+    const t = now();
+    return db.prepare("SELECT * FROM devices WHERE status='active' ORDER BY name").all().map((d) => {
+      const st = d.state_json ? JSON.parse(d.state_json) : {}, status = deviceStatus(d, t), plan = schedulePayload(db, d, t), r = resolvePlaylist(plan, t);
+      const pl = r.playlistId ? plan.playlists?.[r.playlistId] : null, ist = st.playerStatus ?? null;
+      const soll = { playlist: pl?.name ?? null, source: r.source, scheduleId: r.scheduleId, mediaIds: pl?.items?.map((i) => i.mediaId) ?? [] };
+      const g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id) : null;
+      const mismatch = status.level === 'ok' && !!ist?.current && soll.mediaIds.length > 0 && !soll.mediaIds.includes(ist.current.mediaId);
+      return { id: d.id, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, profile: d.profile, status, lastSeen: d.last_seen, soll, ist: ist && { ...ist, source: ist.source }, mismatch,
+        mismatchText: mismatch ? 'Der Bildschirm zeigt etwas anderes als geplant. Er lädt eventuell noch Inhalte.' : null, displayOff: !!st.displayPower && st.displayPower === 'off', shotAt: existsSync(join(shotDir, d.id + '.png')) ? statSync(join(shotDir, d.id + '.png')).mtimeMs : null };
+    });
   });
   app.get('/api/v1/devices/:id', { config: { perm: 'devices.read' } }, async (req, reply) => {
     const d = getDevice(req.params.id); return d ? present(d) : reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
@@ -218,7 +232,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   });
   app.get('/api/v1/devices/:id/commands', { config: { perm: 'devices.read' } }, async (req) =>
     db.prepare('SELECT id,type,status,result_json,created_at FROM commands WHERE device_id=? ORDER BY created_at DESC LIMIT 20').all(req.params.id));
-  app.get('/api/v1/devices/:id/screenshot', { config: { perm: 'devices.read' } }, async (req, reply) => {
+  app.get('/api/v1/devices/:id/screenshot', { config: { perm: 'live.read' } }, async (req, reply) => {
     if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return reply.code(400).send({ error: 'Ungültig.' });
     const f = join(shotDir, req.params.id + '.png');
     return existsSync(f) ? reply.header('Content-Type', 'image/png').header('Cache-Control', 'no-store').send(createReadStream(f)) : reply.code(404).send({ error: 'Es gibt noch keine Vorschau.' });
@@ -250,6 +264,9 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
         pushPlan(getDevice(d.id)); deliverQueued(d.id);
       } else if (m.type === 'heartbeat') {
         db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify(m.state).slice(0, 20000), d.id);
+      } else if (m.type === 'status') {
+        let st = {}; try { st = JSON.parse(getDevice(d.id).state_json ?? '{}'); } catch {}
+        db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...st, playerStatus: { current: m.current, next: m.next ?? null, source: m.source ?? null, scheduleId: m.scheduleId ?? null, ts: now() } }).slice(0, 20000), d.id);
       } else if (m.type === 'command_result') {
         db.prepare("UPDATE commands SET status=?, result_json=? WHERE id=? AND device_id=?").run(m.ok ? 'done' : 'failed', JSON.stringify(m.result ?? { error: m.error }), m.id, d.id);
       } else if (m.type === 'screenshot') {

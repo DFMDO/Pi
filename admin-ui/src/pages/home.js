@@ -6,7 +6,7 @@ import { pairDialog } from './devices.js';
 export const shot = (d) => { const box = h('div', { class: 'shot' }, 'Noch keine Vorschau'); if (d.status.level === 'ok') { const i = h('img', { alt: `Vorschau von ${d.name}`, src: `/api/v1/devices/${d.id}/screenshot?t=${Date.now() >> 14}` }); i.onload = () => box.replaceChildren(i); } return box; };
 
 export async function homePage({ route }) {
-  const [devices, warnings, storage, sched, playlists] = await Promise.all([get('/devices'), get('/warnings'), get('/system/storage').catch(() => null), get('/schedules'), get('/playlists')]);
+  const [devices, warnings, storage, sched, playlists, drafts] = await Promise.all([get('/devices'), get('/warnings'), get('/system/storage').catch(() => null), get('/schedules'), get('/playlists'), get('/drafts')]);
   const active = devices.filter((d) => d.status.level !== 'pending'), pending = devices.filter((d) => d.status.level === 'pending');
   const quick = [['🖼️', 'Bild oder Video anzeigen', 'Datei hochladen und auf einem Bildschirm zeigen', '#/medien'], ['📝', 'Text-Ankündigung anzeigen', 'Aus einer DFM-Vorlage erstellen', '#/medien?text=1'], ['📅', 'Für einen bestimmten Tag planen', 'Zeitraum und Bildschirm wählen', '#/kalender']];
   const issues = [...warnings.map((w) => w.text), ...active.filter((d) => d.status.level === 'warn' || d.status.level === 'bad').map((d) => d.status.level === 'warn' ? `${d.name} hat gerade keine Verbindung. Der Bildschirm zeigt weiter die zuletzt geladenen Inhalte.` : `${d.name} ist nicht erreichbar. Bitte Strom und WLAN prüfen.`), storage?.warn ? storage.text : null].filter(Boolean);
@@ -14,6 +14,7 @@ export async function homePage({ route }) {
     h('div', { class: 'grid', style: 'margin-bottom:16px' }, ...(can('media.write') ? quick.map(([i, t, d, href]) => h('button', { class: 'quick', onclick: () => { location.hash = href; } }, h('b', {}, `${i} ${t}`), h('span', { class: 'hint' }, d))) : []),
       can('devices.manage') ? h('button', { class: 'quick main', 'data-tour': 'pair', onclick: () => pairDialog(route) }, h('b', {}, '➕ Neuen Bildschirm verbinden'), h('span', {}, 'Zeigt einen Code für den neuen Bildschirm')) : null),
     pending.length ? h('div', { class: 'notice' }, h('b', {}, '⏳ Ein neuer Bildschirm wartet auf dich. '), pending.map((d) => `„${d.name}“ (${d.model ?? 'unbekanntes Gerät'})`).join(', '), ' – ', h('a', { href: '#/bildschirme' }, 'Jetzt bestätigen')) : null,
+    drafts.schedules + drafts.playlists ? h('div', { class: 'notice' }, `✎ ${drafts.schedules + drafts.playlists} Entwürfe warten auf Veröffentlichung. `, h('a', { href: '#/kalender' }, 'Zum Kalender'), ' · ', h('a', { href: '#/listen' }, 'Zu den Abspiellisten')) : null,
     await clockNotice(),
     ...issues.map((t) => h('div', { class: 'notice', role: 'status' }, '⚠ ', t)),
     h('h2', {}, 'Meine Bildschirme'),

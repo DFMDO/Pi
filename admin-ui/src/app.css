@@ -57,3 +57,7 @@ input[type=checkbox],input[type=radio]{width:26px;height:26px;min-height:0;flex:
 label:has(>input[type=checkbox]){display:flex;align-items:center;gap:12px;min-height:44px;font-weight:600}
 
 .logobox{background:var(--dfm-secondary);border-radius:14px;padding:14px;margin-bottom:16px;display:flex;justify-content:center}.logobox img{height:96px}
+.livetile{text-align:left;cursor:pointer;display:block;width:100%}.livetile.mismatch{border:2px dashed var(--dfm-warn,#d97706)}.livetile .now{margin:6px 0 0;font-weight:600}
+.wall .lead,.wall h1{display:none}.wall .livetile .hint{display:none}
+.ev.draft{border:2px dashed #fff;opacity:.85;background-image:repeating-linear-gradient(45deg,transparent 0 6px,rgba(255,255,255,.18) 6px 12px)}
+.month small.draft{border:1px dashed #fff}

@@ -16,6 +16,7 @@ const SCHEMAS = {
   media_manifest: { generatedAt: num, items: Array.isArray },
   command: { id: str(64), command: (x) => COMMANDS.includes(x), args: opt(obj) },
   command_result: { id: str(64), ok: (x) => typeof x === 'boolean', result: opt(obj), error: opt(str(500)) },
+  status: { current: obj, next: opt((x) => x === null || obj(x)), source: opt(str(20)), scheduleId: opt((x) => x === null || str(64)(x)) },
   screenshot: { png: str(4 * 1024 * 1024) }, // base64
 };
 

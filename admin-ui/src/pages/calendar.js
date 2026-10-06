@@ -1,4 +1,4 @@
-import { h, dialog, confirmDlg, toast, field, help, empty } from '../ui.js';
+import { h, dialog, confirmDlg, toast, field, help, empty, fmtDate } from '../ui.js';
 import { get, post, put, del, can } from '../api.js';
 import { epochToLocal, localToEpoch, addDays, dowOf } from '../../../shared/time.js';
 
@@ -10,7 +10,7 @@ const monday = (d) => addDays(d, -((dowOf(d) + 6) % 7));
 const nice = (d) => { const [y, m, dd] = d.split('-'); return `${DN[(dowOf(d) + 6) % 7]}, ${dd}.${m}.${y}`; };
 
 export async function calendarPage({ route }) {
-  const [devices, groups, lists, media, scheds] = await Promise.all([get('/devices'), get('/groups'), get('/playlists'), get('/media'), get('/schedules')]);
+  const [devices, groups, lists, media, scheds, drafts] = await Promise.all([get('/devices'), get('/groups'), get('/playlists'), get('/media'), get('/schedules?drafts=1'), get('/drafts')]);
   const free = PALETTE.filter((c) => !groups.some((g) => g.color.toLowerCase() === c)); // Bildschirm-Farben: nie dieselbe wie eine Gruppe
   const targets = [...groups.map((g) => ({ key: 'group:' + g.id, name: 'Gruppe: ' + g.name, color: g.color })), ...devices.filter((d) => d.status.level !== 'pending').map((d, i) => ({ key: 'device:' + d.id, name: d.name, color: free[i % free.length] }))];
   const colorOf = (t, id) => targets.find((x) => x.key === `${t}:${id}`)?.color ?? '#666', nameOf = (t, id) => targets.find((x) => x.key === `${t}:${id}`)?.name ?? 'Bildschirm';
@@ -19,11 +19,11 @@ export async function calendarPage({ route }) {
   const bar = h('div', { class: 'row', style: 'margin-bottom:10px' }), cal = h('div', {}), legend = h('div', { class: 'legend', style: 'margin:8px 0' }, targets.map((t) => h('span', {}, h('i', { style: `background:${t.color}` }), t.name)));
   const nav = (n) => { anchor = view === 'month' ? addDays(anchor, 31 * n) : addDays(anchor, (view === 'week' ? 7 : 1) * n); draw(); };
   const content = (c) => (c.type === 'playlist' ? lists.find((l) => l.id === c.id)?.name : media.find((m) => m.id === c.id)?.name) ?? '(gelöscht)';
-  const open = (s, date, st, en) => editor({ s, date, st, en, targets, lists, media, scheds, devices, groups, route });
+  const open = (s, date, st, en) => editor({ s, date, st, en, targets, lists, media, scheds, devices, groups, route, canPublish: drafts.canPublish });
   async function draw() {
     const days = view === 'day' ? [anchor] : view === 'week' ? Array.from({ length: 7 }, (_, i) => addDays(monday(anchor), i)) : null;
     const from = days ? days[0] : addDays(anchor.slice(0, 8) + '01', -7), to = days ? days[days.length - 1] : addDays(anchor.slice(0, 8) + '01', 40);
-    const ev = await get(`/calendar?from=${from}&to=${to}`);
+    const ev = await get(`/calendar?from=${from}&to=${to}&drafts=1`);
     bar.replaceChildren(h('button', { class: 'btn sec', onclick: () => nav(-1), 'aria-label': 'Zurück' }, '◀'), h('button', { class: 'btn sec', onclick: () => { anchor = today(); draw(); } }, 'Heute'), h('button', { class: 'btn sec', onclick: () => nav(1), 'aria-label': 'Weiter' }, '▶'),
       h('b', {}, view === 'month' ? new Date(anchor + 'T12:00').toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }) : days.length === 1 ? nice(anchor) : `${days[0].split('-').reverse().slice(0, 2).join('.')}. – ${days[6].split('-').reverse().join('.')}`), h('span', { class: 'sp' }),
       ...['day', 'week', 'month'].map((v) => h('button', { class: 'chip', 'aria-pressed': view === v, onclick: () => { view = v; draw(); } }, { day: 'Tag', week: 'Woche', month: 'Monat' }[v])));
@@ -38,7 +38,7 @@ export async function calendarPage({ route }) {
       const col = h('div', { class: 'col', 'data-date': d }); for (let x = H0; x < H1; x++) col.append(h('div', { class: 'slot' }));
       for (const e of ev.filter((e) => epochToLocal(e.start).date === d)) {
         const s = epochToLocal(e.start).time, en = epochToLocal(e.end).date === d ? epochToLocal(e.end).time : '22:00', top = (Number(s.slice(0, 2)) + Number(s.slice(3)) / 60 - H0) * PX, hgt = Math.max(24, (Number(en.slice(0, 2)) + Number(en.slice(3)) / 60 - Number(s.slice(0, 2)) - Number(s.slice(3)) / 60) * PX);
-        col.append(h('button', { class: 'ev', style: `top:${top}px;height:${hgt}px;background:${colorOf(e.targetType, e.targetId)}`, 'aria-label': `${content(e.content)} auf ${nameOf(e.targetType, e.targetId)}, ${s} bis ${en}`, onclick: (x) => { x.stopPropagation(); open(scheds.find((z) => z.id === e.scheduleId), d); } }, `${s} ${content(e.content)}`, h('br'), nameOf(e.targetType, e.targetId)));
+        col.append(h('button', { class: 'ev' + (e.state === 'draft' ? ' draft' : ''), style: `top:${top}px;height:${hgt}px;background:${colorOf(e.targetType, e.targetId)}`, 'aria-label': `${e.state === 'draft' ? 'Entwurf: ' : ''}${content(e.content)} auf ${nameOf(e.targetType, e.targetId)}, ${s} bis ${en}`, onclick: (x) => { x.stopPropagation(); open(scheds.find((z) => z.id === e.scheduleId), d); } }, `${e.state === 'draft' ? '✎ Entwurf · ' : ''}${s} ${content(e.content)}`, h('br'), nameOf(e.targetType, e.targetId)));
       }
       let sel = null, y0 = 0; const snap = (y) => Math.max(0, Math.min((H1 - H0) * PX, Math.round(y / (PX / 2)) * (PX / 2)));
       const time = (y) => { const mins = H0 * 60 + (y / PX) * 60; return `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`; };
@@ -52,15 +52,15 @@ export async function calendarPage({ route }) {
   function month(ev) {
     const first = anchor.slice(0, 8) + '01', start = monday(first), m = h('div', { class: 'month' }, DN.map((x) => h('b', {}, x.slice(0, 2))));
     for (let i = 0; i < 42; i++) { const d = addDays(start, i), es = ev.filter((e) => epochToLocal(e.start).date === d);
-      m.append(h('div', { class: 'd' + (d.slice(0, 7) === first.slice(0, 7) ? '' : ' out'), tabindex: 0, role: 'button', 'aria-label': `${nice(d)}, ${es.length} Termine`, onclick: () => open(null, d), onkeydown: (e) => { if (e.key === 'Enter') open(null, d); } }, d.slice(8), ...es.slice(0, 3).map((e) => h('small', { style: `background:${colorOf(e.targetType, e.targetId)}`, onclick: (x) => { x.stopPropagation(); open(scheds.find((z) => z.id === e.scheduleId), d); } }, content(e.content))), es.length > 3 ? h('small', { style: 'color:inherit' }, `+${es.length - 3} weitere`) : null)); }
+      m.append(h('div', { class: 'd' + (d.slice(0, 7) === first.slice(0, 7) ? '' : ' out'), tabindex: 0, role: 'button', 'aria-label': `${nice(d)}, ${es.length} Termine`, onclick: () => open(null, d), onkeydown: (e) => { if (e.key === 'Enter') open(null, d); } }, d.slice(8), ...es.slice(0, 3).map((e) => h('small', { class: e.state === 'draft' ? 'draft' : '', style: `background:${colorOf(e.targetType, e.targetId)}`, onclick: (x) => { x.stopPropagation(); open(scheds.find((z) => z.id === e.scheduleId), d); } }, (e.state === 'draft' ? '✎ ' : '') + content(e.content))), es.length > 3 ? h('small', { style: 'color:inherit' }, `+${es.length - 3} weitere`) : null)); }
     return m;
   }
-  root.append(can('schedules.write') && targets.length ? h('p', {}, h('button', { class: 'btn big', 'data-tour': 'newsched', onclick: () => open(null, today()) }, '➕ Neuer Termin')) : null, bar, legend, cal);
+  root.append(drafts.schedules + drafts.playlists ? h('div', { class: 'notice' }, `✎ ${drafts.schedules + drafts.playlists} Entwürfe warten auf Veröffentlichung. Sie sind gestrichelt dargestellt und laufen noch nicht auf den Bildschirmen.`, drafts.old ? ` ${drafts.old} davon sind älter als 30 Tage.` : '') : null, can('schedules.write') && targets.length ? h('p', {}, h('button', { class: 'btn big', 'data-tour': 'newsched', onclick: () => open(null, today()) }, '➕ Neuer Termin')) : null, bar, legend, cal);
   await draw(); return root;
 }
 
 /** Termin anlegen/ändern: „Zeige [Inhalt] auf [Bildschirm] am [Datum] von [Zeit] bis [Zeit]“ */
-function editor({ s, date, st, en, targets, lists, media, scheds, devices, groups, route }) {
+function editor({ s, date, st, en, targets, lists, media, scheds, devices, groups, route, canPublish }) {
   const isNew = !s, startDate = s ? s.startLocal.slice(0, 10) : date;
   const rr = s?.rrule ? Object.fromEntries(s.rrule.split(';').map((x) => x.split('='))) : {};
   const v = { content: s ? `${s.content.type}:${s.content.id}` : `playlist:${lists[0]?.id}`, target: s ? `${s.targetType}:${s.targetId}` : targets[0]?.key, date: startDate, from: s ? s.startLocal.slice(11) : st ?? '10:00', to: s ? s.endLocal.slice(11) : en ?? '11:00',
@@ -88,8 +88,24 @@ function editor({ s, date, st, en, targets, lists, media, scheds, devices, group
     actions.unshift({ text: 'Löschen', cls: 'danger', fn: async () => { if (!(await confirmDlg('Termin löschen?', 'Du kannst ihn 30 Tage lang aus dem Papierkorb zurückholen.', 'Löschen'))) return false; await del(`/schedules/${s.id}`); toast('Termin gelöscht.', 'ok', async () => { const t = await get('/trash'); const x = t.find((q) => q.kind === 'schedule'); if (x) { await post(`/trash/${x.id}/restore`); route(); } }); route(); } });
     if (s.rrule) actions.unshift({ text: 'Nur diesen Tag ausfallen lassen', cls: 'sec', fn: async () => { await put(`/schedules/${s.id}`, { ...strip(s), exdates: [...(s.exdates ?? []), date] }); toast(`Am ${nice(date)} fällt der Termin aus.`); route(); } });
   }
-  if (can('schedules.write')) actions.push({ text: 'Speichern', fn: async () => { try { const b = build(); const r = isNew ? await post('/schedules', b) : await put(`/schedules/${s.id}`, b);
-    if (r.conflicts?.length) { toast('Gespeichert – aber: ' + r.conflicts[0].text, 'err'); } else toast('Termin gespeichert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } });
-  dialog(isNew ? 'Neuer Termin' : 'Termin ansehen oder ändern', h('div', {}, sentence, rep, adv, prev), actions);
+  async function saveDraft() { const b = build(); const r = isNew ? await post('/schedules', b) : await put(`/schedules/${s.id}`, b); return r.draftId ?? r.id; }
+  async function publishFlow(id) {
+    const c = await get(`/schedules/${id}/publish-check`);
+    const body = h('div', {}, h('p', {}, h('b', {}, c.summary)), ...c.problems.map((x) => h('p', { class: 'notice bad' }, '⛔ ', x)), ...c.conflicts.map((x) => h('p', { class: 'notice' }, '⚠ ', x)), c.notLoaded ? h('p', { class: 'notice' }, '⚠ ' + c.notLoaded) : null);
+    if (c.problems.length) { dialog('Veröffentlichen nicht möglich', body, [{ text: 'Verstanden', cls: 'sec' }]); return false; }
+    return new Promise((res) => dialog('Jetzt veröffentlichen?', body, [{ text: 'Noch nicht', cls: 'sec', fn: () => res(false) }, { text: 'Veröffentlichen', fn: async () => { try { await post(`/schedules/${id}/publish`); toast('Veröffentlicht. Die Bildschirme bekommen den Termin gleich.'); route(); res(true); } catch (e) { toast(e.message, 'err'); return false; } } }]));
+  }
+  if (can('schedules.write')) {
+    actions.push({ text: 'Als Entwurf speichern', cls: canPublish ? 'sec' : '', fn: async () => { try { await saveDraft(); toast('Als Entwurf gespeichert. Er läuft erst nach dem Veröffentlichen.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } });
+    if (canPublish) actions.push({ text: 'Speichern und veröffentlichen', fn: async () => { try { const id = await saveDraft(); await publishFlow(id); route(); } catch (e) { toast(e.message, 'err'); return false; } } });
+    if (s?.state === 'draft') actions.unshift({ text: 'Entwurf verwerfen', cls: 'danger', fn: async () => { await post(`/schedules/${s.id}/discard`); toast('Entwurf verworfen.'); route(); } });
+    if (!isNew) actions.unshift({ text: 'Frühere Stände', cls: 'sec', fn: async () => { await history(s, route); return false; } });
+  }
+  dialog(isNew ? 'Neuer Termin' : s.state === 'draft' ? 'Entwurf bearbeiten' : 'Termin ansehen oder ändern', h('div', {}, s?.state === 'draft' ? h('p', { class: 'notice' }, '✎ Das ist ein Entwurf. Er läuft erst, wenn du ihn veröffentlichst.') : null, sentence, rep, adv, prev), actions);
 }
 const strip = (s) => ({ targetType: s.targetType, targetId: s.targetId, content: s.content, startLocal: s.startLocal, endLocal: s.endLocal, rrule: s.rrule, exdates: s.exdates, priority: s.priority, validFrom: s.validFrom ?? null, validTo: s.validTo ?? null });
+
+async function history(s, route) {
+  const v = await get(`/versions?kind=schedule&refId=${s.draftOf ?? s.id}`);
+  dialog('Frühere Stände', v.length ? h('ul', {}, v.map((x) => h('li', {}, `${fmtDate(x.ts)} – ${x.user}: ${x.label} `, h('button', { class: 'btn link', onclick: async () => { await post(`/versions/${x.id}/restore`); toast('Als Entwurf wiederhergestellt. Du kannst ihn prüfen und veröffentlichen.'); route(); } }, 'Als Entwurf wiederherstellen')))) : h('p', {}, 'Es gibt noch keine früheren Stände (sie werden 90 Tage aufbewahrt).'), [{ text: 'Schließen', cls: 'sec' }]);
+}

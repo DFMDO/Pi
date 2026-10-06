@@ -96,7 +96,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     A(req, 'medium.geaendert', m.id); return { ok: true };
   });
 
-  app.get('/api/v1/media/:id/file', { config: { perm: 'media.read' } }, async (req, reply) => {
+  app.get('/api/v1/media/:id/file', { config: { perm: 'live.read' } }, async (req, reply) => {
     const v = db.prepare("SELECT path FROM media_variants WHERE media_id=? AND status='ready' ORDER BY CASE profile WHEN 'standard' THEN 0 WHEN 'pro' THEN 1 ELSE 2 END LIMIT 1").get(req.params.id);
     if (!v) return reply.code(404).send({ error: 'Die Vorschau wird noch erstellt.' });
     const type = v.path.endsWith('.mp4') ? 'video/mp4' : v.path.endsWith('.png') ? 'image/png' : 'image/jpeg';
@@ -122,7 +122,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   const noPublish = (reply) => reply.code(403).send({ error: 'Du darfst Änderungen anlegen, aber nicht veröffentlichen. Bitte einen Admin, den Entwurf zu veröffentlichen.' });
   const draftCount = () => ({ schedules: db.prepare("SELECT COUNT(*) n FROM schedules WHERE state='draft'").get().n, playlists: db.prepare("SELECT COUNT(*) n FROM playlists WHERE state='draft'").get().n,
     old: db.prepare("SELECT 'schedule' kind, id FROM schedules WHERE state='draft' AND created_at < ? UNION SELECT 'playlist', id FROM playlists WHERE state='draft' AND COALESCE(created_at,0) < ?").all(now() - 30 * DAY, now() - 30 * DAY).length });
-  app.get('/api/v1/drafts', { config: { perm: 'schedules.read' } }, async () => draftCount());
+  app.get('/api/v1/drafts', { config: { perm: 'schedules.read' } }, async (req) => ({ ...draftCount(), canPublish: mayPublish(req, 'schedules') }));
 
   // ---------- Abspiellisten ----------
   const itemsOf = (id) => db.prepare('SELECT id,media_id AS mediaId,duration_s AS duration,transition,valid_from AS validFrom,valid_to AS validTo FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(id);
