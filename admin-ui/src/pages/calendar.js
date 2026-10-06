@@ -1,5 +1,6 @@
 import { h, dialog, confirmDlg, toast, field, help, empty, fmtDate } from '../ui.js';
 import { get, post, put, del, can } from '../api.js';
+import { specialDaysDlg, weekDlg } from './tools.js';
 import { epochToLocal, localToEpoch, addDays, dowOf } from '../../../shared/time.js';
 
 const PALETTE = ['#c8102e', '#2a6f97', '#5a8f29', '#a23b9e', '#d97706', '#0f766e', '#6b4f3a', '#475569'];
@@ -55,7 +56,7 @@ export async function calendarPage({ route }) {
       m.append(h('div', { class: 'd' + (d.slice(0, 7) === first.slice(0, 7) ? '' : ' out'), tabindex: 0, role: 'button', 'aria-label': `${nice(d)}, ${es.length} Termine`, onclick: () => open(null, d), onkeydown: (e) => { if (e.key === 'Enter') open(null, d); } }, d.slice(8), ...es.slice(0, 3).map((e) => h('small', { class: e.state === 'draft' ? 'draft' : '', style: `background:${colorOf(e.targetType, e.targetId)}`, onclick: (x) => { x.stopPropagation(); open(scheds.find((z) => z.id === e.scheduleId), d); } }, (e.state === 'draft' ? '✎ ' : '') + content(e.content))), es.length > 3 ? h('small', { style: 'color:inherit' }, `+${es.length - 3} weitere`) : null)); }
     return m;
   }
-  root.append(drafts.schedules + drafts.playlists ? h('div', { class: 'notice' }, `✎ ${drafts.schedules + drafts.playlists} Entwürfe warten auf Veröffentlichung. Sie sind gestrichelt dargestellt und laufen noch nicht auf den Bildschirmen.`, drafts.old ? ` ${drafts.old} davon sind älter als 30 Tage.` : '') : null, can('schedules.write') && targets.length ? h('p', {}, h('button', { class: 'btn big', 'data-tour': 'newsched', onclick: () => open(null, today()) }, '➕ Neuer Termin')) : null, bar, legend, cal);
+  root.append(drafts.schedules + drafts.playlists ? h('div', { class: 'notice' }, `✎ ${drafts.schedules + drafts.playlists} Entwürfe warten auf Veröffentlichung. Sie sind gestrichelt dargestellt und laufen noch nicht auf den Bildschirmen.`, drafts.old ? ` ${drafts.old} davon sind älter als 30 Tage.` : '') : null, can('schedules.write') && targets.length ? h('p', { class: 'row' }, h('button', { class: 'btn big', 'data-tour': 'newsched', onclick: () => open(null, today()) }, '➕ Neuer Termin'), h('button', { class: 'btn sec', onclick: () => specialDaysDlg(route) }, '🎄 Feiertage & Sondertage'), h('button', { class: 'btn sec', onclick: () => weekDlg(route, monday(anchor)) }, '🗓 Woche kopieren / Vorlage')) : null, bar, legend, cal);
   await draw(); return root;
 }
 

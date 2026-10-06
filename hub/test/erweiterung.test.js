@@ -79,7 +79,7 @@ test('Live: Ist (vom Player gemeldet) gegen Soll, Abweichung wird erkannt; Anzei
   let live = (await a('GET', '/api/v1/live')).json(); assert.equal(live.length, 1); assert.equal(live[0].soll.playlist, 'Std'); assert.equal(live[0].mismatch, false);
   const st = { playerStatus: { current: { mediaId: m2, name: 'B' }, next: null, source: 'standard', ts: Date.now() } };
   h.db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify(st), dv);
-  live = (await a('GET', '/api/v1/live')).json(); assert.equal(live[0].mismatch, true); assert.match(live[0].mismatchText, /anderes als geplant/);
+  live = (await a('GET', '/api/v1/live')).json(); assert.equal(live[0].mismatch, true); assert.match(live[0].mismatchText, /Laut Plan sollte jetzt/);
   h.db.prepare('UPDATE devices SET last_seen=? WHERE id=?').run(Date.now() - 70000, dv);
   assert.equal((await a('GET', '/api/v1/live')).json()[0].status.level, 'warn', 'nach 65 s nicht mehr „läuft“');
   const v = await h.as('vera'); assert.equal((await v('GET', '/api/v1/live')).statusCode, 200);

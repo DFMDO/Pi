@@ -2,14 +2,28 @@
 // im Lite-Player (mpv-Steuerung) und in den Tests identisch laufen.
 import { epochToLocal } from './time.js';
 
-/** Aktuelle Playlist + Ende des Zeitfensters (null = bis auf Weiteres). */
+/**
+ * Aktuelle Playlist + Ende des Zeitfensters (null = bis auf Weiteres).
+ * Auflösungsreihenfolge (A3): 0. Halt (Wartung/noch nicht bereit) → 1. Übersteuerung/Schnellaktion → 2. aktive Termine (Gerät vor Gruppe, Priorität,
+ * später gestartet; schon im Plan berechnet) → 3. Sondertag-Regel statt Standard → 4. Standard-Abspielliste → 5. Standby.
+ */
 export function resolvePlaylist(plan, now) {
   if (!plan) return { playlistId: null, until: null, scheduleId: null, source: 'none' };
+  if (plan.hold) return { playlistId: null, until: null, scheduleId: null, source: plan.hold };
+  const ov = (plan.overrides ?? []).filter((o) => o.until > now && !(o.from > now)).sort((a, b) => (b.scope === 'all') - (a.scope === 'all') || b.createdAt - a.createdAt)[0];
+  if (ov) return { playlistId: ov.playlistId, until: ov.until, scheduleId: null, source: 'uebersteuerung', override: ov };
   const seg = plan.segments?.find((s) => now >= s.start && now < s.end);
-  if (seg?.source) return { playlistId: seg.source.content.id, until: seg.end, scheduleId: seg.source.scheduleId, source: 'termin' };
-  // Standardliste; nächste Terminkante als Wechselzeitpunkt
+  const nextOv = (plan.overrides ?? []).filter((o) => o.from > now).map((o) => o.from).sort((a, b) => a - b)[0];
+  const cap = (t) => (nextOv != null ? Math.min(t ?? Infinity, nextOv) : t);
+  if (seg?.source) return { playlistId: seg.source.content.id, until: cap(seg.end), scheduleId: seg.source.scheduleId, source: 'termin' };
   const next = plan.segments?.find((s) => s.start > now && s.source);
-  return { playlistId: plan.defaultPlaylistId ?? null, until: next?.start ?? null, scheduleId: null, source: plan.defaultPlaylistId ? 'standard' : 'none' };
+  const day = epochToLocal(now).date, sd = (plan.specialDays ?? []).find((d) => day >= d.from && day <= (d.to ?? d.from));
+  if (sd) {
+    const midnight = epochToLocal(now).date; void midnight;
+    const until = cap(next?.start ?? null);
+    return sd.rule === 'off' ? { playlistId: null, until, scheduleId: null, source: 'schliesstag', off: true, specialDay: sd } : { playlistId: sd.playlistId ?? plan.defaultPlaylistId ?? null, until, scheduleId: null, source: 'sondertag', specialDay: sd };
+  }
+  return { playlistId: plan.defaultPlaylistId ?? null, until: cap(next?.start ?? null), scheduleId: null, source: plan.defaultPlaylistId ? 'standard' : 'none' };
 }
 
 /** Kinds, die ein Renderer darstellen kann. Lite (mpv) hat keinen Browser. */

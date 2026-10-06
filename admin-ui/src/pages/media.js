@@ -1,5 +1,6 @@
 import { h, dialog, confirmDlg, toast, field, empty, fmtBytes } from '../ui.js';
 import { get, post, patch, del, api, state, can } from '../api.js';
+import { templateDlg, qrDlg, importDlg } from './tools.js';
 
 const KIND = { image: 'Bild', video: 'Video', text: 'Text', pdfpage: 'PDF-Seite' };
 export async function mediaPage({ route }) {
@@ -15,7 +16,7 @@ export async function mediaPage({ route }) {
   draw();
   return h('div', {}, h('h1', {}, 'Bilder & Videos'), h('p', { class: 'lead' }, 'Lade Bilder, Videos oder PDFs hoch und lege Text-Ankündigungen an. Danach kannst du sie in Abspiellisten und Termine einbauen.'),
     storage?.warn ? h('div', { class: 'notice' }, '⚠ ' + storage.text) : null,
-    can('media.write') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', 'data-tour': 'upload', onclick: () => uploadDlg(route) }, '⬆️ Bild oder Video hochladen'), h('button', { class: 'btn sec', onclick: () => textDlg(route) }, '📝 Text-Ankündigung erstellen'), h('span', { class: 'sp' }), search) : search,
+    can('media.write') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', 'data-tour': 'upload', onclick: () => uploadDlg(route) }, '⬆️ Bild oder Video hochladen'), h('button', { class: 'btn sec', onclick: () => templateDlg(route) }, '🧩 Vorlage verwenden'), h('button', { class: 'btn sec', onclick: () => qrDlg(route) }, '🔳 QR-Code erstellen'), can('import.run') ? h('button', { class: 'btn sec', onclick: () => importDlg(route) }, '📁 Ordner importieren') : null, h('button', { class: 'btn sec', onclick: () => textDlg(route) }, '📝 Text-Ankündigung erstellen'), h('span', { class: 'sp' }), search) : search,
     items.length ? grid : empty('Noch nichts hochgeladen', 'Lade dein erstes Bild hoch. Erlaubt sind Bilder (JPG, PNG, WebP), Videos (MP4, MOV, MKV) und PDF.', can('media.write') ? h('button', { class: 'btn big', onclick: () => uploadDlg(route) }, 'Bild oder Video hochladen') : null),
     trashSection(route));
 }

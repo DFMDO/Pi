@@ -12,5 +12,5 @@ export async function api(method, url, body, opts = {}) {
   return opts.raw ? r : data;
 }
 export const get = (u) => api('GET', u), post = (u, b) => api('POST', u, b ?? {}), put = (u, b) => api('PUT', u, b), patch = (u, b) => api('PATCH', u, b), del = (u) => api('DELETE', u);
-export const can = (perm) => ({ admin: 1, editor: /^(devices\.read|media\.|playlists\.|schedules\.|system\.read|live\.read)/.test(perm), anzeige: perm === 'live.read' })[state.user?.role];
+export const can = (perm) => ({ admin: 1, editor: /^(devices\.read|media\.|playlists\.|schedules\.|system\.read|live\.read|overrides\.|scenes\.|templates\.use|tickers\.|qr\.)/.test(perm), anzeige: perm === 'live.read' })[state.user?.role];
 export const ROLES = { admin: 'Admin', editor: 'Redakteur', anzeige: 'Anzeige' };

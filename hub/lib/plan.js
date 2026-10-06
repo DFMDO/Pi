@@ -1,5 +1,6 @@
 // Aus Datenbankzeilen werden Zeitpläne, Abspiellisten und Manifeste für Geräte.
 import { buildTimeline, findConflicts } from '../../shared/schedule.js';
+import { deviceWarnings } from './health.js';
 
 export const DAY = 86400000;
 export const PROFILES = ['lite', 'standard', 'pro'];
@@ -35,7 +36,20 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   };
   const segments = tl.map((s) => ({ start: s.start, end: s.end, source: s.source ? { ...s.source, content: use(s.source.content) } : null }));
   if (def) playlists[def] = { name: db.prepare('SELECT name FROM playlists WHERE id=?').get(def).name, items: playlistItems(db, def) };
-  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation,
+  // Übersteuerungen/Schnellaktionen (Z.2): nur aktive, die dieses Gerät betreffen. Wirken auch offline bis zu ihrem Ablauf (der Player prüft „until“ selbst).
+  const overrides = db.prepare('SELECT * FROM overrides WHERE ended_at IS NULL AND until > ?').all(now)
+    .filter((o) => o.scope === 'all' || (o.scope === 'device' && o.target_id === device.id) || (o.scope === 'group' && o.target_id && o.target_id === device.group_id))
+    .map((o) => ({ id: o.id, scope: o.scope, playlistId: use({ type: o.content_type, id: o.content_id }).id, until: o.until, createdAt: o.created_at, label: o.label, by: o.created_by_name }));
+  // Sondertage (Z.6): Feiertage/Schließtage/Betriebsferien der nächsten 14 Tage
+  const d0 = new Date(from + 2 * 3600000).toISOString().slice(0, 10), d1 = new Date(to + 2 * 3600000).toISOString().slice(0, 10);
+  const specialDays = db.prepare('SELECT * FROM special_days WHERE date <= ? AND COALESCE(date_to, date) >= ? ORDER BY CASE source WHEN \'custom\' THEN 0 ELSE 1 END, date').all(d1, d0)
+    .filter((r) => r.rule === 'off' || r.content_id).map((r) => ({ from: r.date, to: r.date_to ?? r.date, name: r.name, kind: r.kind, rule: r.rule, playlistId: r.rule === 'off' || !r.content_id ? null : use({ type: r.content_type ?? 'playlist', id: r.content_id }).id }));
+  const hold = device.maintenance_since ? 'wartung' : device.ready === 0 ? 'nicht_bereit' : null;
+  const tickers = db.prepare("SELECT text,valid_from AS validFrom,valid_to AS validTo FROM tickers WHERE state='published' AND (target_type='all' OR (target_type='device' AND target_id=?) OR (target_type='group' AND target_id=?))").all(device.id, device.group_id ?? '');
+  const stg = Object.fromEntries(db.prepare("SELECT key,value FROM settings WHERE key LIKE 'maintenance.%'").all().map((r) => [r.key, r.value]));
+  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation, overrides, specialDays, hold, tickers,
+    layout: device.profile === 'lite' ? null : device.layout_json ? JSON.parse(device.layout_json) : null,
+    maintenance: { nightlyReboot: (stg['maintenance.nightlyReboot'] ?? 'true') === 'true' ? (stg['maintenance.rebootAt'] ?? '03:30') : null },
     display: device.display_json ? JSON.parse(device.display_json) : null, sync: { window: st['sync.window'] ?? '', bandwidthKbps: Number(st['sync.bandwidthKbps'] ?? 0) } };
 }
 
@@ -44,6 +58,9 @@ export function manifestPayload(db, device, now = Date.now()) {
   const ids = new Set();
   for (const r of db.prepare("SELECT DISTINCT media_id FROM playlist_items i JOIN playlists p ON p.id=i.playlist_id WHERE p.state='published'").all()) ids.add(r.media_id);
   for (const r of db.prepare("SELECT content_id FROM schedules WHERE content_type='media' AND state='published'").all()) ids.add(r.content_id);
+  for (const r of db.prepare("SELECT content_id FROM overrides WHERE content_type='media' AND ended_at IS NULL AND until > ?").all(now)) ids.add(r.content_id);
+  for (const r of db.prepare("SELECT content_id FROM special_days WHERE content_type='media' AND content_id IS NOT NULL").all()) ids.add(r.content_id);
+  for (const r of db.prepare("SELECT media_id FROM playlist_items i JOIN playlists p ON p.id=i.playlist_id WHERE p.id IN (SELECT content_id FROM overrides WHERE content_type='playlist' AND ended_at IS NULL AND until > ?)").all(now)) ids.add(r.media_id);
   const items = [];
   for (const id of ids) {
     const m = db.prepare('SELECT * FROM media WHERE id=?').get(id);
@@ -70,6 +87,7 @@ export function warnings(db, now = Date.now()) {
   }
   for (const d of db.prepare("SELECT * FROM devices WHERE status='active'").all()) {
     const st = d.state_json ? JSON.parse(d.state_json) : null;
+    for (const w of deviceWarnings(d, st, now)) out.push({ kind: w.kind, ids: [d.id], text: w.text });
     if (st?.syncState && st.syncState.done < st.syncState.total) out.push({ kind: 'medien_laden', ids: [d.id], text: `„${d.name}“ lädt noch Medien (${st.syncState.done} von ${st.syncState.total}).` });
   }
   return out;

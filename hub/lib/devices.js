@@ -4,11 +4,11 @@ import { createReadStream, statSync, existsSync, mkdirSync, writeFileSync } from
 import { join } from 'node:path';
 import { randomToken, sha256hex, safeEqual, pairingCode, encrypt, decrypt } from './crypto.js';
 import { formatFingerprint } from './tls.js';
-import { resolvePlaylist } from '../../shared/sequencer.js';
 import { schedulePayload, manifestPayload, PROFILES } from './plan.js';
 import { validateMessage, msg, COMMANDS } from '../../shared/protocol.js';
 import { createLimiter } from './ratelimit.js';
 import QRCode from 'qrcode';
+import sharp from 'sharp';
 import { ensureTestVideo } from './variants.js';
 
 const CODE_TTL = 10 * 60000, MAX_ATTEMPTS = 5, PENDING_TTL = 3600000;
@@ -45,14 +45,25 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   const pushPlan = (d) => { sendTo(d.id, 'schedule_update', schedulePayload(db, d, now())); sendTo(d.id, 'media_manifest', manifestPayload(db, d, now())); };
   const pushAll = () => { for (const id of sockets.keys()) { const d = getDevice(id); if (d?.status === 'active') pushPlan(d); } };
   app.decorate('pushAll', pushAll);
-  /** Live-Vorschau: Solange jemand angemeldet ist (letzte 5 Minuten), holt der Hub jede Minute einen Screenshot von jedem verbundenen Bildschirm. */
+  /**
+   * Live-Ansicht Stufe 2 (Z.1): Screenshots nur, wenn jemand zuschaut – Kacheln alle 30 s, Einzelansicht alle 5 s, 60 s ohne Betrachter = Stopp.
+   * Bilder (JPEG ca. 640 px) liegen nur im Arbeitsspeicher; Lite und überlastete Geräte bleiben bei Stufe 1 (reiner Status).
+   */
+  const viewers = { tile: 0, detail: new Map() }, shots = new Map(), lastReq = new Map(), signals = new Map();
+  const watching = (t = now()) => ({ tile: t - viewers.tile < 60000, detail: (id) => t - (viewers.detail.get(id) ?? 0) < 60000 });
+  const reduced = (d, st) => d.profile === 'lite' || (st?.cpuTemp ?? 0) > 78 || (st?.ramTotalMB && st.ramTotalMB - (st.ramUsedMB ?? 0) < 100);
   function screenshotTick() {
-    if (!db.prepare('SELECT 1 FROM sessions WHERE last_seen > ?').get(now() - 5 * 60000)) return 0;
-    let n = 0; for (const id of sockets.keys()) if (sendTo(id, 'command', { id: 'auto-' + randomUUID(), command: 'screenshot' })) n++;
+    const t = now(), w = watching(t); let n = 0;
+    for (const id of sockets.keys()) {
+      const interval = w.detail(id) ? 5000 : w.tile ? 30000 : 0; if (!interval || t - (lastReq.get(id) ?? 0) < interval - 200) continue;
+      const d = getDevice(id); if (!d || d.status !== 'active' || reduced(d, d.state_json ? JSON.parse(d.state_json) : null)) continue;
+      lastReq.set(id, t); if (sendTo(id, 'command', { id: 'auto-' + randomUUID(), command: 'screenshot' })) n++;
+    }
     return n;
   }
-  const shotTimer = setInterval(screenshotTick, 60000); shotTimer.unref(); app.addHook('onClose', async () => clearInterval(shotTimer));
-  app.decorate('devices', { sockets, sendTo, pushPlan, screenshotTick });
+  const shotTimer = setInterval(screenshotTick, 5000); shotTimer.unref(); app.addHook('onClose', async () => clearInterval(shotTimer));
+  app.decorate('devices', { sockets, sendTo, pushPlan, screenshotTick, viewers, shots, signals, getDevice, reduced, watching });
+
 
   const present = (d) => {
     const st = d.state_json ? JSON.parse(d.state_json) : null;
@@ -66,19 +77,6 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   app.get('/api/v1/devices', { config: { perm: 'devices.read' } }, async () => {
     db.prepare("DELETE FROM devices WHERE status='pending' AND created_at < ?").run(now() - PENDING_TTL);
     return db.prepare('SELECT * FROM devices ORDER BY name').all().map(present);
-  });
-  /** Live-Ansicht (Z.1): Ist (vom Player gemeldet) gegen Soll (aus dem veröffentlichten Plan) */
-  app.get('/api/v1/live', { config: { perm: 'live.read' } }, async () => {
-    const t = now();
-    return db.prepare("SELECT * FROM devices WHERE status='active' ORDER BY name").all().map((d) => {
-      const st = d.state_json ? JSON.parse(d.state_json) : {}, status = deviceStatus(d, t), plan = schedulePayload(db, d, t), r = resolvePlaylist(plan, t);
-      const pl = r.playlistId ? plan.playlists?.[r.playlistId] : null, ist = st.playerStatus ?? null;
-      const soll = { playlist: pl?.name ?? null, source: r.source, scheduleId: r.scheduleId, mediaIds: pl?.items?.map((i) => i.mediaId) ?? [] };
-      const g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id) : null;
-      const mismatch = status.level === 'ok' && !!ist?.current && soll.mediaIds.length > 0 && !soll.mediaIds.includes(ist.current.mediaId);
-      return { id: d.id, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, profile: d.profile, status, lastSeen: d.last_seen, soll, ist: ist && { ...ist, source: ist.source }, mismatch,
-        mismatchText: mismatch ? 'Der Bildschirm zeigt etwas anderes als geplant. Er lädt eventuell noch Inhalte.' : null, displayOff: !!st.displayPower && st.displayPower === 'off', shotAt: existsSync(join(shotDir, d.id + '.png')) ? statSync(join(shotDir, d.id + '.png')).mtimeMs : null };
-    });
   });
   app.get('/api/v1/devices/:id', { config: { perm: 'devices.read' } }, async (req, reply) => {
     const d = getDevice(req.params.id); return d ? present(d) : reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
@@ -134,11 +132,23 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
       card: 'http://10.42.0.1/#c=' + Buffer.from(JSON.stringify(card)).toString('base64url'), cardHasWifi: !!w };
   });
   app.post('/api/v1/devices/:id/approve', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', additionalProperties: false,
-    properties: { name: { type: 'string', minLength: 1, maxLength: 60 }, groupId: { type: ['string', 'null'] } } } } }, async (req, reply) => {
+    properties: { name: { type: 'string', minLength: 1, maxLength: 60 }, groupId: { type: ['string', 'null'] }, replaces: { type: 'string', maxLength: 40 } } } } }, async (req, reply) => {
     const d = getDevice(req.params.id);
     if (!d || d.status !== 'pending') return reply.code(404).send({ error: 'Dieser Bildschirm wartet nicht auf Bestätigung.' });
     const token = randomToken(32);
-    db.prepare("UPDATE devices SET status='active', token_hash=?, name=?, group_id=? WHERE id=?").run(sha256hex(token), req.body?.name ?? d.name, req.body?.groupId ?? null, d.id);
+    const old = req.body?.replaces ? getDevice(req.body.replaces) : null;
+    if (req.body?.replaces && (!old || old.status === 'pending' || old.id === d.id)) return reply.code(400).send({ error: 'Der zu ersetzende Bildschirm wurde nicht gefunden.' });
+    const required = !old && db.prepare("SELECT value FROM settings WHERE key='commissioning.required'").get()?.value !== 'false';
+    db.prepare("UPDATE devices SET status='active', token_hash=?, name=?, group_id=?, ready=? WHERE id=?").run(sha256hex(token), old?.name ?? req.body?.name ?? d.name, old ? old.group_id : req.body?.groupId ?? null, required ? 0 : 1, d.id);
+    if (old) { // Austausch (Z.4): Name, Gruppe, Zeitplan und Einstellungen wandern zum neuen Gerät; der alte Token wird gesperrt
+      db.transaction(() => {
+        db.prepare('UPDATE devices SET orientation=?, display_json=?, layout_json=?, location=?, floor=?, notes=?, doc_url=?, installed_at=?, serial=NULL, mac=NULL WHERE id=?').run(old.orientation, old.display_json, old.layout_json, old.location, old.floor, old.notes, old.doc_url, new Date(now()).toISOString().slice(0, 10), d.id);
+        db.prepare("UPDATE schedules SET target_id=? WHERE target_type='device' AND target_id=?").run(d.id, old.id);
+        db.prepare("UPDATE overrides SET target_id=? WHERE scope='device' AND target_id=?").run(d.id, old.id);
+        db.prepare("UPDATE devices SET status='blocked', token_hash=NULL, name=?, replaced_by=?, group_id=NULL WHERE id=?").run(`${old.name} (ersetzt)`, d.id, old.id);
+      })();
+      sockets.get(old.id)?.close(4001, 'revoked'); audit.log({ user: req.user, action: 'bildschirm.ersetzt', target: d.id, ip: req.ip, security: true, detail: { alt: old.id } });
+    }
     db.prepare('INSERT OR REPLACE INTO setup_state VALUES(?,?)').run('pairtoken:' + d.id, encrypt(key, token));
     audit.log({ user: req.user, action: 'bildschirm.verbunden', target: d.id, ip: req.ip, detail: { model: d.model } });
     return { ok: true };
@@ -208,7 +218,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     return sendFile(req, reply, join(mediaDir, 'variants', v.path));
   });
   // Diagnose: Durchsatz messen (8 MB) und Testvideo im Profil des Geräts
-  app.get('/api/v1/device/speedtest', dev, async (_req, reply) => reply.header('Content-Type', 'application/octet-stream').header('Cache-Control', 'no-store').send(Buffer.alloc(8 * 1024 * 1024, 0x55)));
+  app.get('/api/v1/device/speedtest', dev, async (req, reply) => reply.header('Content-Type', 'application/octet-stream').header('Cache-Control', 'no-store').send(Buffer.alloc(Math.min(8192, Math.max(64, Number(req.query?.kb) || 8192)) * 1024, 0x55))); // kurz und begrenzt: der Test darf andere Bildschirme nicht ausbremsen
   app.get('/api/v1/device/testvideo', dev, async (req, reply) => { try { return sendFile(req, reply, await ensureTestVideo(mediaDir, req.device.profile)); } catch { return reply.code(500).send({ error: 'Das Testvideo konnte nicht erstellt werden.' }); } });
   app.get('/api/v1/device/update/current', dev, async (req, reply) => {
     const f = join(dataDir, 'updates', 'current.dfmpkg');
@@ -222,7 +232,8 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const { command, args = {} } = req.body;
     if (command === 'rotate' && ![0, 90, 180, 270].includes(args.degrees)) return reply.code(400).send({ error: 'Bitte wähle 0, 90, 180 oder 270 Grad.' });
     if (command === 'wifi_change' && !(typeof args.ssid === 'string' && args.ssid.length >= 1 && Buffer.byteLength(args.ssid) <= 32 && typeof args.password === 'string')) return reply.code(400).send({ error: 'Bitte gib Netzwerkname und Passwort an.' });
-    if (command === 'rotate') db.prepare('UPDATE devices SET orientation=? WHERE id=?').run(args.degrees, d.id);
+    if (command === 'rotate' && !args.rollback) db.prepare('UPDATE devices SET orientation=? WHERE id=?').run(args.degrees, d.id); // mit Rückfall erst nach Bestätigung (confirm_display)
+    if (command === 'confirm_display' && [0, 90, 180, 270].includes(args.degrees)) db.prepare('UPDATE devices SET orientation=? WHERE id=?').run(args.degrees, d.id);
     const id = randomUUID();
     db.prepare('INSERT INTO commands(id,device_id,type,args_json,created_at) VALUES(?,?,?,?,?)')
       .run(id, d.id, command, command === 'wifi_change' ? encrypt(key, JSON.stringify(args)) : JSON.stringify(args), now());
@@ -234,8 +245,14 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     db.prepare('SELECT id,type,status,result_json,created_at FROM commands WHERE device_id=? ORDER BY created_at DESC LIMIT 20').all(req.params.id));
   app.get('/api/v1/devices/:id/screenshot', { config: { perm: 'live.read' } }, async (req, reply) => {
     if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return reply.code(400).send({ error: 'Ungültig.' });
-    const f = join(shotDir, req.params.id + '.png');
-    return existsSync(f) ? reply.header('Content-Type', 'image/png').header('Cache-Control', 'no-store').send(createReadStream(f)) : reply.code(404).send({ error: 'Es gibt noch keine Vorschau.' });
+    const sh = shots.get(req.params.id); if (!sh) return reply.code(404).send({ error: 'Es gibt noch keine Vorschau.' });
+    viewers.detail.set(req.params.id, now()); // wer ein Einzelbild abruft, schaut gerade zu
+    return reply.header('Content-Type', sh.mime).header('Cache-Control', 'no-store').header('X-Shot-Time', String(sh.ts)).send(sh.buf);
+  });
+  /** „Bild speichern“: nur durch Admins, bewusst; sonst werden Bilder nie dauerhaft abgelegt (Datenschutz) */
+  app.post('/api/v1/devices/:id/screenshot/save', { config: { perm: 'devices.manage' } }, async (req, reply) => {
+    const sh = shots.get(req.params.id); if (!sh) return reply.code(404).send({ error: 'Es gibt noch kein Bild.' });
+    const f = join(shotDir, `${req.params.id}-${now()}.jpg`); writeFileSync(f, sh.buf); audit.log({ user: req.user, action: 'bild.gespeichert', target: req.params.id, ip: req.ip }); return { ok: true };
   });
 
   function deliverQueued(id) {
@@ -269,9 +286,13 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
         db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...st, playerStatus: { current: m.current, next: m.next ?? null, source: m.source ?? null, scheduleId: m.scheduleId ?? null, ts: now() } }).slice(0, 20000), d.id);
       } else if (m.type === 'command_result') {
         db.prepare("UPDATE commands SET status=?, result_json=? WHERE id=? AND device_id=?").run(m.ok ? 'done' : 'failed', JSON.stringify(m.result ?? { error: m.error }), m.id, d.id);
+      } else if (m.type === 'signal') {
+        signals.set(d.id, { dbm: m.dbm, wifi: m.wifi ?? null, ts: now() });
       } else if (m.type === 'screenshot') {
         const buf = Buffer.from(m.png, 'base64');
-        if (buf.subarray(0, 4).toString('hex') === '89504e47') writeFileSync(join(shotDir, d.id + '.png'), buf);
+        if (buf.subarray(0, 4).toString('hex') === '89504e47' || buf.subarray(0, 2).toString('hex') === 'ffd8') {
+          sharp(buf).resize({ width: 640, withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer().then((j) => shots.set(d.id, { buf: j, mime: 'image/jpeg', ts: now() })).catch(() => {});
+        }
       }
     });
     socket.on('close', () => { clearInterval(timer); if (sockets.get(d.id) === socket) sockets.delete(d.id); });

@@ -97,7 +97,7 @@ export class Agent {
       ws.on('unexpected-response', (_q, res) => { const e = new Error('HTTP ' + res.statusCode); if (res.statusCode === 401) e.revoked = true; reject(e); });
       ws.on('error', (e) => { if (!opened) reject(e); });
       ws.on('open', async () => {
-        opened = true; this.ws = ws; this.connected = true; this.offlineSince = null; this.attempt = 0; this.cfg.lastIp = new URL(base).hostname; writeJson(this.cfgFile, this.cfg);
+        opened = true; this.ws = ws; this.reconnects = (this.reconnects ?? 0) + 1; this.connected = true; this.offlineSince = null; this.attempt = 0; this.cfg.lastIp = new URL(base).hostname; writeJson(this.cfgFile, this.cfg);
         this.send('hello', { version: this.version, profile: this.cfg.profile, model: this.cfg.model, hw: this.cfg.hw });
         this.sendHeartbeat(); this.hb = setInterval(() => this.sendHeartbeat(), this.heartbeatMs);
       });
@@ -106,9 +106,22 @@ export class Agent {
     });
   }
   send(type, body) { if (this.ws?.readyState === 1) this.ws.send(msg(type, body)); }
+  /** Geplanter nächtlicher Neustart (Wartungsfenster, Z.3): einmal pro Nacht, nur wenn der Player schon länger läuft */
+  nightlyReboot() {
+    const at = this.plan?.maintenance?.nightlyReboot; if (!at) return;
+    const n = new Date(), hhmm = n.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' }), day = n.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    const [h, m] = at.split(':').map(Number), [ch, cm] = hhmm.split(':').map(Number);
+    if (ch * 60 + cm >= h * 60 + m && ch * 60 + cm < h * 60 + m + 10 && this.rebootDay !== day && process.uptime() > 6 * 3600) { this.rebootDay = day; this.log('Nächtlicher Neustart'); try { privRequest(this.privdDir, 'reboot'); } catch {} }
+  }
   async sendHeartbeat() {
-    const np = this.nowPlayingInfo();
-    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
+    this.nightlyReboot(); const np = this.nowPlayingInfo();
+    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, reconnects: this.reconnects ?? 0, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
+  }
+  /** Aufstellmodus (Z.15): alle 2 s Signal melden, höchstens 15 Minuten */
+  startSignalWatch(seconds) {
+    clearInterval(this.sigTimer); const until = Date.now() + seconds * 1000;
+    this.sigTimer = setInterval(async () => { if (Date.now() > until || !this.ws) return clearInterval(this.sigTimer); const c = await collect({ version: this.version }); this.send('signal', { dbm: c.signalDbm ?? null, wifi: c.wifi ?? null }); }, 2000);
+    this.sigTimer.unref?.();
   }
   /** Was der Player gerade WIRKLICH zeigt (Ist) – gemeldet von Chromium-Seite oder Lite-Renderer, sofort an den Hub */
   onPlayerStatus(s) {
@@ -183,10 +196,20 @@ export class Agent {
   async runCommand({ id, command, args = {} }) {
     const done = (ok, result, error) => this.send('command_result', { id, ok, ...(result ? { result } : {}), ...(error ? { error: String(error).slice(0, 400) } : {}) });
     try {
+      if (command === 'identify') { const d = { name: this.cfg?.name ?? '', location: args.location ?? '', number: args.number ?? '', seconds: Math.min(60, args.seconds ?? 10) }; this.server.emit('identify', d); this.renderer?.osd?.(`${d.name}\n${d.location}\n${d.number}`, d.seconds * 1000); return done(true); }
+      if (command === 'testpattern') { this.server.emit('testpattern', { on: args.on !== false, seconds: Math.min(300, args.seconds ?? 120) }); this.renderer?.osd?.(args.on !== false ? 'Testbild: Farben, Ränder, Ausrichtung prüfen' : '', 15000); return done(true); }
+      if (command === 'signal_watch') { this.startSignalWatch(Math.min(900, args.seconds ?? 900)); return done(true); }
+      if (command === 'confirm_display') { if (this.displayRevert) { clearTimeout(this.displayRevert.timer); this.displayRevert = null; } return done(true); }
       if (command === 'reload') { this.server.emit('reload'); this.renderer?.notify?.(); return done(true); }
       if (command === 'reconnect') { done(true); this.ws?.close(); return; }
       if (command === 'reboot') { done(true); privRequest(this.privdDir, 'reboot'); return; }
       if (command === 'screenshot') { const png = await this.renderer?.screenshot?.(); if (!png) return done(false, null, 'Der Bildschirm kann keinen Screenshot erstellen.'); this.send('screenshot', { png: png.toString('base64') }); return done(true); }
+      if (command === 'rotate' && args.rollback) { // Z.8/A5: ohne Bestätigung binnen 60 s zurück zur alten Ausrichtung
+        if (this.displayRevert) { clearTimeout(this.displayRevert.timer); } const prev = this.displayRevert?.prev ?? this.cfg.orientation ?? 0;
+        const apply = (deg) => { this.cfg.orientation = deg; writeJson(this.cfgFile, this.cfg); try { privRequest(this.privdDir, 'display-rotate', { degrees: deg }); } catch {} this.server.emit('reload'); this.renderer?.notify?.(); };
+        apply(args.degrees); this.displayRevert = { prev, timer: setTimeout(() => { this.displayRevert = null; apply(prev); this.send('status', { current: { mediaId: '', name: 'Einstellung zurückgesetzt' }, source: 'rueckfall' }); }, (args.seconds ?? 60) * 1000) };
+        return done(true, { revertInS: args.seconds ?? 60 });
+      }
       if (command === 'rotate') { this.cfg.orientation = args.degrees; writeJson(this.cfgFile, this.cfg); privRequest(this.privdDir, 'display-rotate', { degrees: args.degrees }); this.server.emit('reload'); this.renderer?.restart?.(); return done(true); }
       if (command === 'wifi_change') { done(true); privRequest(this.privdDir, 'wifi-connect', { ssid: args.ssid, password: args.password }); return; }
       if (command === 'factory_reset') { done(true); privRequest(this.privdDir, 'factory-reset'); return; }
@@ -200,7 +223,7 @@ export class Agent {
   async runDiagnose(args = {}) {
     const get = (p, extra = {}) => request({ url: this.activeBase() + p, pin: this.cfg.hubSpki, token: this.cfg.token, timeout: 60000, ...extra });
     const res = { ...(await collect({ version: this.version })), powerSave: await powerSave(), profile: this.cfg.profile };
-    const t0 = Date.now(); const sp = await get('/api/v1/device/speedtest'); res.throughputMBs = sp.status === 200 ? Math.round((sp.body.length / 1048576) / ((Date.now() - t0) / 1000) * 10) / 10 : null;
+    const t0 = Date.now(); const sp = await get(args.quick ? '/api/v1/device/speedtest?kb=2048' : '/api/v1/device/speedtest'); res.throughputMBs = sp.status === 200 ? Math.round((sp.body.length / 1048576) / ((Date.now() - t0) / 1000) * 10) / 10 : null;
     if (args.testvideo) {
       const f = join(this.dataDir, 'testvideo.mp4'); const tv = await get('/api/v1/device/testvideo'); if (tv.status !== 200) { res.testvideo = { error: 'Testvideo nicht verfügbar' }; return res; }
       writeFileSync(f, tv.body);

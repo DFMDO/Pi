@@ -1,6 +1,7 @@
 import { h, dialog, confirmDlg, toast, field, statusEl, empty, fmtDate, help } from '../ui.js';
 import { get, post, patch, del, api, state, can } from '../api.js';
 import { shot } from './home.js';
+import { commissioning } from './betrieb.js';
 
 /** „Neuen Bildschirm verbinden“: Einmalcode + Fingerabdruck + Startkarte */
 export async function pairDialog(after) {
@@ -28,13 +29,14 @@ export async function devicesPage({ route }) {
   const rows = devices.map((d) => h('article', { class: 'card' },
     h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, d.name), h('span', { class: 'sp' }), statusEl(d.status)), h('p', {}, d.summary),
     d.status.level === 'pending' ? h('div', { class: 'notice' }, h('b', {}, 'Ist das dein Bildschirm? '), `Modell: ${d.model ?? 'unbekannt'}, Name: ${d.name}`, h('div', { class: 'row', style: 'margin-top:8px' },
-      h('button', { class: 'btn', onclick: async () => { try { await post(`/devices/${d.id}/approve`, {}); toast('Der Bildschirm ist jetzt verbunden.'); route(); } catch (e) { toast(e.message, 'err'); } } }, 'Ja, das ist mein Bildschirm'),
+      h('select', { class: 'inline', id: 'rep-' + d.id, 'aria-label': 'Ersetzt welchen Bildschirm?' }, h('option', { value: '' }, 'Neuer Bildschirm'), devices.filter((x) => x.status.level !== 'pending' && x.status.label !== 'Gesperrt').map((x) => h('option', { value: x.id }, `Ersetzt: ${x.name}`))),
+      h('button', { class: 'btn', onclick: async () => { try { const rep = document.getElementById('rep-' + d.id).value; await post(`/devices/${d.id}/approve`, rep ? { replaces: rep } : {}); toast(rep ? 'Der neue Bildschirm hat alles vom alten übernommen.' : 'Der Bildschirm ist jetzt verbunden. Als Nächstes folgt die Prüfung.'); if (rep) route(); else commissioning(d.id, d.name, route); } catch (e) { toast(e.message, 'err'); } } }, 'Ja, das ist mein Bildschirm'),
       h('button', { class: 'btn sec', onclick: async () => { if (await confirmDlg('Bildschirm ablehnen?', 'Der Bildschirm wird entfernt. Er kann sich mit einem neuen Code erneut verbinden.', 'Ablehnen')) { await del(`/devices/${d.id}`); route(); } } }, 'Nein, ablehnen'))) : [
       h('div', { class: 'grid' }, shot(d), h('div', {}, h('p', {}, h('b', {}, 'Gruppe: '), d.groupName ?? 'keine'), h('p', {}, h('b', {}, 'Gerät: '), d.model ?? 'unbekannt'),
         d.state ? h('p', { class: 'hint' }, `Temperatur ${d.state.cpuTemp ?? '–'} °C · Speicher ${d.state.ramUsedMB ?? '–'}/${d.state.ramTotalMB ?? '–'} MB · WLAN-Signal ${d.state.signalDbm ?? '–'} dBm · Medien ${d.state.syncState?.done ?? 0}/${d.state.syncState?.total ?? 0}`) : null)),
       can('devices.manage') ? h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn sec', onclick: () => editDlg(d, groups, route) }, 'Bearbeiten'), cmdMenu(d, route)) : null]));
   return h('div', {}, h('h1', {}, 'Bildschirme'), h('p', { class: 'lead' }, 'Hier verwaltest du alle Bildschirme im Museum.'),
-    can('devices.manage') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', onclick: () => pairDialog(route) }, '➕ Neuen Bildschirm verbinden'), h('button', { class: 'btn sec', onclick: () => groupDlg(route) }, 'Gruppe anlegen'), h('button', { class: 'btn sec', onclick: () => hubInfo() }, 'Hub-Adresse & Fingerabdruck')) : null,
+    can('devices.manage') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', onclick: () => pairDialog(route) }, '➕ Neuen Bildschirm verbinden'), h('button', { class: 'btn sec', onclick: () => groupDlg(route) }, 'Gruppe anlegen'), h('button', { class: 'btn sec', onclick: () => replaceInfo(route) }, 'Bildschirm ersetzen'), h('a', { class: 'btn sec', href: '/api/v1/devices.csv' }, 'Liste als Excel/CSV'), h('button', { class: 'btn sec', onclick: () => hubInfo() }, 'Hub-Adresse & Fingerabdruck')) : null,
     rows.length ? h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(340px,1fr))' }, rows) : empty('Noch kein Bildschirm verbunden', 'Klicke oben auf „Neuen Bildschirm verbinden“.'));
 }
 function cmdMenu(d, route) {
@@ -45,14 +47,17 @@ function cmdMenu(d, route) {
     if (v === 'screenshot') { run('screenshot', {}, 'Vorschau wird aktualisiert.'); setTimeout(route, 2500); }
     if (v === 'reconnect') run('reconnect', {}, 'Der Bildschirm verbindet sich neu.');
     if (v === 'reboot' && await confirmDlg('Bildschirm neu starten?', 'Der Bildschirm ist für etwa eine Minute schwarz.', 'Neu starten')) run('reboot', {}, 'Der Bildschirm startet neu.');
-    if (v.startsWith('rot')) run('rotate', { degrees: Number(v.slice(3)) }, 'Die Ausrichtung wird geändert.');
+    if (v.startsWith('rot')) rotateConfirm(d, Number(v.slice(3)), run);
+    if (v === 'identify') run('identify', { location: d.location ?? '', number: d.id.slice(0, 4).toUpperCase() }, 'Der Bildschirm zeigt 10 Sekunden lang seinen Namen.');
+    if (v === 'test') run('testpattern', { on: true }, 'Das Testbild läuft 2 Minuten.');
+    if (v === 'copy') copyDlg(d, route);
     if (v === 'wifi') wifiDlg(d, run);
     if (v === 'diag') diagDlg(d);
     if (v === 'update' && await confirmDlg('Update einspielen?', 'Der Bildschirm lädt das Update vom Hub und startet neu.', 'Update einspielen', false)) run('update', {}, 'Das Update wird eingespielt.');
     if (v === 'block' && await confirmDlg('Bildschirm sperren?', 'Der Bildschirm verliert sofort die Verbindung zum Hub und zeigt nur noch gespeicherte Inhalte. Du kannst ihn später neu verbinden.', 'Sperren')) { await post(`/devices/${d.id}/block`); route(); }
     if (v === 'remove' && await confirmDlg('Bildschirm entfernen?', `„${d.name}“ wird aus dem Hub entfernt. Seine Termine bleiben nicht erhalten.`, 'Entfernen')) { await del(`/devices/${d.id}`); route(); }
     if (v === 'reset' && await confirmDlg('Auf Werkseinstellungen zurücksetzen?', 'Alle Daten und die WLAN-Verbindung dieses Bildschirms werden gelöscht. Danach muss er neu eingerichtet werden.', 'Zurücksetzen')) run('factory_reset', {}, 'Der Bildschirm wird zurückgesetzt.');
-  } }, h('option', { value: '' }, 'Weitere Aktionen …'), h('option', { value: 'reload' }, 'Neu laden'), h('option', { value: 'screenshot' }, 'Vorschau aktualisieren'), h('option', { value: 'reconnect' }, 'Mit dem Hub neu verbinden'),
+  } }, h('option', { value: '' }, 'Weitere Aktionen …'), h('option', { value: 'reload' }, 'Neu laden'), h('option', { value: 'screenshot' }, 'Vorschau aktualisieren'), h('option', { value: 'identify' }, 'Diesen Bildschirm erkennen'), h('option', { value: 'test' }, 'Testbild anzeigen'), h('option', { value: 'copy' }, 'Einstellungen auf andere kopieren …'), h('option', { value: 'reconnect' }, 'Mit dem Hub neu verbinden'),
     h('option', { value: 'rot0' }, 'Ausrichtung: normal'), h('option', { value: 'rot90' }, 'Ausrichtung: 90° gedreht'), h('option', { value: 'rot180' }, 'Ausrichtung: 180°'), h('option', { value: 'rot270' }, 'Ausrichtung: 270°'),
     h('option', { value: 'wifi' }, 'WLAN ändern …'), h('option', { value: 'diag' }, 'Diagnose …'), h('option', { value: 'update' }, 'Update einspielen'), h('option', { value: 'reboot' }, 'Neu starten'), h('option', { value: 'block' }, 'Sperren'), h('option', { value: 'remove' }, 'Entfernen'), h('option', { value: 'reset' }, 'Auf Werkseinstellungen zurücksetzen'));
   return sel;
@@ -93,4 +98,21 @@ function diagDlg(d) {
         return out.replaceChildren(h('table', {}, h('tbody', {}, rows.map(([a, b]) => h('tr', {}, h('td', {}, a), h('td', {}, b)))))); } }
       throw new Error('Der Bildschirm hat nicht geantwortet.'); } catch (e) { out.replaceChildren(h('p', { class: 'bad' }, e.message)); start.disabled = false; } } }, 'Messung starten');
   dialog(`Diagnose: ${d.name}`, h('div', {}, out, h('label', {}, tv, ' Testvideo für dieses Gerät abspielen (zeigt, ob Videos flüssig laufen)')), [{ text: 'Schließen', cls: 'sec' }, { text: 'Messung starten', fn: () => { start.click(); return false; } }]);
+}
+
+/** Fern-Einstellung mit Rückfall (A5/Z.8): ohne Bestätigung binnen 60 s stellt der Bildschirm die alte Einstellung wieder her */
+async function rotateConfirm(d, degrees, run) {
+  try { await post(`/devices/${d.id}/commands`, { command: 'rotate', args: { degrees, rollback: true, seconds: 60 } }); } catch (e) { return toast(e.message, 'err'); }
+  let left = 60; const t = h('b', {}, '60'); const iv = setInterval(() => { left--; t.textContent = String(left); if (left <= 0) { clearInterval(iv); dlg.close(); toast('Keine Bestätigung – der Bildschirm hat die alte Ausrichtung wiederhergestellt.', 'err'); } }, 1000);
+  const dlg = dialog('Passt die Ausrichtung?', h('p', {}, 'Schau auf den Bildschirm. Wenn alles richtig aussieht, bestätige. Sonst wird die alte Ausrichtung in ', t, ' Sekunden automatisch wiederhergestellt.'),
+    [{ text: 'Nein, zurücksetzen', cls: 'sec', fn: () => { clearInterval(iv); toast('Wird zurückgesetzt …'); } }, { text: 'Ja, passt', fn: async () => { clearInterval(iv); await post(`/devices/${d.id}/commands`, { command: 'confirm_display', args: { degrees } }); toast('Gespeichert.'); } }]);
+}
+function copyDlg(d, route) {
+  get('/devices').then((all) => { const sel = all.filter((x) => x.id !== d.id && x.status.level !== 'pending').map((x) => ({ x, c: h('input', { type: 'checkbox' }) }));
+    dialog(`Einstellungen von „${d.name}“ kopieren`, h('div', {}, h('p', {}, 'Kopiert Ausrichtung, automatisches Ausschalten und Layout auf diese Bildschirme:'), sel.map(({ x, c }) => h('label', { style: 'display:flex;gap:8px;min-height:44px;align-items:center' }, c, x.name))),
+      [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Kopieren', fn: async () => { const to = sel.filter((s) => s.c.checked).map((s) => s.x.id); if (!to.length) { toast('Bitte wähle mindestens einen Bildschirm.', 'err'); return false; } const r = await post(`/devices/${d.id}/copy-settings`, { to }); toast(`${r.copied} Bildschirm(e) aktualisiert.`); route(); } }]); });
+}
+function replaceInfo(route) {
+  dialog('Bildschirm ersetzen', h('div', {}, h('ol', {}, h('li', {}, 'Baue den neuen Raspberry Pi auf und schalte ihn ein.'), h('li', {}, 'Klicke hier auf „Weiter“ und verbinde ihn wie gewohnt mit dem Code oder der Startkarte.'), h('li', {}, 'Bestätige den neuen Bildschirm in der Liste und wähle dabei, welchen alten Bildschirm er ersetzt. Name, Gruppe, Termine und Einstellungen wandern automatisch zum neuen Gerät. Der alte wird gesperrt.'))),
+    [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Weiter', fn: () => { pairDialog(route); } }]);
 }

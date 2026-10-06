@@ -1,5 +1,6 @@
 import { h, toast, field } from '../ui.js';
 import { api, post } from '../api.js';
+import { resetDlg } from './tools.js';
 export function loginPage(onOk) {
   let totp = false; const form = h('form', { class: 'card', onsubmit: async (e) => {
     e.preventDefault(); const f = new FormData(form);
@@ -8,7 +9,7 @@ export function loginPage(onOk) {
     h('h1', {}, 'Anmelden'), h('p', { class: 'lead' }, 'Melde dich mit deinem Benutzernamen und Passwort an.'),
     field('Benutzername', h('input', { name: 'name', autocomplete: 'username', required: true, autofocus: true })), field('Passwort', h('input', { name: 'password', type: 'password', autocomplete: 'current-password', required: true })));
   const $totp = h('div', { hidden: true }, field('Code aus der Authenticator-App (oder Wiederherstellungscode)', h('input', { name: 'totp', autocomplete: 'one-time-code', inputmode: 'numeric' })));
-  form.append($totp, h('button', { class: 'btn big', style: 'width:100%;margin-top:16px', type: 'submit' }, 'Anmelden'));
+  form.append($totp, h('button', { class: 'btn big', style: 'width:100%;margin-top:16px', type: 'submit' }, 'Anmelden'), h('p', {}, h('button', { class: 'btn link', type: 'button', onclick: resetDlg }, 'Passwort vergessen?')));
   return h('main', { class: 'login', id: 'main' }, h('div', { class: 'logobox' }, h('img', { src: '/logo.svg', alt: 'Deutsches Fußballmuseum' })), form);
 }
 /** Allererste Einrichtung im Browser (nur wenn beim Handy-Setup kein Konto angelegt wurde). */

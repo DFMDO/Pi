@@ -1,5 +1,5 @@
 // Geräte-Zustand für den Heartbeat (Temperatur, RAM, WLAN-Signal, Zeitsync …).
-import { readFileSync } from 'node:fs';
+import { readFileSync, statfsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { uptime } from 'node:os';
 
@@ -12,6 +12,13 @@ export function parseMeminfo(t) {
   const total = g('MemTotal'), avail = g('MemAvailable');
   return { ramTotalMB: Math.round(total / 1024), ramUsedMB: Math.round((total - avail) / 1024) };
 }
+export function parseLink(t) { // „iw dev wlan0 link“: Zugangspunkt, Kanal, Band
+  const bssid = (/Connected to ([0-9a-f:]{17})/i.exec(t ?? '') ?? [])[1] ?? null, ssid = (/SSID: (.*)/.exec(t ?? '') ?? [])[1] ?? null, freq = Number((/freq: (\d+)/.exec(t ?? '') ?? [])[1]) || null;
+  const channel = freq ? (freq >= 5955 ? Math.round((freq - 5950) / 5) : freq >= 5000 ? Math.round((freq - 5000) / 5) : freq === 2484 ? 14 : Math.round((freq - 2407) / 5)) : null;
+  return { bssid, ssid, freq, channel, band: freq ? (freq >= 5955 ? '6 GHz' : freq >= 4900 ? '5 GHz' : '2,4 GHz') : null };
+}
+/** Raspberry-Pi-Throttling-Bits: 0x1 Unterspannung, 0x4 gedrosselt, 0x10000/0x40000 früher aufgetreten */
+export const parseThrottled = (t) => { const m = /throttled=0x([0-9a-f]+)/i.exec(t ?? ''); return m ? parseInt(m[1], 16) : null; };
 export const parseSignal = (t) => { const m = /signal:\s*(-?\d+) dBm/.exec(t ?? ''); return m ? Number(m[1]) : null; };
 
 export async function timeSynced() {
@@ -21,10 +28,17 @@ export async function timeSynced() {
   if (t.length > 13) return Number(t[2]) < 16 && t[13] === 'Normal';
   return (await run('timedatectl', ['show', '-p', 'NTPSynchronized', '--value'])).trim() === 'yes';
 }
+let sdCache = { at: 0, n: 0 };
+/** SD-Karten-Fehler im Kernel-Protokoll seit dem Start (alle 10 Minuten neu gezählt) */
+async function sdErrors() {
+  if (Date.now() - sdCache.at < 600000) return sdCache.n;
+  const out = await run('journalctl', ['-k', '-b', '-q', '--no-pager', '-g', 'mmcblk0.*(I/O error|timeout|CRC)']); sdCache = { at: Date.now(), n: out.split('\n').filter(Boolean).length }; return sdCache.n;
+}
 export async function collect({ version, extra = {} }) {
-  const t = read('/sys/class/thermal/thermal_zone0/temp');
-  return { version, uptimeS: Math.round(uptime()), cpuTemp: t ? Math.round(parseInt(t, 10) / 100) / 10 : null, ...parseMeminfo(read('/proc/meminfo')),
-    signalDbm: parseSignal(await run('iw', ['dev', 'wlan0', 'link'])), timeSynced: await timeSynced(), ...extra };
+  const t = read('/sys/class/thermal/thermal_zone0/temp'); const link = await run('iw', ['dev', 'wlan0', 'link']);
+  let diskFreeMB = null; try { const s = statfsSync(process.env.DFM_DATA ?? '/data'); diskFreeMB = Math.round((s.bavail * s.bsize) / 1048576); } catch {}
+  return { version, epoch: Date.now(), uptimeS: Math.round(uptime()), cpuTemp: t ? Math.round(parseInt(t, 10) / 100) / 10 : null, ...parseMeminfo(read('/proc/meminfo')),
+    signalDbm: parseSignal(link), wifi: parseLink(link), throttled: parseThrottled(await run('vcgencmd', ['get_throttled'])), diskFreeMB, sdErrors: await sdErrors(), timeSynced: await timeSynced(), ...extra };
 }
 
 /** Hardware erkennen → Modell, RAM, Architektur, Profilvorschlag */

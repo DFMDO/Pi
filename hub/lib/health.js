@@ -1,0 +1,21 @@
+// Gesundheit der Bildschirme (Z.3) und WLAN-Stufen (Z.15): reine Funktionen, Klartext statt Fachbegriffen.
+export const signalQuality = (dbm) => (dbm == null ? { level: 'unbekannt', label: 'Unbekannt', bars: 0 } : dbm >= -55 ? { level: 'sehr_gut', label: 'Sehr gut', bars: 4 } : dbm >= -67 ? { level: 'gut', label: 'Gut', bars: 3 } : dbm >= -75 ? { level: 'schwach', label: 'Schwach', bars: 2 } : { level: 'zu_schwach', label: 'Zu schwach', bars: 1 });
+
+/** Warnungen in Klartext für einen aktiven Bildschirm. st = Heartbeat-Zustand, cfg = Schwellenwerte */
+export function deviceWarnings(d, st, now, cfg = {}) {
+  const w = [], name = d.name;
+  if (d.maintenance_since) { if (now - d.maintenance_since > 24 * 3600000) w.push({ kind: 'wartung_vergessen', level: 'warn', text: `„${name}“ ist seit über 24 Stunden im Wartungsmodus. Bitte prüfen, ob er noch gebraucht wird.` }); return w; } // Wartung: sonst alles stumm
+  if (!st) return w;
+  const t = st.throttled;
+  if (t != null && (t & 0x1)) w.push({ kind: 'netzteil', level: 'bad', text: `Netzteil zu schwach bei „${name}“. Bitte das Original-Netzteil verwenden oder austauschen.` });
+  else if (t != null && (t & 0x10000)) w.push({ kind: 'netzteil', level: 'warn', text: `„${name}“ hatte Unterspannung. Bitte das Netzteil und das Kabel prüfen.` });
+  if (t != null && (t & 0x4)) w.push({ kind: 'drosselung', level: 'warn', text: `„${name}“ wird gedrosselt (zu heiß oder zu wenig Strom).` });
+  if ((st.cpuTemp ?? 0) >= 80) w.push({ kind: 'temperatur', level: 'bad', text: `„${name}“ ist zu heiß (${Math.round(st.cpuTemp)} °C). Bitte für Luft sorgen oder kühlen.` });
+  else if ((st.cpuTemp ?? 0) >= 72) w.push({ kind: 'temperatur', level: 'warn', text: `„${name}“ wird sehr warm (${Math.round(st.cpuTemp)} °C).` });
+  if ((st.sdErrors ?? 0) > 0) w.push({ kind: 'sd', level: 'bad', text: `Die SD-Karte von „${name}“ meldet Fehler. Bitte bald austauschen.` });
+  if (st.diskFreeMB != null && st.diskFreeMB < 200) w.push({ kind: 'speicher', level: 'warn', text: `„${name}“ hat nur noch ${st.diskFreeMB} MB freien Speicher. Bitte nicht benötigte Medien entfernen.` });
+  const weak = cfg.warnDbm ?? -72;
+  if (st.signalDbm != null && st.signalDbm < weak) w.push({ kind: 'wlan', level: 'warn', text: `WLAN bei „${name}“ ist ${signalQuality(st.signalDbm).label.toLowerCase()}. Bitte den Bildschirm näher an den Access Point stellen.` });
+  if (st.timeSynced === false) w.push({ kind: 'uhrzeit', level: 'warn', text: `Die Uhr von „${name}“ ist nicht abgeglichen.` });
+  return w;
+}

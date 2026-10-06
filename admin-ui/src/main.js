@@ -10,12 +10,14 @@ import { playlistsPage } from './pages/playlists.js';
 import { calendarPage } from './pages/calendar.js';
 import { settingsPage, usersPage, auditPage } from './pages/admin.js';
 import { helpPage, startTour } from './pages/help.js';
-import { livePage } from './pages/live.js';
+import { livePage, wallPage } from './pages/live.js';
+import { scenesPage } from './pages/quick.js';
+import { betriebPage } from './pages/betrieb.js';
 import { wizardPage } from './pages/wizard.js';
 
 const app = document.getElementById('app');
 const NAV = [['#/', 'Startseite', '🏠', homePage], ['#/live', 'Live', '📺', livePage], ['#/bildschirme', 'Bildschirme', '🖥️', devicesPage], ['#/medien', 'Bilder & Videos', '🖼️', mediaPage], ['#/listen', 'Abspiellisten', '▶️', playlistsPage],
-  ['#/kalender', 'Kalender', '📅', calendarPage], ['#/hilfe', 'Hilfe', '❓', helpPage]];
+  ['#/kalender', 'Kalender', '📅', calendarPage], ['#/szenen', 'Szenen', '🎬', scenesPage], ['#/betrieb', 'Betrieb', '🩺', betriebPage], ['#/hilfe', 'Hilfe', '❓', helpPage]];
 const ADMIN = [['#/benutzer', 'Benutzer', '👥', usersPage, 'users.manage'], ['#/protokoll', 'Protokoll', '📜', auditPage, 'audit.read'], ['#/einstellungen', 'Erweitert', '⚙️', settingsPage, 'settings.manage']];
 
 async function boot() {
@@ -27,13 +29,15 @@ async function boot() {
 const navFor = () => (state.user?.role === 'anzeige' ? NAV.filter((n) => ['#/live', '#/hilfe'].includes(n[0])) : [...NAV, ...ADMIN.filter((a) => can(a[4]))]);
 async function route() {
   const path = location.hash || '#/';
+  if (path === '#/wand') return app.replaceChildren(await wallPage());
   if (!state.user) return app.replaceChildren(loginPage(async (u, csrf) => { state.user = u; state.csrf = csrf; location.hash = '#/'; route(); }));
   state.settings = await get('/settings').catch(() => ({}));
   if (state.user.role === 'admin' && state.settings['wizard.done'] !== 'true' && path !== '#/hilfe') return mount(wizardPage(() => { state.settings['wizard.done'] = 'true'; route(); }, route), null);
   if (state.user.role === 'anzeige' && !['#/live', '#/hilfe'].includes(path)) { location.hash = '#/live'; return; }
-  const page = navFor().find((n) => n[0] === path) ?? NAV[0];
+  const liveId = /^#\/live\/([0-9a-f-]{36})$/.exec(path)?.[1];
+  const page = liveId ? [NAV[1][0], NAV[1][1], NAV[1][2], (c) => livePage(c, { openId: liveId })] : navFor().find((n) => n[0] === path) ?? NAV[0];
   const view = h('div', {}, h('p', {}, 'Wird geladen …'));
-  mount(view, page[0]);
+  mount(view, liveId ? '#/live' : page[0]);
   try { view.replaceWith(await page[3]({ route, pair: pairDialog })); } catch (e) { view.replaceChildren(h('div', { class: 'notice bad' }, e.message)); }
   $('main')?.querySelector('h1')?.setAttribute('tabindex', '-1'); $('main h1')?.focus({ preventScroll: true });
 }

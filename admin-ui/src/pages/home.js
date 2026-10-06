@@ -1,6 +1,7 @@
 import { h, statusEl, empty, fmtDate, fmtBytes } from '../ui.js';
 import { get, post, state, can } from '../api.js';
 import { pairDialog } from './devices.js';
+import { quickActions } from './quick.js';
 
 /** Vorschaubild (Screenshot) eines Bildschirms; wenn keins da ist, ein ruhiger Platzhalter */
 export const shot = (d) => { const box = h('div', { class: 'shot' }, 'Noch keine Vorschau'); if (d.status.level === 'ok') { const i = h('img', { alt: `Vorschau von ${d.name}`, src: `/api/v1/devices/${d.id}/screenshot?t=${Date.now() >> 14}` }); i.onload = () => box.replaceChildren(i); } return box; };
@@ -11,6 +12,7 @@ export async function homePage({ route }) {
   const quick = [['🖼️', 'Bild oder Video anzeigen', 'Datei hochladen und auf einem Bildschirm zeigen', '#/medien'], ['📝', 'Text-Ankündigung anzeigen', 'Aus einer DFM-Vorlage erstellen', '#/medien?text=1'], ['📅', 'Für einen bestimmten Tag planen', 'Zeitraum und Bildschirm wählen', '#/kalender']];
   const issues = [...warnings.map((w) => w.text), ...active.filter((d) => d.status.level === 'warn' || d.status.level === 'bad').map((d) => d.status.level === 'warn' ? `${d.name} hat gerade keine Verbindung. Der Bildschirm zeigt weiter die zuletzt geladenen Inhalte.` : `${d.name} ist nicht erreichbar. Bitte Strom und WLAN prüfen.`), storage?.warn ? storage.text : null].filter(Boolean);
   return h('div', {}, h('h1', {}, 'Startseite'), h('p', { class: 'lead' }, 'Hier siehst du, ob alle Bildschirme laufen und was gerade gezeigt wird.'),
+    can('overrides.write') ? await quickActions(route) : null,
     h('div', { class: 'grid', style: 'margin-bottom:16px' }, ...(can('media.write') ? quick.map(([i, t, d, href]) => h('button', { class: 'quick', onclick: () => { location.hash = href; } }, h('b', {}, `${i} ${t}`), h('span', { class: 'hint' }, d))) : []),
       can('devices.manage') ? h('button', { class: 'quick main', 'data-tour': 'pair', onclick: () => pairDialog(route) }, h('b', {}, '➕ Neuen Bildschirm verbinden'), h('span', {}, 'Zeigt einen Code für den neuen Bildschirm')) : null),
     pending.length ? h('div', { class: 'notice' }, h('b', {}, '⏳ Ein neuer Bildschirm wartet auf dich. '), pending.map((d) => `„${d.name}“ (${d.model ?? 'unbekanntes Gerät'})`).join(', '), ' – ', h('a', { href: '#/bildschirme' }, 'Jetzt bestätigen')) : null,

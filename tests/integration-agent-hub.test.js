@@ -161,9 +161,10 @@ test('Live-Vorschau: Hub holt Screenshots, solange jemand angemeldet ist; Bildsc
   const dataDir = mkdtempSync(join(tmpdir(), 'agent-')); writeFileSync(join(dataDir, 'agent.json'), JSON.stringify({ deviceId, hubUrl, hubSpki: spki, token, profile: 'standard' }));
   const png = await sharp({ create: { width: 64, height: 36, channels: 3, background: '#c8102e' } }).png().toBuffer();
   const agent = new Agent({ dataDir, port: 0, heartbeatMs: 200, renderer: { screenshot: async () => png, stop() {}, notify() {} } }); await agent.start(); await until(() => agent.connected);
-  assert.equal(h.app.devices.screenshotTick(), 1, 'angemeldeter Admin → Screenshot angefordert');
+  assert.equal(h.app.devices.screenshotTick(), 0, 'niemand schaut zu → keine unnötige Last');
+  await admin('GET', '/api/v1/live'); assert.equal(h.app.devices.screenshotTick(), 1, 'Kachelansicht offen → Screenshot angefordert');
   await until(async () => (await admin('GET', `/api/v1/devices/${deviceId}/screenshot`)).statusCode === 200);
-  const shot = await admin('GET', `/api/v1/devices/${deviceId}/screenshot`); assert.equal(shot.headers['content-type'], 'image/png'); assert.deepEqual(shot.rawPayload.subarray(0, 4), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-  h.db.prepare('DELETE FROM sessions').run(); assert.equal(h.app.devices.screenshotTick(), 0, 'niemand angemeldet → keine unnötige Last');
+  const shot = await admin('GET', `/api/v1/devices/${deviceId}/screenshot`); assert.equal(shot.headers['content-type'], 'image/jpeg'); assert.deepEqual(shot.rawPayload.subarray(0, 2), Buffer.from([0xff, 0xd8]), 'nur im Speicher, als JPEG');
+  h.clock.t += 61000; assert.equal(h.app.devices.screenshotTick(), 0, '60 s ohne Betrachter → Screenshots stoppen');
   await agent.stop(); await h.cleanup();
 });

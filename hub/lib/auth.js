@@ -48,6 +48,11 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
     }
     const sid = parseCookies(req.headers.cookie)[COOKIE];
     const s = sid && q.sess.get(sha256hex(sid));
+    if (!s && c.perm === 'live.read' && req.method === 'GET') { // Wandmodus: eigenes Lese-Token, nur für die Live-Ansicht, ohne Sitzungsablauf
+      const wt = req.headers['x-live-token'] ?? parseCookies(req.headers.cookie)['__Host-dfm_wall'];
+      const t = wt && db.prepare('SELECT * FROM read_tokens WHERE token_hash=?').get(sha256hex(String(wt)));
+      if (t) { req.user = { id: 'token:' + t.id, name: 'Wandmodus „' + t.name + '“', role: 'anzeige', groups: null, wall: true }; return; }
+    }
     if (!s || s.last_seen + IDLE_MS < now() || s.expires_at < now()) {
       if (s) db.prepare('DELETE FROM sessions WHERE id_hash=?').run(s.id_hash);
       return reply.code(401).send({ error: 'Bitte melde dich an.', code: 'login' });
@@ -62,7 +67,7 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
       audit.log({ user: u, action: 'zugriff.verweigert', target: req.url, ip: req.ip, security: true });
       return reply.code(403).send({ error: 'Dafür fehlt dir die Berechtigung.' });
     }
-    req.user = u; req.session = s;
+    u.groups = u.groups_json ? JSON.parse(u.groups_json) : null; req.user = u; req.session = s;
     q.touch.run(now(), now() + 12 * 3600000, s.id_hash);
   });
 
@@ -146,7 +151,7 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
 
   // Benutzerverwaltung (nur Admin)
   app.get('/api/v1/users', { config: { perm: 'users.manage' } }, async () =>
-    db.prepare('SELECT id,name,role,totp_secret_enc IS NOT NULL AS totp,created_at FROM users ORDER BY name').all());
+    db.prepare('SELECT id,name,role,totp_secret_enc IS NOT NULL AS totp,groups_json,created_at FROM users ORDER BY name').all().map(({ groups_json, ...u }) => ({ ...u, groups: groups_json ? JSON.parse(groups_json) : null })));
   app.post('/api/v1/users', { config: { perm: 'users.manage' }, schema: { body: { type: 'object', required: ['name', 'password', 'role'],
     additionalProperties: false, properties: { name: { type: 'string', minLength: 2, maxLength: 60 }, password: { type: 'string', maxLength: 300 },
       role: { enum: ['admin', 'editor', 'anzeige'] } } } } }, async (req, reply) => {
@@ -160,8 +165,9 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
     return reply.code(201).send({ id });
   });
   const adminCount = () => db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin'").get().n;
-  app.patch('/api/v1/users/:id', { config: { perm: 'users.manage' }, schema: { body: { type: 'object', required: ['role'], additionalProperties: false, properties: { role: { enum: ['admin', 'editor', 'anzeige'] } } } } }, async (req, reply) => {
+  app.patch('/api/v1/users/:id', { config: { perm: 'users.manage' }, schema: { body: { type: 'object', minProperties: 1, additionalProperties: false, properties: { role: { enum: ['admin', 'editor', 'anzeige'] }, groups: { type: ['array', 'null'], maxItems: 100, items: { type: 'string', maxLength: 40 } } } } } }, async (req, reply) => {
     const u = q.byId.get(req.params.id); if (!u) return reply.code(404).send({ error: 'Benutzer nicht gefunden.' });
+    if (req.body.groups !== undefined) { db.prepare('UPDATE users SET groups_json=? WHERE id=?').run(req.body.groups ? JSON.stringify(req.body.groups) : null, u.id); audit.log({ user: req.user, action: 'benutzer.gruppen_geaendert', target: u.name, ip: req.ip, security: true }); if (!req.body.role) return { ok: true }; }
     if (u.role === 'admin' && req.body.role !== 'admin' && adminCount() <= 1) return reply.code(409).send({ error: 'Das ist der letzte Admin. Lege zuerst einen weiteren Admin an – sonst könnte niemand mehr alles verwalten.' });
     db.prepare('UPDATE users SET role=? WHERE id=?').run(req.body.role, u.id); db.prepare('DELETE FROM sessions WHERE user_id=?').run(u.id);
     audit.log({ user: req.user, action: 'benutzer.rolle_geaendert', target: u.name, ip: req.ip, security: true, detail: { von: u.role, zu: req.body.role } }); return { ok: true };

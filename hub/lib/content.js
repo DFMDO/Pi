@@ -295,11 +295,18 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     const d = db.prepare('SELECT * FROM devices WHERE id=?').get(req.query.deviceId); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
     const t = localToEpoch(req.query.date, req.query.time);
     const seg = currentSegment(buildTimeline(loadSchedules(db, { drafts: req.query.drafts === '1' }), { deviceId: d.id, groupId: d.group_id }, t - DAY, t + DAY), t);
-    let playlistId = seg?.source?.content.type === 'playlist' ? seg.source.content.id : null, mediaIds = [];
+    let playlistId = seg?.source?.content.type === 'playlist' ? seg.source.content.id : null, mediaIds = [], source = seg?.source ? 'termin' : null, text = null;
     if (seg?.source?.content.type === 'media') mediaIds = [seg.source.content.id];
-    else { playlistId ??= db.prepare("SELECT id FROM playlists WHERE is_default=1 AND state='published'").get()?.id; if (playlistId) mediaIds = db.prepare('SELECT media_id FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(playlistId).map((r) => r.media_id); }
-    return { source: seg?.source ? 'termin' : mediaIds.length ? 'standard' : 'standby', scheduleId: seg?.source?.scheduleId ?? null, playlistId, mediaIds,
-      text: seg?.source ? 'Ein Termin legt fest, was gezeigt wird.' : mediaIds.length ? 'Es läuft die Standard-Abspielliste.' : 'Es gibt nichts zu zeigen. Der Bildschirm zeigt das DFM-Standby-Bild.' };
+    else {
+      if (!playlistId) { // Sondertag-Regel (A3 Punkt 5) ersetzt die Standardliste
+        const sd = db.prepare("SELECT * FROM special_days WHERE date<=? AND COALESCE(date_to,date)>=? AND (rule='off' OR content_id IS NOT NULL) ORDER BY CASE source WHEN 'custom' THEN 0 ELSE 1 END LIMIT 1").get(req.query.date, req.query.date);
+        if (sd?.rule === 'off') return { source: 'schliesstag', scheduleId: null, playlistId: null, mediaIds: [], text: `Am ${req.query.date.split('-').reverse().join('.')} ist „${sd.name}“. Der Bildschirm ist aus.` };
+        if (sd) { source = 'sondertag'; text = `Am ${req.query.date.split('-').reverse().join('.')} ist „${sd.name}“. Dafür läuft eine besondere Anzeige statt der normalen.`; if (sd.content_type === 'media') mediaIds = [sd.content_id]; else playlistId = sd.content_id; }
+      }
+      playlistId ??= db.prepare("SELECT id FROM playlists WHERE is_default=1 AND state='published'").get()?.id; if (playlistId && !mediaIds.length) mediaIds = db.prepare('SELECT media_id FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(playlistId).map((r) => r.media_id);
+    }
+    return { source: source ?? (mediaIds.length ? 'standard' : 'standby'), scheduleId: seg?.source?.scheduleId ?? null, playlistId, mediaIds,
+      text: text ?? (seg?.source ? 'Ein Termin legt fest, was gezeigt wird.' : mediaIds.length ? 'Es läuft die Standard-Abspielliste.' : 'Es gibt nichts zu zeigen. Der Bildschirm zeigt das DFM-Standby-Bild.') };
   });
   app.get('/api/v1/warnings', { config: { perm: 'devices.read' } }, async () => warnings(db, now()));
 
@@ -335,7 +342,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   });
 
   // ---------- Einstellungen ----------
-  const DEFAULTS = { 'site.name': 'Deutsches Fußballmuseum', 'feature.weburl': 'false', 'feature.rss': 'false', 'feature.weather': 'false', 'mail.enabled': 'false', 'ssh.enabled': 'false', 'sync.window': '', 'sync.bandwidthKbps': '0', 'demo.enabled': 'true', 'backup.extraDir': '', 'wizard.done': 'false', 'publish.editor': 'true' };
+  const DEFAULTS = { 'site.name': 'Deutsches Fußballmuseum', 'feature.weburl': 'false', 'feature.rss': 'false', 'feature.weather': 'false', 'mail.enabled': 'false', 'ssh.enabled': 'false', 'sync.window': '', 'sync.bandwidthKbps': '0', 'demo.enabled': 'true', 'backup.extraDir': '', 'wizard.done': 'false', 'publish.editor': 'true', 'wifi.warnDbm': '-72', 'maintenance.nightlyReboot': 'true', 'maintenance.rebootAt': '03:30', 'commissioning.required': 'true', 'retention.overrideDays': '30', 'retention.historyDays': '90', 'retention.auditDays': '365', 'qr.allowedHosts': '', 'screen.diagonalInch': '43', 'screen.distanceM': '3' };
   const getSettings = () => ({ ...DEFAULTS, ...Object.fromEntries(db.prepare('SELECT key,value FROM settings').all().map((r) => [r.key, r.value])) });
   app.decorate('settings', getSettings);
   app.get('/api/v1/settings', { config: { perm: 'settings.manage' } }, async () => getSettings());

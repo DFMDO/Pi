@@ -55,7 +55,8 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
     timer = setTimeout(() => { next(); }, Math.max(500, wait));
   }
   function next() { idx++; tick(); }
-  return { ...sup, stop: () => { stopped = true; clearTimeout(timer); sock?.destroy(); sup.stop(); }, notify: () => { idx = 0; tick(); },
+  const osd = (text, ms) => send(['show-text', text, ms]);
+  return { ...sup, osd, stop: () => { stopped = true; clearTimeout(timer); sock?.destroy(); sup.stop(); }, notify: () => { idx = 0; tick(); },
     screenshot: () => new Promise((res, rej) => { // mpv schreibt das Bild in eine Datei
       const f = '/run/dfm/shot.png'; send(['screenshot-to-file', f, 'window']); setTimeout(() => { try { res(require_fs().readFileSync(f)); } catch (e) { rej(e); } }, 800); }) };
 }

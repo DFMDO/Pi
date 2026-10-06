@@ -9,7 +9,8 @@ const j = (u) => fetch(u, { cache: 'no-store' }).then((r) => r.json());
 
 async function refresh() {
   [plan, manifest, health] = await Promise.all([j('/plan.json'), j('/manifest.json'), j('/health')]);
-  document.body.classList.toggle('black', !!health.displayOff);
+  document.body.classList.toggle('black', !!health.displayOff || (resolvePlaylist(plan, Date.now()).off === true));
+  if (typeof applyLayout === 'function') applyLayout();
   const deg = health.orientation ?? 0; stage.className = deg ? 'r' + deg : ''; stage.style.setProperty('--rot', deg + 'deg');
 }
 function el(tag, cls, ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
@@ -42,7 +43,7 @@ async function main() {
   await refresh().catch(() => {});
   let idx = 0, lastPl = null;
   for (;;) {
-    const now = Date.now(), r = resolvePlaylist(plan, now);
+    const now = Date.now(), r = resolvePlaylist(plan, now); document.body.classList.toggle('black', !!health.displayOff || r.off === true);
     const { items } = playableItems(plan, r.playlistId, manifest, { profile: health.profile ?? 'standard', now, have: (m) => (health.cached ?? []).includes(m.id) }); // noch nicht geladene Medien werden übersprungen
     if (r.playlistId !== lastPl) { idx = 0; lastPl = r.playlistId; }
     if (!items.length) { await show(standby(), 'fade'); await sleep(5000); continue; }
@@ -58,7 +59,33 @@ async function main() {
     }
   }
 }
+// ---- Zonen (Z.7): Laufband und Uhr/Datum; Lite hat keine Zonen (der Hub liefert dort kein Layout) ----
+const bar = el('div', 'bar'); bar.hidden = true; const tick = el('div', 'ticker'), clock = el('div', 'clock'), info = el('div', 'infozone'); bar.append(tick, clock); stage.append(bar, info);
+const today = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+function applyLayout() {
+  const L = plan?.layout?.preset ?? null; const on = !!L && !health.displayOff;
+  bar.hidden = !on; info.hidden = !(L === 'ticker-clock-info' && plan.layout.info); stage.classList.toggle('zones', on); stage.classList.toggle('side', !info.hidden);
+  if (!on) return;
+  clock.hidden = L === 'ticker'; const d = today();
+  const msgs = (plan.tickers ?? []).filter((t) => (!t.validFrom || d >= t.validFrom) && (!t.validTo || d <= t.validTo)).map((t) => t.text);
+  const text = msgs.length ? msgs.join('     •     ') : '';
+  if (tick.dataset.t !== text) { tick.dataset.t = text; tick.replaceChildren(); if (text) { const sp = el('span', '', text + '     •     '); tick.append(sp); sp.style.setProperty('animation-duration', Math.max(12, text.length * 0.22) + 's'); } }
+  info.replaceChildren(el('div', '', plan.layout.info ?? ''));
+}
+function tickClock() { const n = new Date(); clock.replaceChildren(el('b', '', n.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' })), el('small', '', n.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long', day: 'numeric', month: 'long' }))); }
+setInterval(tickClock, 10000); tickClock();
+
+// ---- Erkennen und Testbild (Z.8): nur vorübergehend, nie für Besucher gedacht ----
+let ovTimer = null;
+function overlayShow(node, ms) { overlay.replaceChildren(node); overlay.hidden = false; clearTimeout(ovTimer); if (ms) ovTimer = setTimeout(() => { overlay.hidden = true; overlay.replaceChildren(); }, ms); }
+function identify(d) { overlayShow(el('div', 'ident', el('h1', '', d.name ?? ''), el('p', '', d.location ?? ''), el('div', 'num', d.number ?? '')), (d.seconds ?? 10) * 1000); }
+function testPattern(d) {
+  if (!d.on) { overlay.hidden = true; overlay.replaceChildren(); return; }
+  const bars = el('div', 'bars'); for (const c of ['#fff', '#ff0', '#0ff', '#0f0', '#f0f', '#f00', '#00f', '#000']) { const b = el('i'); b.style.setProperty('background', c); bars.append(b); }
+  overlayShow(el('div', 'pattern', bars, el('div', 'grid'), el('div', 'arrow', '▲ OBEN'), el('div', 'res', `${innerWidth} × ${innerHeight} px · ${(innerWidth / innerHeight).toFixed(2)}:1 · Ränder und Ausrichtung prüfen`)), (d.seconds ?? 120) * 1000);
+}
 const ev = new EventSource('/events');
+ev.addEventListener('identify', (e) => identify(JSON.parse(e.data))); ev.addEventListener('testpattern', (e) => testPattern(JSON.parse(e.data)));
 ev.addEventListener('black', () => document.body.classList.add('black')); ev.addEventListener('unblack', () => document.body.classList.remove('black'));
 ev.addEventListener('plan', refresh); ev.addEventListener('manifest', refresh); ev.addEventListener('reload', () => location.reload());
 setInterval(() => refresh().catch(() => {}), 30000);
