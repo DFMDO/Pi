@@ -58,3 +58,26 @@ test('Netzausfall: nach 10 min Einrichtungsmodus, Technikhinweis nie über Inhal
   assert.equal(serialOf(CPU), '10000000a1b2c3d4');
   const f = join(mkdtempSync(join(tmpdir(), 's-')), 'x'); writeFileSync(f, 'passwort'); shred(f); assert.equal(existsSync(f), false);
 });
+
+import { restoreHubFromBackup } from '../lib/restore.js';
+import { setupBackupKey, encryptBackup, createArchive } from '../../hub/lib/backup.js';
+import { openDb } from '../../hub/lib/db.js';
+import { ensureCertificate } from '../../hub/lib/tls.js';
+import { loadOrCreateKey } from '../../hub/lib/crypto.js';
+
+test('Hub aus Backup per Konfigurationsdatei wiederherstellen: gleicher Fingerabdruck, falsche Passphrase abgelehnt', async () => {
+  // „alter Hub“
+  const old = mkdtempSync(join(tmpdir(), 'old-hub-')); const db = openDb(join(old, 'hub.db')); const cert = ensureCertificate(join(old, 'tls'), ['DNS:dfm-signage.local']); loadOrCreateKey(join(old, 'keys', 'master.key'));
+  db.prepare("INSERT INTO playlists(id,name) VALUES('p','Gerettet')").run();
+  const key = setupBackupKey('Meine-Backup-Passphrase'); const file = encryptBackup(createArchive(old, db), key);
+  // neue SD-Karte
+  const { dataDir, bootDir } = mk(); writeFileSync(join(bootDir, 'dfm-backup.dfmbak'), file);
+  writeFileSync(join(bootDir, 'dfm-setup.txt'), 'rolle = hub\nbackup_datei = dfm-backup.dfmbak\nbackup_passphrase = Meine-Backup-Passphrase\n'); let applied;
+  const r = await runFirstboot({ dataDir, bootDir, cpuinfo: CPU, drmDir: '/x', applyConfig: async (d) => { applied = d; restoreHubFromBackup({ bootDir, file: d.backup.file, passphrase: d.backup.passphrase, hubDataDir: join(dataDir, 'hub') }); } });
+  assert.equal(r.mode, 'configured'); assert.ok(applied.backup);
+  const restored = ensureCertificate(join(dataDir, 'hub', 'tls'), ['DNS:dfm-signage.local']); assert.equal(restored.spki, cert.spki, 'gleicher Hub-Schlüssel → kein Neu-Pairing');
+  assert.ok(openDb(join(dataDir, 'hub', 'hub.db')).prepare("SELECT 1 FROM playlists WHERE name='Gerettet'").get());
+  assert.equal(existsSync(join(bootDir, 'dfm-setup.txt')), false, 'Passphrase-Datei gelöscht');
+  assert.throws(() => restoreHubFromBackup({ bootDir, file: 'dfm-backup.dfmbak', passphrase: 'falsch-falsch-falsch', hubDataDir: join(dataDir, 'x') }), /Passphrase stimmt nicht/);
+  assert.throws(() => restoreHubFromBackup({ bootDir, file: 'nicht-da.dfmbak', passphrase: 'x', hubDataDir: join(dataDir, 'y') }), /liegt nicht auf der SD-Karte/);
+});

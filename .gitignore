@@ -7,3 +7,4 @@ dist/
 *.key
 !/hub/test/*.key
 .env
+/build/keys/

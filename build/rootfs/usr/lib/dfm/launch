@@ -1,8 +1,12 @@
 #!/bin/sh
-# Startet den Dienst aus dem zuletzt eingespielten Update (/data/app/current) oder aus dem Image (/opt/dfm).
+# Startet den Dienst aus dem zuletzt eingespielten Update (…/app/current) oder aus dem Image (/opt/dfm).
+# Hub und Player-Agent haben je ein eigenes Update-Verzeichnis (jeweils die ganze Anwendung).
 set -eu
 ROOT=/opt/dfm
-[ -e /data/app/current/hub/server.js ] && ROOT=/data/app/current
+case "$1" in
+  hub)   [ -e /data/hub/app/current/hub/server.js ] && ROOT=/data/hub/app/current ;;
+  agent) [ -e /data/agent/app/current/player/agent/agent.js ] && ROOT=/data/agent/app/current ;;
+esac
 case "$1" in
   hub) exec /opt/node/bin/node "$ROOT/hub/server.js" ;;
   agent) exec /opt/node/bin/node "$ROOT/player/agent/agent.js" ;;

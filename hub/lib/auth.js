@@ -33,7 +33,7 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
   app.addHook('onRoute', (r) => {
     if (!r.url.startsWith('/api/v1/')) return;
     const c = r.config ?? {};
-    apiRoutes.push({ method: [].concat(r.method), url: r.url, config: c });
+    apiRoutes.push({ method: [].concat(r.method), url: r.url, config: c, schema: r.schema });
     if (!c.perm && !c.public && !c.device && !c.authenticated) throw new Error(`Route ohne Rechte: ${r.method} ${r.url}`);
   });
 

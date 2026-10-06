@@ -35,3 +35,10 @@ export function detectHardware(model = (read('/proc/device-tree/model') ?? '').r
   else if (/Pi 3|Compute Module 3/.test(model)) profile = 'standard';
   return { model, ramMB: memMB, arch, profile };
 }
+
+/** mpv-Statuszeile „D:<verworfen>/<Decoder verworfen> F:<Bilder>“ auswerten → Prozent ausgelassener Bilder */
+export function parseDrops(out) {
+  const m = [...String(out).matchAll(/D:(\d+)\/(\d+) F:(\d+)/g)].pop(); if (!m) return null;
+  const frames = Number(m[3]) || 0; return { dropped: Number(m[1]) + Number(m[2]), frames, percent: frames ? Math.round(((Number(m[1]) + Number(m[2])) / frames) * 1000) / 10 : null };
+}
+export const powerSave = async () => (/Power save: (\w+)/.exec(await run('iw', ['dev', 'wlan0', 'get', 'power_save'])) ?? [])[1] ?? null;

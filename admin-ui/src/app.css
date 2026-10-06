@@ -52,3 +52,6 @@ dialog{max-width:min(640px,94vw);width:100%;border:2px solid var(--dfm-primary);
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 .loading{padding:24px}
+
+input[type=checkbox],input[type=radio]{width:26px;height:26px;min-height:0;flex:none}
+label:has(>input[type=checkbox]){display:flex;align-items:center;gap:12px;min-height:44px;font-weight:600}

@@ -47,13 +47,14 @@ function cmdMenu(d, route) {
     if (v === 'reboot' && await confirmDlg('Bildschirm neu starten?', 'Der Bildschirm ist für etwa eine Minute schwarz.', 'Neu starten')) run('reboot', {}, 'Der Bildschirm startet neu.');
     if (v.startsWith('rot')) run('rotate', { degrees: Number(v.slice(3)) }, 'Die Ausrichtung wird geändert.');
     if (v === 'wifi') wifiDlg(d, run);
+    if (v === 'diag') diagDlg(d);
     if (v === 'update' && await confirmDlg('Update einspielen?', 'Der Bildschirm lädt das Update vom Hub und startet neu.', 'Update einspielen', false)) run('update', {}, 'Das Update wird eingespielt.');
     if (v === 'block' && await confirmDlg('Bildschirm sperren?', 'Der Bildschirm verliert sofort die Verbindung zum Hub und zeigt nur noch gespeicherte Inhalte. Du kannst ihn später neu verbinden.', 'Sperren')) { await post(`/devices/${d.id}/block`); route(); }
     if (v === 'remove' && await confirmDlg('Bildschirm entfernen?', `„${d.name}“ wird aus dem Hub entfernt. Seine Termine bleiben nicht erhalten.`, 'Entfernen')) { await del(`/devices/${d.id}`); route(); }
     if (v === 'reset' && await confirmDlg('Auf Werkseinstellungen zurücksetzen?', 'Alle Daten und die WLAN-Verbindung dieses Bildschirms werden gelöscht. Danach muss er neu eingerichtet werden.', 'Zurücksetzen')) run('factory_reset', {}, 'Der Bildschirm wird zurückgesetzt.');
   } }, h('option', { value: '' }, 'Weitere Aktionen …'), h('option', { value: 'reload' }, 'Neu laden'), h('option', { value: 'screenshot' }, 'Vorschau aktualisieren'), h('option', { value: 'reconnect' }, 'Mit dem Hub neu verbinden'),
     h('option', { value: 'rot0' }, 'Ausrichtung: normal'), h('option', { value: 'rot90' }, 'Ausrichtung: 90° gedreht'), h('option', { value: 'rot180' }, 'Ausrichtung: 180°'), h('option', { value: 'rot270' }, 'Ausrichtung: 270°'),
-    h('option', { value: 'wifi' }, 'WLAN ändern …'), h('option', { value: 'update' }, 'Update einspielen'), h('option', { value: 'reboot' }, 'Neu starten'), h('option', { value: 'block' }, 'Sperren'), h('option', { value: 'remove' }, 'Entfernen'), h('option', { value: 'reset' }, 'Auf Werkseinstellungen zurücksetzen'));
+    h('option', { value: 'wifi' }, 'WLAN ändern …'), h('option', { value: 'diag' }, 'Diagnose …'), h('option', { value: 'update' }, 'Update einspielen'), h('option', { value: 'reboot' }, 'Neu starten'), h('option', { value: 'block' }, 'Sperren'), h('option', { value: 'remove' }, 'Entfernen'), h('option', { value: 'reset' }, 'Auf Werkseinstellungen zurücksetzen'));
   return sel;
 }
 function wifiDlg(d, run) {
@@ -77,4 +78,17 @@ async function hubInfo() {
   dialog('Hub-Adresse und Fingerabdruck', h('div', {}, h('p', {}, 'Adresse im Browser: ', h('b', {}, `https://${i.host}`)), h('p', {}, 'Fingerabdruck:'), h('p', { class: 'fp' }, i.fingerprint),
     h('h3', {}, 'Für die IT'), h('p', { class: 'hint' }, i.tip), h('ul', {}, i.addresses.map((a) => h('li', {}, `${a.ip} · MAC-Adresse ${a.mac}`))),
     h('a', { class: 'btn sec', href: '/api/v1/system/certificate' }, 'Zertifikat für die IT herunterladen')), [{ text: 'Schließen' }]);
+}
+
+/** Diagnose eines Bildschirms: Zustand, WLAN-Qualität, Durchsatz, Testvideo im eigenen Profil */
+function diagDlg(d) {
+  const out = h('div', {}, h('p', {}, 'Der Bildschirm misst jetzt Speicher, Temperatur, WLAN und Geschwindigkeit. Das dauert etwa eine halbe Minute.'));
+  const tv = h('input', { type: 'checkbox' }); const start = h('button', { class: 'btn', type: 'button', onclick: async () => {
+    start.disabled = true; out.replaceChildren(h('p', {}, '⏳ Wird gemessen …'));
+    try { const { id } = await post(`/devices/${d.id}/commands`, { command: 'diagnose', args: { testvideo: tv.checked } });
+      for (let i = 0; i < 60; i++) { await new Promise((r) => setTimeout(r, 2000)); const c = (await get(`/devices/${d.id}/commands`)).find((x) => x.id === id); if (c && c.status !== 'queued' && c.status !== 'sent') {
+        if (c.status === 'failed') throw new Error('Die Messung ist fehlgeschlagen.'); const r = JSON.parse(c.result_json); const rows = [['Prozessor-Temperatur', r.cpuTemp != null ? `${r.cpuTemp} °C` : '–'], ['Arbeitsspeicher', `${r.ramUsedMB ?? '–'} von ${r.ramTotalMB ?? '–'} MB`], ['WLAN-Signal', r.signalDbm != null ? `${r.signalDbm} dBm (${r.signalDbm > -60 ? 'sehr gut' : r.signalDbm > -70 ? 'gut' : 'schwach'})` : '–'], ['WLAN-Energiesparen', r.powerSave === 'off' ? '✔ aus (richtig)' : `⚠ ${r.powerSave ?? 'unbekannt'}`], ['Geschwindigkeit vom Hub', r.throughputMBs != null ? `${r.throughputMBs} MB/s` : '–'], ['Zeit synchron', r.timeSynced ? '✔ ja' : '⚠ nein'], ...(r.testvideo ? [['Testvideo', r.testvideo.error ?? `${r.testvideo.percent ?? '–'} % Bilder ausgelassen (${r.testvideo.dropped}/${r.testvideo.frames})`]] : [])];
+        return out.replaceChildren(h('table', {}, h('tbody', {}, rows.map(([a, b]) => h('tr', {}, h('td', {}, a), h('td', {}, b)))))); } }
+      throw new Error('Der Bildschirm hat nicht geantwortet.'); } catch (e) { out.replaceChildren(h('p', { class: 'bad' }, e.message)); start.disabled = false; } } }, 'Messung starten');
+  dialog(`Diagnose: ${d.name}`, h('div', {}, out, h('label', {}, tv, ' Testvideo für dieses Gerät abspielen (zeigt, ob Videos flüssig laufen)')), [{ text: 'Schließen', cls: 'sec' }, { text: 'Messung starten', fn: () => { start.click(); return false; } }]);
 }

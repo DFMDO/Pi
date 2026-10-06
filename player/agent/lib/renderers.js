@@ -8,7 +8,9 @@ function supervise(start, log) {
   let child = null, stopped = false, delay = 1000;
   const run = () => {
     if (stopped) return; const t0 = Date.now(); child = start();
-    child.on('exit', (c) => { log('Renderer beendet', c); delay = Date.now() - t0 > 30000 ? 1000 : Math.min(delay * 2, 30000); if (!stopped) setTimeout(run, delay); });
+    let ended = false;
+    const again = (c) => { if (ended) return; ended = true; log('Renderer beendet', c); delay = Date.now() - t0 > 30000 ? 1000 : Math.min(delay * 2, 30000); if (!stopped) setTimeout(run, delay); };
+    child.on('exit', again); child.on('error', again); // z. B. Programm fehlt → später erneut versuchen, nie abstürzen
   };
   run();
   return { stop: () => { stopped = true; child?.kill('SIGTERM'); }, restart: () => child?.kill('SIGTERM') };

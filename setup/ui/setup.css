@@ -23,3 +23,7 @@ body.display { background: var(--dfm-secondary); color: #fff; font-size: 2.2vw; 
 .pin { font-size: 8vw; font-weight: 800; letter-spacing: .2em; font-family: ui-monospace, monospace; } .display ol { font-size: 2.4vw; line-height: 1.6; padding-left: 1.2em; }
 
 .display .logo { height: 10vh; }
+
+.display .qr { width: min(42vw, 62vh); }
+input[type=checkbox], input[type=radio] { width: 26px; height: 26px; min-height: 0; flex: none; }
+label:has(> input[type=checkbox]) { display: flex; align-items: center; gap: 12px; min-height: 48px; font-weight: 600; }

@@ -135,3 +135,13 @@ export function mediaHints(kind, w, h) {
   if (h > w) hints.push('Das ist ein Hochformat-Medium. Es passt am besten zu Bildschirmen, die gedreht aufgehängt sind.');
   return hints;
 }
+
+/** Testvideo für die Diagnose (je Profil, einmal erzeugt): zeigt, ob ein Bildschirm sein Profil flüssig abspielt. */
+export async function ensureTestVideo(mediaDir, profile) {
+  const spec = PROFILE_SPEC[profile]; if (!spec) throw new Error('Unbekanntes Profil');
+  mkdirSync(mediaDir, { recursive: true }); const out = join(mediaDir, `testvideo-${profile}.mp4`);
+  if (existsSync(out)) return out;
+  const w = Math.round(spec.h * 16 / 9 / 2) * 2, fps = spec.fpsMax;
+  await runLow('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `testsrc2=size=${w}x${spec.h}:rate=${fps}:duration=20`, '-c:v', 'libx264', ...spec.x264, '-pix_fmt', 'yuv420p', '-b:v', spec.vb, '-maxrate', spec.maxrate, '-bufsize', spec.buf, '-movflags', '+faststart', out + '.tmp.mp4']);
+  (await import('node:fs')).renameSync(out + '.tmp.mp4', out); return out;
+}

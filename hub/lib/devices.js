@@ -8,6 +8,7 @@ import { schedulePayload, manifestPayload, PROFILES } from './plan.js';
 import { validateMessage, msg, COMMANDS } from '../../shared/protocol.js';
 import { createLimiter } from './ratelimit.js';
 import QRCode from 'qrcode';
+import { ensureTestVideo } from './variants.js';
 
 const CODE_TTL = 10 * 60000, MAX_ATTEMPTS = 5, PENDING_TTL = 3600000;
 
@@ -179,6 +180,9 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     if (!v) return reply.code(404).send({ error: 'Medium nicht gefunden.' });
     return sendFile(req, reply, join(mediaDir, 'variants', v.path));
   });
+  // Diagnose: Durchsatz messen (8 MB) und Testvideo im Profil des Geräts
+  app.get('/api/v1/device/speedtest', dev, async (_req, reply) => reply.header('Content-Type', 'application/octet-stream').header('Cache-Control', 'no-store').send(Buffer.alloc(8 * 1024 * 1024, 0x55)));
+  app.get('/api/v1/device/testvideo', dev, async (req, reply) => { try { return sendFile(req, reply, await ensureTestVideo(mediaDir, req.device.profile)); } catch { return reply.code(500).send({ error: 'Das Testvideo konnte nicht erstellt werden.' }); } });
   app.get('/api/v1/device/update/current', dev, async (req, reply) => {
     const f = join(dataDir, 'updates', 'current.dfmpkg');
     return existsSync(f) ? sendFile(req, reply, f) : reply.code(404).send({ error: 'Kein Update vorhanden.' });

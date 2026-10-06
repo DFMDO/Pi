@@ -11,7 +11,8 @@ const nice = (d) => { const [y, m, dd] = d.split('-'); return `${DN[(dowOf(d) + 
 
 export async function calendarPage({ route }) {
   const [devices, groups, lists, media, scheds] = await Promise.all([get('/devices'), get('/groups'), get('/playlists'), get('/media'), get('/schedules')]);
-  const targets = [...groups.map((g) => ({ key: 'group:' + g.id, name: 'Gruppe: ' + g.name, color: g.color })), ...devices.filter((d) => d.status.level !== 'pending').map((d, i) => ({ key: 'device:' + d.id, name: d.name, color: PALETTE[(i + 1) % PALETTE.length] }))];
+  const free = PALETTE.filter((c) => !groups.some((g) => g.color.toLowerCase() === c)); // Bildschirm-Farben: nie dieselbe wie eine Gruppe
+  const targets = [...groups.map((g) => ({ key: 'group:' + g.id, name: 'Gruppe: ' + g.name, color: g.color })), ...devices.filter((d) => d.status.level !== 'pending').map((d, i) => ({ key: 'device:' + d.id, name: d.name, color: free[i % free.length] }))];
   const colorOf = (t, id) => targets.find((x) => x.key === `${t}:${id}`)?.color ?? '#666', nameOf = (t, id) => targets.find((x) => x.key === `${t}:${id}`)?.name ?? 'Bildschirm';
   let view = 'week', anchor = today();
   const root = h('div', {}, h('h1', {}, 'Kalender'), h('p', { class: 'lead' }, 'Klicke in den Kalender oder ziehe über einen Zeitraum, um etwas zu planen. Oder schreibe den Termin in einem Satz.'));

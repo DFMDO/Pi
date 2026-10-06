@@ -9,7 +9,8 @@ import { pinnedAgent, request, PinError } from './lib/pinned.js';
 import { writeJson, readJson } from './lib/store.js';
 import { syncMedia } from './lib/sync.js';
 import { hubCandidates } from './lib/discovery.js';
-import { collect, timeSynced } from './lib/sysinfo.js';
+import { collect, timeSynced, parseDrops, powerSave } from './lib/sysinfo.js';
+import { execFile } from 'node:child_process';
 import { createLocalServer } from './lib/localserver.js';
 import { request as privRequest } from './lib/privd.js';
 import { resolvePlaylist } from '../../shared/sequencer.js';
@@ -164,8 +165,22 @@ export class Agent {
       if (command === 'wifi_change') { done(true); privRequest(this.privdDir, 'wifi-connect', { ssid: args.ssid, password: args.password }); return; }
       if (command === 'factory_reset') { done(true); privRequest(this.privdDir, 'factory-reset'); return; }
       if (command === 'update') return done(...(await this.runUpdate()));
+      if (command === 'diagnose') return done(true, await this.runDiagnose(args));
       done(false, null, 'Unbekannter Befehl');
     } catch (e) { done(false, null, e.message); }
+  }
+
+  /** Diagnose: Zustand, WLAN, Durchsatz und (optional) Testvideo im eigenen Profil. */
+  async runDiagnose(args = {}) {
+    const get = (p, extra = {}) => request({ url: this.activeBase() + p, pin: this.cfg.hubSpki, token: this.cfg.token, timeout: 60000, ...extra });
+    const res = { ...(await collect({ version: this.version })), powerSave: await powerSave(), profile: this.cfg.profile };
+    const t0 = Date.now(); const sp = await get('/api/v1/device/speedtest'); res.throughputMBs = sp.status === 200 ? Math.round((sp.body.length / 1048576) / ((Date.now() - t0) / 1000) * 10) / 10 : null;
+    if (args.testvideo) {
+      const f = join(this.dataDir, 'testvideo.mp4'); const tv = await get('/api/v1/device/testvideo'); if (tv.status !== 200) { res.testvideo = { error: 'Testvideo nicht verfügbar' }; return res; }
+      writeFileSync(f, tv.body);
+      res.testvideo = await new Promise((r) => execFile('mpv', ['--vo=null', '--ao=null', '--no-audio', '--hwdec=auto-safe', '--length=15', '--msg-level=all=no', '--term-status-msg=D:${frame-drop-count}/${decoder-frame-drop-count} F:${estimated-frame-count}', f], { timeout: 40000 }, (e, so) => r(e && !so ? { error: 'mpv nicht verfügbar' } : parseDrops(so) ?? { error: 'keine Messwerte' })));
+    }
+    return res;
   }
 
   async runUpdate() {
@@ -186,8 +201,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const dataDir = process.env.DFM_AGENT_DATA ?? '/data/agent';
   const cfg = readJson(join(dataDir, 'agent.json'));
   const { chromiumRenderer, liteRenderer } = await import('./lib/renderers.js');
-  const a = new Agent({ dataDir, log: (...x) => console.error(...x), port: 8080 });
-  a.renderer = cfg?.profile === 'lite' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getRotation: () => a.cfg?.orientation ?? 0, haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
+  const a = new Agent({ dataDir, log: (...x) => console.error(...x), port: Number(process.env.DFM_PORT ?? 8080) });
+  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getRotation: () => a.cfg?.orientation ?? 0, haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
     : chromiumRenderer({ url: 'http://127.0.0.1:8080/player/', profileDir: join(dataDir, 'chromium-profile') });
   await a.start();
   for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => a.stop().then(() => process.exit(0)));

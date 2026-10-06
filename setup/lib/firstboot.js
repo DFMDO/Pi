@@ -44,6 +44,11 @@ einrichtungscode = XXXX-XXXX
 # Optional, aber empfohlen: Fingerabdruck des Hubs (steht auf der Startkarte)
 # hub_fingerabdruck = A3F2 91C0 7B44 D8E1 5C6A 0F73 B2E9 1D88 4A21 CC09 E7F5 3B60 92D1 08AE 6C47 F13B
 
+# --- Hub aus einem Backup wiederherstellen (neuer Pi, gleicher Hub – Bildschirme müssen NICHT neu verbunden werden) ---
+# Backup-Datei (.dfmbak) auf die SD-Karte kopieren und hier eintragen:
+# backup_datei = dfm-backup.dfmbak
+# backup_passphrase = die-Backup-Passphrase
+
 # --- Für den Hub (rolle = hub) ---
 # admin_name = Chefin
 # admin_passwort = mindestens-12-Zeichen-lang
@@ -73,7 +78,7 @@ export async function runFirstboot({ dataDir, bootDir, exec = async () => {}, rn
     const f = join(bootDir, name); if (!existsSync(f)) continue;
     const { config, errors } = parseSetupFile(readFileSync(f, 'utf8'), json);
     const draft = config && { ...config, wifi: config.wifi, admin: config.admin, site: config.site ?? 'Deutsches Fußballmuseum', name: config.name ?? dev.hostname };
-    const verr = draft ? validateDraft(draft, { adminPolicy: () => null }).filter((e) => !(config.wifi === null && /WLAN/.test(e))) : [];
+    const verr = draft ? validateDraft(draft, { adminPolicy: () => null }).filter((e) => !(config.wifi === null && /WLAN/.test(e)) && !(draft.backup && /Admin-Konto|Museum/.test(e))) : [];
     const all = [...errors, ...verr];
     if (all.length) { writeFileSync(join(bootDir, 'dfm-setup-FEHLER.txt'), `Die Einrichtungsdatei konnte nicht verwendet werden:\n- ${all.join('\n- ')}\n`); shred(f); return { mode: 'setup', device: dev, errors: all }; }
     await applyConfig(draft, dev); shred(f); // enthält Passwörter → nach dem Einlesen sicher löschen

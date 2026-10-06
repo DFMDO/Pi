@@ -23,12 +23,12 @@
     if (card && d.wifi && !msg) return testWifi();
     let showPw = false, hidden = false, ent = false, pwIn, ssidIn;
     const list = (info.networks ?? []).map((n) => h('button', { class: 'opt', type: 'button', 'aria-pressed': d.wifi?.ssid === n.ssid, onclick: () => { d.wifi = { ...(d.wifi ?? {}), ssid: n.ssid, enterprise: n.enterprise }; wifiView(); } },
-      h('span', {}, n.ssid, n.secure ? ' 🔒' : ''), h('span', { 'aria-label': `Signal ${n.signal} Prozent` }, '▂▄▆█'.slice(0, Math.max(1, Math.ceil(n.signal / 25))), ` ${n.signal} %`)));
+      h('span', {}, n.ssid, n.secure ? ' 🔒' : ''), h('span', { 'aria-label': `Signal ${n.signal} Prozent` }, n.signal >= 70 ? 'sehr gut ' : n.signal >= 45 ? 'gut ' : 'schwach ', '▂▄▆█'.slice(0, Math.max(1, Math.ceil(n.signal / 25))))));
     view(1, 'WLAN wählen', h('p', {}, 'Mit diesem WLAN soll sich das Gerät verbinden.'), info.band24only ? h('p', { class: 'hint' }, 'Dieses Gerät kann nur 2,4-GHz-WLAN. 5-GHz-Netze funktionieren hier nicht.') : null,
       list.length ? list : h('p', { class: 'hint' }, 'Keine Netzwerke gefunden. Du kannst den Namen unten eintippen.'),
       ...field('Oder Netzwerkname eintippen (auch versteckte Netze)', 'ssid', { value: d.wifi?.ssid ?? '', max: 32, set: (v) => { d.wifi = { ...(d.wifi ?? {}), ssid: v }; } }),
-      h('label', {}, h('input', { type: 'checkbox', style: 'width:auto;min-height:0;margin-right:8px', onchange: (e) => { hidden = e.target.checked; } }), 'Das Netzwerk ist versteckt'),
-      h('label', {}, h('input', { type: 'checkbox', style: 'width:auto;min-height:0;margin-right:8px', onchange: (e) => { ent = e.target.checked; wifiView(); } }), 'Firmen-WLAN (Benutzername und Passwort)'),
+      h('label', {}, h('input', { type: 'checkbox', onchange: (e) => { hidden = e.target.checked; } }), 'Das Netzwerk ist versteckt'),
+      h('label', {}, h('input', { type: 'checkbox', onchange: (e) => { ent = e.target.checked; wifiView(); } }), 'Firmen-WLAN (Benutzername und Passwort)'),
       ent ? [...field('Benutzername', 'eu', { set: (v) => { d.eu = v; } }), h('label', { for: 'ep' }, 'Passwort'), h('input', { id: 'ep', type: 'password', autocomplete: 'off', oninput: (e) => { d.ep = e.target.value; } })]
         : [h('label', { for: 'pw' }, 'WLAN-Passwort'), h('div', { class: 'row' }, pwIn = h('input', { id: 'pw', type: 'password', autocomplete: 'off', value: d.wifi?.password ?? '', maxlength: 64, oninput: (e) => { d.wifi = { ...(d.wifi ?? {}), password: e.target.value }; } }),
           h('button', { class: 'eye', type: 'button', 'aria-label': 'Passwort anzeigen oder verbergen', onclick: () => { showPw = !showPw; pwIn.type = showPw ? 'text' : 'password'; } }, '👁'))],

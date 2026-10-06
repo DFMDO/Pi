@@ -32,7 +32,7 @@ export function parseCard(text) {
 
 /** dfm-setup.txt:  schluessel = wert   (# Kommentare). Auch dfm-setup.json. Gibt {config, errors} zurück. */
 const KEYS = { wlan_name: 'ssid', wlan_passwort: 'password', rolle: 'role', geraetename: 'name', hub_adresse: 'hubAddress', einrichtungscode: 'pairCode', hub_fingerabdruck: 'fingerprint',
-  admin_name: 'adminName', admin_passwort: 'adminPassword', standort: 'site', wlan_versteckt: 'hidden' };
+  admin_name: 'adminName', admin_passwort: 'adminPassword', standort: 'site', wlan_versteckt: 'hidden', backup_datei: 'backupFile', backup_passphrase: 'backupPassphrase' };
 export function parseSetupFile(text, isJson = false) {
   let raw = {}; const errors = [];
   if (isJson) { try { raw = JSON.parse(text); } catch { return { config: null, errors: ['Die Datei dfm-setup.json ist kein gültiges JSON.'] }; } }
@@ -50,6 +50,8 @@ export function parseSetupFile(text, isJson = false) {
   if (g.pairCode && !codeOk(g.pairCode)) errors.push('einrichtungscode ist ungültig.');
   if (g.fingerprint && !fpOk(g.fingerprint)) errors.push('hub_fingerabdruck ist ungültig.');
   if (g.name && !nameOk(g.name)) errors.push('geraetename ist ungültig.');
+  if (g.backupFile && !/^[\w.\- ]{1,80}\.dfmbak$/.test(g.backupFile)) errors.push('backup_datei muss ein Dateiname auf der SD-Karte sein, z. B. dfm-backup.dfmbak.');
+  if (g.backupFile && !g.backupPassphrase) errors.push('Zu backup_datei gehört auch backup_passphrase.');
   return { config: errors.length ? null : { wifi: g.ssid ? { ssid: g.ssid, password: g.password ?? '', hidden: g.hidden === 'true' } : null, role: g.role, name: g.name, hubAddress: g.hubAddress ? normalizeHubAddress(g.hubAddress) : undefined,
-    pairCode: g.pairCode, fingerprint: g.fingerprint, admin: g.adminName ? { name: g.adminName, password: g.adminPassword } : undefined, site: g.site }, errors };
+    pairCode: g.pairCode, fingerprint: g.fingerprint, admin: g.adminName ? { name: g.adminName, password: g.adminPassword } : undefined, site: g.site, backup: g.backupFile ? { file: g.backupFile, passphrase: g.backupPassphrase } : undefined }, errors };
 }

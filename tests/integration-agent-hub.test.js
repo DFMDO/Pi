@@ -120,3 +120,16 @@ test('Erstverbindung nach der Einrichtung: Agent koppelt sich selbst mit Code + 
   const saved = JSON.parse(readFileSync(join(dataDir, 'agent.json'), 'utf8')); assert.ok(saved.token); assert.equal(saved.pairing, undefined, 'Einmalcode entfernt'); assert.equal(saved.hubSpki, h.tls.spki);
   await agent.stop(); await h.cleanup(); delete process.env.DFM_DEVICE_FILE;
 });
+
+test('Diagnose-Befehl: Agent misst Durchsatz und meldet Zustand an den Hub', { timeout: 60000 }, async () => {
+  const h = await makeHub({ useTls: true }); await h.app.listen({ port: 0, host: '127.0.0.1' }); const hubUrl = `https://127.0.0.1:${h.app.server.address().port}`;
+  const admin = await h.as('admin'); const { code, fingerprintRaw } = (await admin('POST', '/api/v1/pairing')).json(); const deviceId = randomUUID();
+  const paired = pairWithHub({ hubUrl, code, expectedFp: fingerprintRaw, deviceId, name: 'D', model: 'Pi', profile: 'standard', hw: {}, pollMs: 30, timeoutMs: 10000 });
+  await until(async () => (await admin('GET', '/api/v1/devices')).json().length); await admin('POST', `/api/v1/devices/${deviceId}/approve`, {}); const { token, spki } = await paired;
+  const dataDir = mkdtempSync(join(tmpdir(), 'agent-')); writeFileSync(join(dataDir, 'agent.json'), JSON.stringify({ deviceId, hubUrl, hubSpki: spki, token, profile: 'standard' }));
+  const agent = new Agent({ dataDir, port: 0, heartbeatMs: 200 }); await agent.start(); await until(() => agent.connected);
+  const c = (await admin('POST', `/api/v1/devices/${deviceId}/commands`, { command: 'diagnose', args: {} })).json();
+  const row = await until(async () => { const r = (await admin('GET', `/api/v1/devices/${deviceId}/commands`)).json().find((x) => x.id === c.id); return r?.status === 'done' ? r : null; });
+  const res = JSON.parse(row.result_json); assert.ok(res.throughputMBs > 0, 'Durchsatz gemessen'); assert.equal(res.profile, 'standard'); assert.ok('ramTotalMB' in res);
+  await agent.stop(); await h.cleanup();
+});

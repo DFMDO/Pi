@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 ROOT=$PWD; WORK=$ROOT/build/work; OUT=$ROOT/build/out
 VERSION=$(node -p "require('./package.json').version")
 PIGEN_REPO=${PIGEN_REPO:-https://github.com/RPi-Distro/pi-gen}
-PIGEN_REF=${PIGEN_REF:-arm64}                    # für reproduzierbare Builds: festen Commit-Hash eintragen
+PIGEN_REF=${PIGEN_REF:-bookworm-arm64}                    # für reproduzierbare Builds: festen Commit-Hash eintragen
 NODE_VERSION=${DFM_NODE_VERSION:-22.22.0}        # aktuelle LTS; Prüfsumme unten MUSS zur Version passen
 NODE_SHA256=${DFM_NODE_SHA256:-}                 # sha256 von node-v$NODE_VERSION-linux-arm64.tar.xz (aus SHASUMS256.txt)
 UPDATE_PUBKEY=${DFM_UPDATE_PUBKEY:-$ROOT/build/keys/update-key.pub}
@@ -49,8 +49,8 @@ echo "== 4/7 pi-gen holen ($PIGEN_REF) =="
 git clone --quiet "$PIGEN_REPO" "$WORK/pi-gen"; git -C "$WORK/pi-gen" checkout --quiet "$PIGEN_REF"
 echo "pi-gen Commit: $(git -C "$WORK/pi-gen" rev-parse HEAD)" | tee "$OUT/build-info-$VERSION.txt"
 cp -a build/pi-gen/stage-dfm "$WORK/pi-gen/stage-dfm"
-touch "$WORK/pi-gen/stage3/SKIP" "$WORK/pi-gen/stage4/SKIP" "$WORK/pi-gen/stage5/SKIP" "$WORK/pi-gen/stage3/SKIP_IMAGES" "$WORK/pi-gen/stage4/SKIP_IMAGES" "$WORK/pi-gen/stage5/SKIP_IMAGES" 2>/dev/null || true
-touch "$WORK/pi-gen/stage2/SKIP_NOOBS" 2>/dev/null || true; touch "$WORK/pi-gen/stage-dfm/EXPORT_IMAGE"
+# Nur das fertige DFM-Image exportieren (nicht die Zwischenstufen von pi-gen)
+rm -f "$WORK/pi-gen/stage2/EXPORT_IMAGE" "$WORK/pi-gen/stage2/EXPORT_NOOBS"; touch "$WORK/pi-gen/stage-dfm/EXPORT_IMAGE"
 sed -e "s/@VERSION@/$VERSION/" -e "s/@RANDOM_PASS@/$(openssl rand -hex 24)/" build/pi-gen/config.template > "$WORK/pi-gen/config"
 cat >> "$WORK/pi-gen/config" <<CFG
 DFM_VERSION='$VERSION'

@@ -233,3 +233,15 @@ test('bootGuard: nach 3 Fehlstarts automatischer Rollback', () => {
   activate(d, '1.0.0'); activate(d, '1.1.0');
   assert.deepEqual([bootGuard(d), bootGuard(d), bootGuard(d), bootGuard(d)], ['ok', 'ok', 'ok', 'rolled-back']);
 });
+
+test('Diagnose: Testvideo je Profil wird erzeugt (720p/Baseline für Lite) und Speedtest liefert 8 MB', { timeout: 120000 }, async () => {
+  const h = await makeHub(); const dv = addDevice(h, 'lite'); const { sha256hex } = await import('../lib/crypto.js'); const token = 'd'.repeat(40);
+  h.db.prepare('UPDATE devices SET token_hash=? WHERE id=?').run(sha256hex(token), dv);
+  const get = (url) => h.app.inject({ url, headers: { authorization: `Bearer ${token}` } });
+  assert.equal((await get('/api/v1/device/speedtest')).rawPayload.length, 8 * 1024 * 1024);
+  const tv = await get('/api/v1/device/testvideo'); assert.equal(tv.statusCode, 200);
+  const f = join(h.dataDir, 'media', 'testvideo-lite.mp4'); assert.ok(existsSync(f));
+  const p = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=height,profile', '-of', 'json', f])).streams[0];
+  assert.equal(p.height, 720); assert.match(p.profile, /Baseline/);
+  await h.cleanup();
+});

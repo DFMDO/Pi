@@ -1,0 +1,17 @@
+// Schematische Bilder für die Anleitung „SD-Karte flashen“ (bewusst keine Screenshots fremder Programme).
+import { writeFileSync } from 'node:fs';
+const OUT = new URL('../docs/bilder/', import.meta.url).pathname;
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const frame = (n, title, body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" role="img" aria-label="${esc(title)}" font-family="system-ui,Segoe UI,Arial,sans-serif">
+<rect width="640" height="360" rx="14" fill="#f5f5f3" stroke="#d6d6d0"/><circle cx="36" cy="36" r="20" fill="#c8102e"/><text x="36" y="44" text-anchor="middle" font-size="22" font-weight="800" fill="#fff">${n}</text>
+<text x="70" y="44" font-size="22" font-weight="700" fill="#1a1a1a">${esc(title)}</text>${body}
+<text x="620" y="346" text-anchor="end" font-size="11" fill="#777">Schematische Darstellung – Aussehen des Programms kann abweichen</text></svg>`;
+const btn = (x, y, w, t, hot) => `<rect x="${x}" y="${y}" width="${w}" height="44" rx="8" fill="${hot ? '#c8102e' : '#fff'}" stroke="${hot ? '#c8102e' : '#999'}" stroke-width="2"/><text x="${x + w / 2}" y="${y + 28}" text-anchor="middle" font-size="17" font-weight="600" fill="${hot ? '#fff' : '#1a1a1a'}">${esc(t)}</text>`;
+const files = {
+  'flashen-1.svg': frame(1, 'Programm öffnen und Betriebssystem wählen', `${btn(60, 110, 240, 'Raspberry Pi Gerät: egal', false)}${btn(340, 110, 240, 'Betriebssystem WÄHLEN', true)}${btn(200, 200, 240, 'Speicher: SD-Karte', false)}<text x="320" y="300" text-anchor="middle" font-size="16" fill="#444">Raspberry Pi Imager (oder balenaEtcher) starten.</text>`),
+  'flashen-2.svg': frame(2, '„Eigenes Image verwenden“ wählen', `<rect x="120" y="90" width="400" height="190" rx="10" fill="#fff" stroke="#999"/><text x="150" y="130" font-size="16" fill="#777">Raspberry Pi OS (32-bit) …</text><text x="150" y="165" font-size="16" fill="#777">Andere Betriebssysteme …</text><rect x="130" y="190" width="380" height="42" rx="6" fill="#c8102e"/><text x="150" y="217" font-size="17" font-weight="700" fill="#fff">Eigenes Image verwenden (.img.xz)</text><text x="320" y="320" text-anchor="middle" font-size="15" fill="#444">Dann die Datei dfm-signage-arm64-….img.xz auswählen.</text>`),
+  'flashen-3.svg': frame(3, 'Wichtig: KEINE Einstellungen vorgeben', `<rect x="130" y="90" width="380" height="150" rx="10" fill="#fff" stroke="#999"/><text x="150" y="125" font-size="17" fill="#1a1a1a" font-weight="700">Möchten Sie die Einstellungen anpassen?</text><text x="150" y="150" font-size="14" fill="#555">Das Image braucht keine Vorgaben (kein WLAN, kein Benutzer).</text>${btn(150, 175, 160, 'NEIN', true)}${btn(330, 175, 160, 'Einstellungen', false)}<text x="320" y="300" text-anchor="middle" font-size="15" fill="#444">Alles wird später am Handy eingerichtet.</text>`),
+  'flashen-4.svg': frame(4, 'Schreiben, warten, Karte entnehmen', `<rect x="120" y="100" width="400" height="26" rx="13" fill="#e5e5e0"/><rect x="120" y="100" width="290" height="26" rx="13" fill="#c8102e"/><text x="320" y="165" text-anchor="middle" font-size="17" fill="#1a1a1a">Schreiben … 72 %  (dauert einige Minuten)</text>${btn(200, 200, 240, 'Fertig – Karte entfernen', true)}<text x="320" y="300" text-anchor="middle" font-size="15" fill="#444">SD-Karte (mind. 16 GB) in den Raspberry Pi stecken und Strom anschließen.</text>`),
+};
+for (const [f, svg] of Object.entries(files)) writeFileSync(OUT + f, svg);
+console.log('Flash-Bilder erzeugt');

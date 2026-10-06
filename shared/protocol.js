@@ -6,7 +6,7 @@ const num = (x) => typeof x === 'number' && Number.isFinite(x);
 const obj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const opt = (f) => (x) => x === undefined || f(x);
 
-export const COMMANDS = ['reload', 'reboot', 'screenshot', 'rotate', 'wifi_change', 'reconnect', 'update', 'factory_reset'];
+export const COMMANDS = ['reload', 'reboot', 'screenshot', 'rotate', 'wifi_change', 'reconnect', 'update', 'factory_reset', 'diagnose'];
 
 const SCHEMAS = {
   hello: { profile: opt(str(20)), version: str(40), model: opt(str(100)), hw: opt(obj) },
