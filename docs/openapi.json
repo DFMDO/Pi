@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DFM Signage Hub API",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Alle Routen liegen unter /api/v1. Anmeldung per Cookie (__Host-dfm_sid) mit CSRF-Header X-CSRF-Token bei schreibenden Aufrufen; Player nutzen ein Bearer-Token. WebSocket: siehe docs/websocket.md."
   },
   "servers": [
@@ -2033,6 +2033,36 @@
     },
     "/api/v1/live/{id}/media": {
       "get": {
+        "summary": "Sitzung + Recht „live.read“",
+        "x-berechtigung": "live.read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/live/{id}/refresh": {
+      "post": {
         "summary": "Sitzung + Recht „live.read“",
         "x-berechtigung": "live.read",
         "parameters": [
