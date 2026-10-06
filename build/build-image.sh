@@ -87,7 +87,7 @@ grep -q 'FEHLGESCHLAGEN' "$OUT/check-$VERSION.txt" && die "Image-Prüfung fehlge
 
 echo "== 7/7 Komprimieren, Prüfsumme, Signatur =="
 FINAL=$OUT/dfm-signage-arm64-$VERSION.img
-mv "$IMG" "$FINAL"; xz -T0 -6 -f "$FINAL"
+mv "$IMG" "$FINAL"; xz -T0 -6 -c "$FINAL" > "$FINAL.xz" && rm -f "$FINAL" # über Pipe: das Image gehört root (Docker), xz könnte sonst die Gruppe nicht übernehmen
 (cd "$OUT" && sha256sum "dfm-signage-arm64-$VERSION.img.xz" > "dfm-signage-arm64-$VERSION.img.xz.sha256")
 if [ -n "${DFM_SIGN_KEY:-}" ]; then build/sign-release.sh "$FINAL.xz"; else echo "HINWEIS: Keine Signatur erzeugt (DFM_SIGN_KEY nicht gesetzt)."; fi
 echo "Fertig: $FINAL.xz  ($(du -h "$FINAL.xz" | cut -f1) komprimiert, $(xz -l --robot "$FINAL.xz" | awk '/^totals/{printf "%.2f GB", $5/1e9}') entpackt)"
