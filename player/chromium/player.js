@@ -43,7 +43,7 @@ async function main() {
   let idx = 0, lastPl = null;
   for (;;) {
     const now = Date.now(), r = resolvePlaylist(plan, now);
-    const { items } = playableItems(plan, r.playlistId, manifest, { profile: health.profile ?? 'standard', now, have: () => true });
+    const { items } = playableItems(plan, r.playlistId, manifest, { profile: health.profile ?? 'standard', now, have: (m) => (health.cached ?? []).includes(m.id) }); // noch nicht geladene Medien werden übersprungen
     if (r.playlistId !== lastPl) { idx = 0; lastPl = r.playlistId; }
     if (!items.length) { await show(standby(), 'fade'); await sleep(5000); continue; }
     const item = items[idx % items.length]; idx++;

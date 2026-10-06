@@ -3,7 +3,7 @@
 // fällt WLAN oder Hub aus, läuft der Player unbegrenzt weiter.
 import WebSocket from 'ws';
 import { join } from 'node:path';
-import { readFileSync, existsSync, mkdirSync, createWriteStream, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, createWriteStream, writeFileSync, readdirSync } from 'node:fs';
 import { randomInt } from 'node:crypto';
 import { pinnedAgent, request, PinError } from './lib/pinned.js';
 import { writeJson, readJson } from './lib/store.js';
@@ -32,7 +32,8 @@ export class Agent {
     this.nowPlaying = null; this.displayOff = false; this.displayRule = null;
     this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health() });
   }
-  health() { return { displayOff: !!this.displayOff, pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
+  health() { let cached = []; try { cached = readdirSync(this.mediaDir).filter((f) => !f.endsWith('.part')); } catch {}
+    return { cached, displayOff: !!this.displayOff, pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
     cacheEmpty: !(this.manifest?.items?.length), offlineSince: this.offlineSince ?? null }; }
 
   async start() {

@@ -62,6 +62,7 @@ export async function syncMedia({ manifest, dir, fetchRange, parallel = 2, bandw
   await Promise.all(Array.from({ length: Math.min(parallel, queue.length) }, worker));
   // Aufräumen: nur nach erfolgreichem Abgleich, nur Dateien die nicht mehr im Manifest stehen
   const keep = new Set(manifest.items.map((i) => i.id));
-  for (const f of readdirSync(dir)) { const id = f.replace(/\.part$/, ''); if (!keep.has(id)) rmSync(join(dir, f), { force: true }); }
+  // Ein leeres Manifest (z. B. Hub-Fehler) löscht nie den ganzen Cache
+  if (manifest.items.length) for (const f of readdirSync(dir)) { const id = f.replace(/\.part$/, ''); if (!keep.has(id)) rmSync(join(dir, f), { force: true }); }
   return state;
 }

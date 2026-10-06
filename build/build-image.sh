@@ -15,8 +15,8 @@ PIGEN_REF=${PIGEN_REF:-bookworm-arm64}                    # für reproduzierbare
 NODE_VERSION=${DFM_NODE_VERSION:-22.22.0}        # aktuelle LTS; Prüfsumme unten MUSS zur Version passen
 NODE_SHA256=${DFM_NODE_SHA256:-}                 # sha256 von node-v$NODE_VERSION-linux-arm64.tar.xz (aus SHASUMS256.txt)
 UPDATE_PUBKEY=${DFM_UPDATE_PUBKEY:-$ROOT/build/keys/update-key.pub}
-SKIP_TESTS=0
-while [ $# -gt 0 ]; do case $1 in --skip-tests) SKIP_TESTS=1;; --pigen-ref) PIGEN_REF=$2; shift;; *) echo "Unbekannte Option $1"; exit 2;; esac; shift; done
+SKIP_TESTS=0; CONTINUE=0
+while [ $# -gt 0 ]; do case $1 in --skip-tests) SKIP_TESTS=1;; --continue) CONTINUE=1; SKIP_TESTS=1;; --pigen-ref) PIGEN_REF=$2; shift;; *) echo "Unbekannte Option $1"; exit 2;; esac; shift; done
 
 die() { echo "FEHLER: $*" >&2; exit 1; }
 for c in docker git node npm xz openssl sha256sum curl; do command -v $c >/dev/null || die "$c fehlt"; done
@@ -26,7 +26,7 @@ if [ -z "$NODE_SHA256" ]; then
   NODE_SHA256=$(curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/SHASUMS256.txt" | awk "/node-v$NODE_VERSION-linux-arm64.tar.xz/{print \$1}")
   [ -n "$NODE_SHA256" ] || die "Node-Prüfsumme nicht gefunden"
 fi
-rm -rf "$WORK"; mkdir -p "$WORK" "$OUT"
+[ $CONTINUE = 1 ] || rm -rf "$WORK"; mkdir -p "$WORK" "$OUT"
 
 echo "== 1/7 Tests und Oberfläche bauen =="
 npm ci --no-audit --no-fund
@@ -52,23 +52,25 @@ cp -a build/pi-gen/stage-dfm "$WORK/pi-gen/stage-dfm"
 # Nur das fertige DFM-Image exportieren (nicht die Zwischenstufen von pi-gen)
 rm -f "$WORK/pi-gen/stage2/EXPORT_IMAGE" "$WORK/pi-gen/stage2/EXPORT_NOOBS"; touch "$WORK/pi-gen/stage-dfm/EXPORT_IMAGE"
 sed -e "s/@VERSION@/$VERSION/" -e "s/@RANDOM_PASS@/$(openssl rand -hex 24)/" build/pi-gen/config.template > "$WORK/pi-gen/config"
+# „export“ ist nötig: pi-gen führt jedes Stage-Skript als eigenen Prozess aus
 cat >> "$WORK/pi-gen/config" <<CFG
-DFM_VERSION='$VERSION'
-DFM_NODE_VERSION='$NODE_VERSION'
-DFM_NODE_SHA256='$NODE_SHA256'
+export DFM_VERSION='$VERSION'
+export DFM_NODE_VERSION='$NODE_VERSION'
+export DFM_NODE_SHA256='$NODE_SHA256'
 CFG
 # Verzeichnisse, die die Stage-Skripte lesen (im Container unter /pi-gen)
 mkdir -p "$WORK/pi-gen/stage-dfm/files"; cp -a "$APP" "$WORK/pi-gen/stage-dfm/files/app"; cp -a build/rootfs "$WORK/pi-gen/stage-dfm/files/rootfs"
 cp -a "$WORK/assets" "$WORK/pi-gen/stage-dfm/files/assets"; cp "$UPDATE_PUBKEY" "$WORK/pi-gen/stage-dfm/files/update-key.pub"
 cat >> "$WORK/pi-gen/config" <<CFG
-DFM_APP_STAGE=/pi-gen/stage-dfm/files/app
-DFM_ROOTFS_OVERLAY=/pi-gen/stage-dfm/files/rootfs
-DFM_BOOT_ASSETS=/pi-gen/stage-dfm/files/assets
-DFM_UPDATE_PUBKEY=/pi-gen/stage-dfm/files/update-key.pub
+export DFM_APP_STAGE=/pi-gen/stage-dfm/files/app
+export DFM_ROOTFS_OVERLAY=/pi-gen/stage-dfm/files/rootfs
+export DFM_BOOT_ASSETS=/pi-gen/stage-dfm/files/assets
+export DFM_UPDATE_PUBKEY=/pi-gen/stage-dfm/files/update-key.pub
 CFG
 
 echo "== 5/7 pi-gen (Docker) – das dauert 30–90 Minuten =="
-(cd "$WORK/pi-gen" && PRESERVE_CONTAINER=0 CONTINUE=0 ./build-docker.sh)
+# Container bleibt bei Fehlern erhalten: mit  build/build-image.sh --continue  geht es dort weiter (statt von vorn)
+(cd "$WORK/pi-gen" && PRESERVE_CONTAINER=1 CONTAINER_NAME=dfm-pigen CONTINUE=$CONTINUE ./build-docker.sh)
 IMG=$(ls "$WORK"/pi-gen/deploy/*.img | head -1); [ -f "$IMG" ] || die "pi-gen hat kein Image erzeugt"
 
 echo "== 6/7 Partitionen (Boot, Root schreibgeschützt, Daten) und Prüfungen =="
