@@ -259,3 +259,14 @@ test('Hub begrenzt gleichzeitige Medien-Downloads auf 4 (5. bekommt „später e
   held[0].r.destroy(); await new Promise((r) => setTimeout(r, 300)); const again = await open(); assert.equal(again.resp.statusCode, 200, 'Platz wieder frei');
   for (const x of [...held, fifth, again]) x.r.destroy(); await h.cleanup();
 });
+
+test('Härtung: Bild-Bomben und fremde Container werden abgelehnt', async () => {
+  const h = await makeHub(); const a = await h.as('admin');
+  const big = await sharp({ create: { width: 9500, height: 9500, channels: 3, background: '#000' } }).png({ compressionLevel: 9 }).toBuffer();
+  const m = multipart('file', 'riesig.png', big); const r = await a('POST', '/api/v1/media', m.payload, m.headers);
+  assert.equal(r.statusCode, 400); assert.match(r.json().error, /zu groß|Megapixel/);
+  // „MP4“ mit HLS-Playlist-Inhalt hinter ftyp: wird nicht als Playlist interpretiert (Demuxer fest vorgegeben), Upload scheitert verständlich
+  const fake = Buffer.concat([Buffer.from([0, 0, 0, 16]), Buffer.from('ftypisom'), Buffer.from('\n#EXTM3U\nhttp://127.0.0.1:1/x.ts\n')]);
+  const v = multipart('file', 'x.mp4', fake); const r2 = await a('POST', '/api/v1/media', v.payload, v.headers); assert.equal(r2.statusCode, 400); assert.match(r2.json().error, /nicht gelesen|Video/);
+  await h.cleanup();
+});

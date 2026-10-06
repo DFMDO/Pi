@@ -12,6 +12,7 @@ const FAQ = [
 export async function helpPage() {
   return h('div', {}, h('h1', {}, 'Hilfe & häufige Fragen'), h('p', { class: 'lead' }, 'Alles hier funktioniert ohne Internet.'), h('p', {}, h('button', { class: 'btn big', onclick: startTour }, '▶ Zeig mir, wie das geht')),
     ...FAQ.map(([q, a]) => h('details', { class: 'card', style: 'margin:8px 0' }, h('summary', { style: 'font-weight:700;min-height:44px;cursor:pointer' }, q), h('p', {}, a))),
+    h('h2', {}, 'Browser-Warnung: so geht es sicher'), h('img', { src: '/browser-warnung.svg', alt: 'Schematisch: Erweitert wählen, weiter zum Hub, Fingerabdruck vergleichen', style: 'width:100%;max-width:880px' }),
     h('h2', {}, 'Begriffe einfach erklärt'), h('dl', {}, ...[['Hub', 'Der Hauptrechner. Er speichert alle Inhalte und Termine.'], ['Bildschirm (Player)', 'Ein Bildschirm mit Raspberry Pi, der Inhalte zeigt.'], ['Abspielliste', 'Eine Reihenfolge von Bildern und Videos.'], ['Letzte Meldung', 'Wann sich der Bildschirm zuletzt beim Hub gemeldet hat.'], ['Bildschirm verbinden', 'Einen neuen Bildschirm sicher mit dem Hub koppeln.']].flatMap(([a, b]) => [h('dt', { style: 'font-weight:700;margin-top:8px' }, a), h('dd', { style: 'margin:0 0 4px 0' }, b)])));
 }
 /** Rundgang: hebt nacheinander Bereiche hervor und erklärt sie */

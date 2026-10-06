@@ -56,7 +56,7 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
   app.decorate('runBackup', (extraDir) => runScheduledBackup({ dataDir, db, keyInfo: keyInfo(), extraDir }));
 
   // Update (Paket hochladen → Signatur prüfen → einspielen → verteilen)
-  app.post('/api/v1/update/upload', { config: { perm: 'update.manage' }, bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
+  app.post('/api/v1/update/upload', { config: { perm: 'update.manage' }, bodyLimit: 96 * 1024 * 1024 }, async (req, reply) => {
     const body = req.body; if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: 'Bitte lade eine Update-Datei hoch.' });
     mkdirSync(join(dataDir, 'updates'), { recursive: true });
     const tmp = join(dataDir, 'updates', 'incoming.dfmpkg'); writeFileSync(tmp, body);

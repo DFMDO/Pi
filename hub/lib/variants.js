@@ -13,6 +13,15 @@ export const PROFILE_SPEC = {
   pro:      { maxImg: 3840, h: 1080, fpsMax: 60, vb: '10M',   maxrate: '15M', buf: '30M', x264: ['-profile:v', 'high', '-level', '4.2'] },
 };
 
+/** Schutz vor „Bild-Bomben“ (riesige Bilder) und zu hohem Speicherverbrauch auf dem Pi */
+sharp.cache(false); sharp.concurrency(1);
+export const SHARP_OPTS = { failOn: 'error', limitInputPixels: 80_000_000 };
+
+/** Container anhand der ersten Bytes → ffmpeg bekommt den Demuxer fest vorgegeben (kein „Raten“ durch Inhalt der Datei) */
+export function demuxerFor(file) {
+  const h = readFileSync(file).subarray(0, 12);
+  return h.subarray(4, 8).toString() === 'ftyp' ? 'mov,mp4,m4a,3gp,3g2,mj2' : h.subarray(0, 4).toString('hex') === '1a45dfa3' ? 'matroska,webm' : null;
+}
 const sha256File = (f) => new Promise((res, rej) => { const h = createHash('sha256'); createReadStream(f).on('data', (d) => h.update(d)).on('end', () => res(h.digest('hex'))).on('error', rej); });
 const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, { maxBuffer: 1 << 24 }, (e, so, se) => (e ? rej(new Error(se.slice(-300) || e.message)) : res(so))));
 
@@ -27,15 +36,16 @@ function lowPriority() { // nice + ionice, falls im System verfügbar
 const runLow = (cmd, args) => { const p = lowPriority(); return p.length ? run(p[0], [...p.slice(1), cmd, ...args]) : run(cmd, args); };
 
 export async function probeVideo(file) {
-  const out = JSON.parse(await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,avg_frame_rate,codec_name:format=duration', '-of', 'json', file]));
+  const fmt = demuxerFor(file); if (!fmt) throw new Error('Containerformat nicht erlaubt');
+  const out = JSON.parse(await run('ffprobe', ['-v', 'error', '-protocol_whitelist', 'file', '-f', fmt, '-select_streams', 'v:0', '-show_entries', 'stream=width,height,avg_frame_rate,codec_name:format=duration', '-of', 'json', file]));
   const s = out.streams?.[0]; if (!s) throw new Error('Keine Videospur gefunden.');
   const [a, b] = (s.avg_frame_rate || '0/1').split('/').map(Number);
   return { width: s.width, height: s.height, fps: b ? a / b : 0, duration: parseFloat(out.format?.duration ?? '0'), codec: s.codec_name };
 }
 
 async function imageVariant(src, dst, spec) {
-  const img = sharp(src, { failOn: 'error' }).rotate();
-  const meta = await sharp(src).metadata();
+  const img = sharp(src, SHARP_OPTS).rotate();
+  const meta = await sharp(src, SHARP_OPTS).metadata();
   const base = img.resize({ width: spec.maxImg, height: spec.maxImg, fit: 'inside', withoutEnlargement: true });
   // Neu kodiert, Metadaten (EXIF/GPS) entfernt
   if (meta.hasAlpha) await base.png({ compressionLevel: 9 }).toFile(dst + '.png'), dst += '.png';
@@ -46,7 +56,7 @@ async function imageVariant(src, dst, spec) {
 async function videoVariant(src, dst, spec, probe) {
   const vf = [`scale=-2:'min(${spec.h},ih)'`]; if (probe.fps > spec.fpsMax + 0.5) vf.push(`fps=${spec.fpsMax}`);
   const out = dst + '.mp4';
-  await runLow('ffmpeg', ['-y', '-v', 'error', '-i', src, '-map', '0:v:0', '-an', '-sn', '-vf', vf.join(','),
+  await runLow('ffmpeg', ['-y', '-v', 'error', '-protocol_whitelist', 'file', '-f', demuxerFor(src), '-i', src, '-map', '0:v:0', '-an', '-sn', '-vf', vf.join(','),
     '-c:v', 'libx264', ...spec.x264, '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-b:v', spec.vb, '-maxrate', spec.maxrate, '-bufsize', spec.buf,
     '-movflags', '+faststart', out]);
   return out;

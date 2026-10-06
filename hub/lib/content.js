@@ -7,7 +7,7 @@ import multipart from '@fastify/multipart';
 import sharp from 'sharp';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { detectKind, LIMITS, probeVideo, mediaHints } from './variants.js';
+import { detectKind, LIMITS, probeVideo, mediaHints, SHARP_OPTS } from './variants.js';
 import { sendFile } from './devices.js';
 import { sha256hex } from './crypto.js';
 import { loadSchedules, rowToSchedule, warnings, DAY } from './plan.js';
@@ -52,19 +52,19 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
           .run(id, nm, k, path, statSync(join(mediaDir, 'original', path)).size, dur ?? null, w ?? null, h ?? null, folder, req.user.id, now()); ids.push(id); return id;
       };
       if (kind === 'image') {
-        let meta; try { meta = await sharp(tmp).metadata(); } catch { throw Object.assign(new Error('img'), { friendly: 'Das Bild ist beschädigt oder kann nicht gelesen werden.' }); }
+        let meta; try { meta = await sharp(tmp, SHARP_OPTS).metadata(); if (meta.width * meta.height > 80_000_000) throw new Error('zu groß'); } catch (e) { throw Object.assign(new Error('img'), { friendly: /zu groß|pixel/i.test(e.message) ? 'Das Bild ist zu groß (mehr als 80 Megapixel). Bitte verkleinere es.' : 'Das Bild ist beschädigt oder kann nicht gelesen werden.' }); }
         const p = randomUUID(); renameSync(tmp, join(mediaDir, 'original', p)); addMedia('image', p, name, meta.width, meta.height);
       } else if (kind === 'video') {
         let pr; try { pr = await probeVideo(tmp); } catch { throw Object.assign(new Error('vid'), { friendly: 'Das Video kann nicht gelesen werden. Bitte versuche ein anderes Format (MP4).' }); }
         const p = randomUUID(); renameSync(tmp, join(mediaDir, 'original', p)); addMedia('video', p, name, pr.width, pr.height, pr.duration);
       } else { // PDF nur als gerenderte Bilder
         const outdir = join(mediaDir, 'incoming', randomUUID()); mkdirSync(outdir);
-        try { await pexec('pdftoppm', ['-r', '110', '-png', '-l', '60', tmp, join(outdir, 'p')]); }
+        try { await pexec('pdftoppm', ['-scale-to', '1920', '-png', '-l', '60', tmp, join(outdir, 'p')], { timeout: 120000 }); }
         catch { throw Object.assign(new Error('pdf'), { friendly: 'Das PDF konnte nicht umgewandelt werden. Ist es passwortgeschützt oder beschädigt?' }); }
         const { readdirSync } = await import('node:fs');
         for (const [i, f] of readdirSync(outdir).sort().entries()) {
           const p = randomUUID(); renameSync(join(outdir, f), join(mediaDir, 'original', p));
-          const meta = await sharp(join(mediaDir, 'original', p)).metadata();
+          const meta = await sharp(join(mediaDir, 'original', p), SHARP_OPTS).metadata();
           addMedia('pdfpage', p, `${name.replace(/\.pdf$/i, '')} – Seite ${i + 1}`, meta.width, meta.height);
         }
         unlinkSync(tmp); (await import('node:fs')).rmSync(outdir, { recursive: true, force: true });

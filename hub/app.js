@@ -45,7 +45,7 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   app.decorate('ctx', { db, key, audit, dataDir, mediaDir, tls });
 
   app.addHook('onSend', async (_req, reply) => { for (const [k, v] of Object.entries(SECURITY_HEADERS)) reply.header(k, v); });
-  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 300 * 1024 * 1024 }, (_r, b, d) => d(null, b));
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 96 * 1024 * 1024 }, (_r, b, d) => d(null, b));
   // Fehler ohne Stacktrace/Codes an Nutzer
   app.setErrorHandler((err, req, reply) => {
     if (err.validation) return reply.code(400).send({ error: 'Die Eingabe ist ungültig. Bitte prüfe deine Angaben.', details: err.validation.map((v) => `${v.instancePath || 'Eingabe'} ${v.message}`).slice(0, 5) });

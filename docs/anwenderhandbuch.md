@@ -61,6 +61,8 @@ Sobald das Handy verbunden ist, wechselt der Bildschirm. Meist öffnet sich die 
 
 ![Anmelden](bilder/01-anmelden.png)
 
+![Browser-Warnung sicher bestätigen](bilder/browser-warnung.svg)
+
 **Der Browser zeigt eine Warnung – das ist normal.** Der Hub arbeitet ohne Internet und hat darum ein eigenes Sicherheitszertifikat. So gehst du sicher vor:
 1. Auf der Warnseite „Erweitert“ → „Weiter zu dfm-signage.local“.
 2. Vergleiche den **Fingerabdruck** (Hub-Seite: *Bildschirme → Hub-Adresse & Fingerabdruck*) mit dem Aufdruck oder der Anzeige am Hub. Stimmen alle Zeichen überein, bist du richtig. Stimmen sie nicht überein: **nicht fortfahren, IT informieren.**

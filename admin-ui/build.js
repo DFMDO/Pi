@@ -15,6 +15,7 @@ const r = await build({ entryPoints: { app: join(here, 'src', 'main.js') }, bund
 const out = Object.keys(r.metafile.outputs).map((f) => f.split('/').pop());
 const js = out.find((f) => f.endsWith('.js')), css = out.find((f) => f.endsWith('.css'));
 copyFileSync(join(root, 'assets', 'dfm-logo.svg'), join(dist, 'logo.svg'));
+copyFileSync(join(root, 'assets', 'browser-warnung.svg'), join(dist, 'browser-warnung.svg'));
 const html = readFileSync(join(here, 'src', 'index.html'), 'utf8').replace('%JS%', `/assets/${js}`).replace('%CSS%', css ? `/assets/${css}` : '');
 writeFileSync(join(dist, 'index.html'), html);
 const walk = (d) => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
