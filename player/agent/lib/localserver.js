@@ -1,0 +1,61 @@
+// Lokaler Server NUR auf 127.0.0.1: liefert dem Browser (Chromium-Kiosk) die Playerseite,
+// den gespeicherten Plan und die zwischengespeicherten Medien. Chromium spricht nie
+// direkt mit dem Hub – so braucht der Browser keine Zertifikatsausnahme und das
+// Pinning bleibt allein im Agent.
+import http from 'node:http';
+import { createReadStream, statSync, existsSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, '..', '..', '..');
+const STATIC = new Map([
+  ['/player/', [join(ROOT, 'player', 'chromium', 'index.html'), 'text/html; charset=utf-8']],
+  ['/player/player.js', [join(ROOT, 'player', 'chromium', 'player.js'), 'text/javascript; charset=utf-8']],
+  ['/player/player.css', [join(ROOT, 'player', 'chromium', 'player.css'), 'text/css; charset=utf-8']],
+  ['/shared/sequencer.js', [join(ROOT, 'shared', 'sequencer.js'), 'text/javascript; charset=utf-8']],
+  ['/shared/time.js', [join(ROOT, 'shared', 'time.js'), 'text/javascript; charset=utf-8']],
+  ['/assets/dfm-logo.svg', [join(ROOT, 'assets', 'dfm-logo.svg'), 'image/svg+xml']],
+]);
+const HEAD = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store',
+  'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; media-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'" };
+
+function sniff(file) {
+  const b = Buffer.alloc(12); const fd = readFileSync(file, { flag: 'r' }).subarray(0, 12); b.set(fd);
+  if (b[0] === 0xff && b[1] === 0xd8) return 'image/jpeg'; if (b.subarray(1, 4).toString() === 'PNG') return 'image/png';
+  if (b.subarray(4, 8).toString() === 'ftyp') return 'video/mp4'; return 'application/octet-stream';
+}
+
+export function createLocalServer({ getPlan, getManifest, getHealth, mediaDir, port = 8080 }) {
+  const clients = new Set();
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://127.0.0.1'); const p = url.pathname;
+    if (req.method !== 'GET') { res.writeHead(405, HEAD).end(); return; }
+    if (STATIC.has(p)) { const [f, t] = STATIC.get(p); if (!existsSync(f)) { res.writeHead(404, HEAD).end(); return; } res.writeHead(200, { ...HEAD, 'Content-Type': t }); createReadStream(f).pipe(res); return; }
+    if (p === '/plan.json') return json(res, getPlan() ?? { segments: [], playlists: {}, defaultPlaylistId: null });
+    if (p === '/manifest.json') return json(res, getManifest() ?? { items: [] });
+    if (p === '/health') return json(res, getHealth());
+    if (p === '/events') {
+      res.writeHead(200, { ...HEAD, 'Content-Type': 'text/event-stream', Connection: 'keep-alive' }); res.write('retry: 2000\n\n');
+      clients.add(res); req.on('close', () => clients.delete(res)); return;
+    }
+    const m = /^\/media\/([0-9a-f-]{36})$/.exec(p); // Kein Pfad aus Nutzereingabe: nur UUIDs
+    if (m) {
+      const f = join(mediaDir, m[1]); if (!existsSync(f)) { res.writeHead(404, HEAD).end(); return; }
+      const size = statSync(f).size, type = sniff(f), r = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+      if (r && (r[1] || r[2])) {
+        const s = r[1] ? Number(r[1]) : Math.max(0, size - Number(r[2])), e = r[1] && r[2] ? Math.min(Number(r[2]), size - 1) : size - 1;
+        if (s > e) { res.writeHead(416, { ...HEAD, 'Content-Range': `bytes */${size}` }).end(); return; }
+        res.writeHead(206, { ...HEAD, 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${s}-${e}/${size}`, 'Content-Length': e - s + 1, 'Cache-Control': 'no-store' }); createReadStream(f, { start: s, end: e }).pipe(res); return;
+      }
+      res.writeHead(200, { ...HEAD, 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': size }); createReadStream(f).pipe(res); return;
+    }
+    res.writeHead(404, HEAD).end();
+  });
+  const json = (res, o) => { res.writeHead(200, { ...HEAD, 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+  return {
+    listen: () => new Promise((r) => server.listen(port, '127.0.0.1', () => r(server.address().port))),
+    close: () => new Promise((r) => { for (const c of clients) c.end(); server.close(() => r()); }),
+    emit: (event, data = {}) => { for (const c of clients) c.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); },
+  };
+}

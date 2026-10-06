@@ -30,3 +30,10 @@ export async function makeHub(opts = {}) {
   const cleanup = async () => { await app.close(); rmSync(dataDir, { recursive: true, force: true }); };
   return { app, db, tls, dataDir, clock, login, as, cleanup, mkUser };
 }
+
+export function multipart(name, filename, data, fields = {}) {
+  const b = '----dfmtest' + randomUUID(); const parts = [];
+  for (const [k, v] of Object.entries(fields)) parts.push(Buffer.from(`--${b}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`));
+  parts.push(Buffer.from(`--${b}\r\nContent-Disposition: form-data; name="${name}"; filename="${filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`), data, Buffer.from(`\r\n--${b}--\r\n`));
+  return { payload: Buffer.concat(parts), headers: { 'content-type': `multipart/form-data; boundary=${b}` } };
+}

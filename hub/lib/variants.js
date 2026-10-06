@@ -70,7 +70,7 @@ ${body.map((l, i) => `<text x="${pad}" y="${pad + tf * 2 + i * bf * 1.4}" font-f
 
 export function createVariantQueue({ db, mediaDir, onChange = () => {}, log = () => {} }) {
   const vdir = join(mediaDir, 'variants'); mkdirSync(vdir, { recursive: true });
-  let running = null, waiting = false;
+  let running = null, waiting = false, closed = false;
   db.prepare("UPDATE media_variants SET status='pending' WHERE status='running'").run(); // nach Neustart fortsetzen
 
   const activeProfiles = () => {
@@ -88,9 +88,10 @@ export function createVariantQueue({ db, mediaDir, onChange = () => {}, log = ()
     }
     kick();
   }
-  function kick() { if (!running && !waiting) { waiting = true; setImmediate(() => { waiting = false; running = loop().finally(() => { running = null; }); }); } }
+  function kick() { if (!closed && !running && !waiting) { waiting = true; setImmediate(() => { waiting = false; running = loop().finally(() => { running = null; }); }); } }
   async function loop() {
     for (;;) {
+      if (closed) return;
       const v = db.prepare("SELECT * FROM media_variants WHERE status='pending' ORDER BY rowid LIMIT 1").get();
       if (!v) return;
       db.prepare("UPDATE media_variants SET status='running' WHERE id=?").run(v.id);
@@ -109,7 +110,7 @@ export function createVariantQueue({ db, mediaDir, onChange = () => {}, log = ()
       onChange();
     }
   }
-  return { ensureAll, kick, idle: async () => { while (running || waiting || db.prepare("SELECT 1 FROM media_variants WHERE status IN ('pending','running')").get()) { kick(); await (running ?? new Promise((r) => setTimeout(r, 20))); } } };
+  return { ensureAll, kick, close: async () => { closed = true; await running; }, idle: async () => { while (!closed && (running || waiting || db.prepare("SELECT 1 FROM media_variants WHERE status IN ('pending','running')").get())) { kick(); await (running ?? new Promise((r) => setTimeout(r, 20))); } } };
 }
 
 // ---- Upload-Prüfung ----

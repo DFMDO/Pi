@@ -122,7 +122,7 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
 
   // Aufräumen: abgelaufene Sitzungen / Papierkorb
   const janitor = setInterval(() => { db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now()); db.prepare('DELETE FROM trash WHERE deleted_at<?').run(now() - 30 * 86400000); db.prepare('DELETE FROM pairing_codes WHERE expires_at<?').run(now()); }, 600000).unref();
-  app.addHook('onClose', async () => { clearInterval(janitor); db.close(); });
+  app.addHook('onClose', async () => { clearInterval(janitor); await variants.close(); db.close(); });
   variants.ensureAll();
   return app;
 }

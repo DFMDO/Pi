@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80" role="img" aria-label="Deutsches Fußballmuseum">
+  <!-- PLATZHALTER: bitte durch das offizielle DFM-Logo ersetzen (assets/dfm-logo.svg) -->
+  <rect width="240" height="80" rx="10" fill="#c8102e"/>
+  <text x="120" y="52" text-anchor="middle" font-family="system-ui,Arial,sans-serif" font-weight="800" font-size="40" fill="#fff" letter-spacing="2">DFM</text>
+</svg>
