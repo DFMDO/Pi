@@ -49,8 +49,8 @@ test('Rechteprüfung auf JEDER Route: ohne Login 401, falsche Rolle 403', async 
   const routes = h.app.apiRoutes.filter((r) => r.config.perm || r.config.authenticated);
   assert.ok(routes.length > 40, 'erwartet viele Routen, hat ' + routes.length);
   const { ROLE_PERMS } = await import('../lib/permissions.js');
-  for (const role of ['viewer', 'editor']) {
-    const c = await h.as(role === 'viewer' ? 'vera' : 'edi');
+  for (const role of ['anzeige', 'editor']) {
+    const c = await h.as(role === 'anzeige' ? 'vera' : 'edi');
     for (const r of routes.filter((x) => x.config.perm && !ROLE_PERMS[role].has(x.config.perm))) {
       const method = r.method.find((m) => m !== 'HEAD' && m !== 'OPTIONS');
       const res = await c(method, r.url.replace(/:[a-zA-Z]+/g, 'x'), method === 'GET' ? undefined : {});

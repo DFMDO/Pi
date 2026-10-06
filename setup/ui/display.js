@@ -1,7 +1,7 @@
 // Bildschirmanzeige im Einrichtungsmodus: nie schwarz, nie Konsolentext.
 const app = document.getElementById('app');
 const h = (t, a = {}, ...k) => { const e = document.createElement(t); for (const [x, v] of Object.entries(a)) { if (x === 'style') e.style.cssText = v; else e.setAttribute(x, v); } e.append(...k.flat(Infinity).filter((y) => y != null)); return e; };
-const logo = () => h('img', { src: '/logo.svg', alt: 'Deutsches Fußballmuseum', style: 'height:9vh' });
+const logo = () => h("img", { src: "/logo.svg", alt: "Deutsches Fußballmuseum", style: "height:11vh" });
 const qr = (svg) => { const d = h('div', { class: 'qr', role: 'img', 'aria-label': 'QR-Code' }); d.innerHTML = svg; return d; }; // SVG stammt vom lokalen Server (qrcode), nicht aus Nutzereingaben
 let last = '';
 async function tick() {

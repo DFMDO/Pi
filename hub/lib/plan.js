@@ -5,11 +5,13 @@ export const DAY = 86400000;
 export const PROFILES = ['lite', 'standard', 'pro'];
 
 export const rowToSchedule = (r) => ({
+  state: r.state ?? 'published', draftOf: r.draft_of ?? null, note: r.note ?? null, createdBy: r.created_by ?? null,
   id: r.id, targetType: r.target_type, targetId: r.target_id, content: { type: r.content_type, id: r.content_id },
   startLocal: r.start_local, endLocal: r.end_local, rrule: r.rrule, exdates: JSON.parse(r.exdates || '[]'),
   priority: r.priority, validFrom: r.valid_from, validTo: r.valid_to,
 });
-export const loadSchedules = (db) => db.prepare('SELECT * FROM schedules').all().map(rowToSchedule);
+/** Standard: NUR veröffentlichte Termine (Player, Live-Ansicht, Konflikte). Entwürfe nur mit { drafts: true } (Kalender/Vorschau). */
+export const loadSchedules = (db, { drafts = false } = {}) => db.prepare(drafts ? 'SELECT * FROM schedules' : "SELECT * FROM schedules WHERE state='published'").all().map(rowToSchedule);
 
 function playlistItems(db, id) {
   return db.prepare('SELECT media_id AS mediaId, duration_s AS duration, transition, valid_from AS validFrom, valid_to AS validTo FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(id);
@@ -21,7 +23,7 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   const from = now - 3600000, to = now + days * DAY;
   const tl = buildTimeline(loadSchedules(db), { deviceId: device.id, groupId: device.group_id }, from, to);
   const playlists = {};
-  const def = db.prepare('SELECT id FROM playlists WHERE is_default=1').get()?.id ?? null;
+  const def = db.prepare("SELECT id FROM playlists WHERE is_default=1 AND state='published'").get()?.id ?? null;
   const use = (c) => {
     if (c.type === 'media') { // Einzelnes Medium wie eine Ein-Elemente-Liste behandeln
       const id = 'media:' + c.id;
@@ -40,8 +42,8 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
 /** Alle Medien, die dieser Player braucht (nur Variante seines Profils). */
 export function manifestPayload(db, device, now = Date.now()) {
   const ids = new Set();
-  for (const r of db.prepare('SELECT DISTINCT media_id FROM playlist_items').all()) ids.add(r.media_id);
-  for (const r of db.prepare("SELECT content_id FROM schedules WHERE content_type='media'").all()) ids.add(r.content_id);
+  for (const r of db.prepare("SELECT DISTINCT media_id FROM playlist_items i JOIN playlists p ON p.id=i.playlist_id WHERE p.state='published'").all()) ids.add(r.media_id);
+  for (const r of db.prepare("SELECT content_id FROM schedules WHERE content_type='media' AND state='published'").all()) ids.add(r.content_id);
   const items = [];
   for (const id of ids) {
     const m = db.prepare('SELECT * FROM media WHERE id=?').get(id);
@@ -57,7 +59,7 @@ export function manifestPayload(db, device, now = Date.now()) {
 /** Hinweise für die Startseite (Konflikte, fehlende Inhalte, Medien nicht geladen). */
 export function warnings(db, now = Date.now()) {
   const out = [];
-  const scheds = loadSchedules(db);
+  const scheds = loadSchedules(db); // nur Veröffentlichtes
   const names = Object.fromEntries([...db.prepare('SELECT id,name FROM devices').all(), ...db.prepare('SELECT id,name FROM device_groups').all()].map((r) => [r.id, r.name]));
   for (const c of findConflicts(scheds, now, now + 14 * DAY)) out.push({ kind: 'konflikt', ids: [c.a, c.b],
     text: `Zwei Termine für „${names[scheds.find((s) => s.id === c.a).targetId] ?? 'Bildschirm'}“ überschneiden sich. Der später gestartete gewinnt. Gib einem der Termine eine höhere Priorität, wenn du das ändern willst.` });
@@ -71,4 +73,18 @@ export function warnings(db, now = Date.now()) {
     if (st?.syncState && st.syncState.done < st.syncState.total) out.push({ kind: 'medien_laden', ids: [d.id], text: `„${d.name}“ lädt noch Medien (${st.syncState.done} von ${st.syncState.total}).` });
   }
   return out;
+}
+
+const WD = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const dmy = (d) => d.split('-').reverse().join('.');
+/** Zusammenfassung in Klartext für „Veröffentlichen“: „Ab sofort zeigt „Shop-Screen“ am Samstag, 10.10.2026 von 10:00 bis 12:00 Uhr „Sommer-Aktion“.“ */
+export function summarizeSchedule(db, s) {
+  const target = s.targetType === 'device' ? db.prepare('SELECT name FROM devices WHERE id=?').get(s.targetId)?.name : db.prepare('SELECT name FROM device_groups WHERE id=?').get(s.targetId)?.name;
+  const content = s.content.type === 'playlist' ? db.prepare('SELECT name FROM playlists WHERE id=?').get(s.content.id)?.name : db.prepare('SELECT name FROM media WHERE id=?').get(s.content.id)?.name;
+  const [d1, t1] = s.startLocal.split('T'), [d2, t2] = s.endLocal.split('T');
+  const [y, m, d] = d1.split('-').map(Number), wd = WD[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  const who = `${s.targetType === 'group' ? 'die Gruppe ' : ''}„${target ?? 'Bildschirm'}“`;
+  const when = d1 === d2 ? `am ${wd}, ${dmy(d1)} von ${t1} bis ${t2} Uhr` : `von ${wd}, ${dmy(d1)} ${t1} Uhr bis ${dmy(d2)} ${t2} Uhr`;
+  const rep = !s.rrule ? '' : /FREQ=DAILY/.test(s.rrule) ? ', jeden Tag' : /FREQ=MONTHLY/.test(s.rrule) ? ', jeden Monat' : ', jede Woche';
+  return `Ab sofort zeigt ${who} ${when}${rep} „${content ?? 'Inhalt'}“.`;
 }

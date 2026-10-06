@@ -9,7 +9,7 @@ export function loginPage(onOk) {
     field('Benutzername', h('input', { name: 'name', autocomplete: 'username', required: true, autofocus: true })), field('Passwort', h('input', { name: 'password', type: 'password', autocomplete: 'current-password', required: true })));
   const $totp = h('div', { hidden: true }, field('Code aus der Authenticator-App (oder Wiederherstellungscode)', h('input', { name: 'totp', autocomplete: 'one-time-code', inputmode: 'numeric' })));
   form.append($totp, h('button', { class: 'btn big', style: 'width:100%;margin-top:16px', type: 'submit' }, 'Anmelden'));
-  return h('main', { class: 'login', id: 'main' }, h('img', { src: '/logo.svg', alt: 'Deutsches Fußballmuseum', style: 'height:56px;margin-bottom:16px' }), form);
+  return h('main', { class: 'login', id: 'main' }, h('div', { class: 'logobox' }, h('img', { src: '/logo.svg', alt: 'Deutsches Fußballmuseum' })), form);
 }
 /** Allererste Einrichtung im Browser (nur wenn beim Handy-Setup kein Konto angelegt wurde). */
 export function firstSetupPage(done) {

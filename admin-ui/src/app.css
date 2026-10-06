@@ -6,7 +6,7 @@ body{margin:0;background:var(--dfm-bg);color:var(--dfm-text);font:1rem/1.55 var(
 h1{font-size:1.6rem;margin:.2em 0 .1em}h2{font-size:1.2rem;margin:1.2em 0 .4em}p{margin:.4em 0 .9em}.lead{opacity:.85;margin-bottom:18px}.hint{font-size:.9rem;opacity:.8}
 .shell{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
 nav.side{background:var(--dfm-secondary);color:#fff;padding:12px;display:flex;flex-direction:column;gap:4px}
-nav.side img{height:40px;margin:4px 4px 14px;align-self:flex-start}
+nav.side img{height:72px;margin:4px 4px 14px;align-self:flex-start}
 nav.side a{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:10px;color:#fff;text-decoration:none}
 nav.side a[aria-current=page]{background:var(--dfm-primary)}nav.side a:hover{background:#ffffff22}
 nav.side .grow{flex:1}.who{font-size:.85rem;opacity:.85;padding:8px 12px}
@@ -55,3 +55,5 @@ dialog{max-width:min(640px,94vw);width:100%;border:2px solid var(--dfm-primary);
 
 input[type=checkbox],input[type=radio]{width:26px;height:26px;min-height:0;flex:none}
 label:has(>input[type=checkbox]){display:flex;align-items:center;gap:12px;min-height:44px;font-weight:600}
+
+.logobox{background:var(--dfm-secondary);border-radius:14px;padding:14px;margin-bottom:16px;display:flex;justify-content:center}.logobox img{height:96px}

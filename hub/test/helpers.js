@@ -16,7 +16,7 @@ export async function makeHub(opts = {}) {
   await app.ready();
   const { db } = app.ctx;
   const mkUser = async (name, role) => { db.prepare('INSERT INTO users(id,name,pw_hash,role,created_at) VALUES(?,?,?,?,?)').run(randomUUID(), name, await hashPassword(PW), role, now()); };
-  if (!opts.noUsers) { await mkUser('admin', 'admin'); await mkUser('edi', 'editor'); await mkUser('vera', 'viewer'); }
+  if (!opts.noUsers) { await mkUser('admin', 'admin'); await mkUser('edi', 'editor'); await mkUser('vera', 'anzeige'); }
   const login = async (name, password = PW) => {
     const r = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { name, password } });
     const cookie = (r.headers['set-cookie'] ?? '').split(';')[0];

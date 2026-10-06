@@ -10,8 +10,9 @@ import { promisify } from 'node:util';
 import { detectKind, LIMITS, probeVideo, mediaHints, SHARP_OPTS } from './variants.js';
 import { sendFile } from './devices.js';
 import { sha256hex } from './crypto.js';
-import { loadSchedules, rowToSchedule, warnings, DAY } from './plan.js';
-import { expand, buildTimeline, currentSegment } from '../../shared/schedule.js';
+import { loadSchedules, rowToSchedule, warnings, summarizeSchedule, DAY } from './plan.js';
+import { expand, buildTimeline, currentSegment, findConflicts } from '../../shared/schedule.js';
+import { can } from './permissions.js';
 import { localToEpoch } from '../../shared/time.js';
 
 const pexec = promisify(execFile);
@@ -114,35 +115,79 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     db.prepare('DELETE FROM media WHERE id=?').run(m.id); A(req, 'medium.geloescht', m.name); app.pushAll(); return { ok: true };
   });
 
+  // ---------- Entwurf / Veröffentlicht (Z.13) ----------
+  // Neues und Änderungen entstehen als ENTWURF. Player, Live-Ansicht und der 14-Tage-Plan kennen nur veröffentlichte Stände.
+  const mayPublish = (req, kind) => can(req.user.role, kind + '.publish') && (req.user.role === 'admin' || app.settings()['publish.editor'] !== 'false');
+  const snapshot = (req, kind, refId, label, payload) => db.prepare('INSERT INTO versions VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), kind, refId, label, JSON.stringify(payload), now(), req.user.id, req.user.name);
+  const noPublish = (reply) => reply.code(403).send({ error: 'Du darfst Änderungen anlegen, aber nicht veröffentlichen. Bitte einen Admin, den Entwurf zu veröffentlichen.' });
+  const draftCount = () => ({ schedules: db.prepare("SELECT COUNT(*) n FROM schedules WHERE state='draft'").get().n, playlists: db.prepare("SELECT COUNT(*) n FROM playlists WHERE state='draft'").get().n,
+    old: db.prepare("SELECT 'schedule' kind, id FROM schedules WHERE state='draft' AND created_at < ? UNION SELECT 'playlist', id FROM playlists WHERE state='draft' AND COALESCE(created_at,0) < ?").all(now() - 30 * DAY, now() - 30 * DAY).length });
+  app.get('/api/v1/drafts', { config: { perm: 'schedules.read' } }, async () => draftCount());
+
   // ---------- Abspiellisten ----------
+  const itemsOf = (id) => db.prepare('SELECT id,media_id AS mediaId,duration_s AS duration,transition,valid_from AS validFrom,valid_to AS validTo FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(id);
   app.get('/api/v1/playlists', { config: { perm: 'playlists.read' } }, async () =>
-    db.prepare('SELECT * FROM playlists ORDER BY name').all().map((p) => ({ id: p.id, name: p.name, isDefault: !!p.is_default,
-      items: db.prepare('SELECT id,media_id AS mediaId,duration_s AS duration,transition,valid_from AS validFrom,valid_to AS validTo FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(p.id) })));
-  app.post('/api/v1/playlists', { config: { perm: 'playlists.write' }, schema: { body: { type: 'object', required: ['name'], additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 80 } } } } }, async (req, reply) => {
-    const id = randomUUID(); db.prepare('INSERT INTO playlists(id,name) VALUES(?,?)').run(id, req.body.name); A(req, 'liste.angelegt', req.body.name); return reply.code(201).send({ id });
+    db.prepare('SELECT * FROM playlists ORDER BY name').all().map((p) => ({ id: p.id, name: p.name, isDefault: !!p.is_default, state: p.state, draftOf: p.draft_of, note: p.note, hasDraft: p.state === 'published' && !!db.prepare('SELECT 1 FROM playlists WHERE draft_of=?').get(p.id), items: itemsOf(p.id) })));
+  app.post('/api/v1/playlists', { config: { perm: 'playlists.write' }, schema: { body: { type: 'object', required: ['name'], additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 80 }, publish: { type: 'boolean' } } } } }, async (req, reply) => {
+    if (req.body.publish && !mayPublish(req, 'playlists')) return noPublish(reply);
+    const id = randomUUID(); db.prepare('INSERT INTO playlists(id,name,state,created_at) VALUES(?,?,?,?)').run(id, req.body.name, req.body.publish ? 'published' : 'draft', now()); A(req, 'liste.angelegt', req.body.name); return reply.code(201).send({ id });
   });
   const itemSchema = { type: 'object', required: ['mediaId'], additionalProperties: false, properties: { mediaId: { type: 'string', maxLength: 40 }, duration: { type: 'integer', minimum: 1, maximum: 3600 },
     transition: { enum: ['fade', 'cut'] }, validFrom: { type: ['string', 'null'], pattern: DATE }, validTo: { type: ['string', 'null'], pattern: DATE } } };
+  function publishPlaylist(req, id) {
+    const d = db.prepare('SELECT * FROM playlists WHERE id=?').get(id); const target = d.draft_of ?? d.id;
+    db.transaction(() => {
+      if (d.draft_of) {
+        db.prepare('UPDATE playlists SET name=?, note=? WHERE id=?').run(d.name, d.note, target);
+        db.prepare('DELETE FROM playlist_items WHERE playlist_id=?').run(target);
+        for (const i of db.prepare('SELECT * FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(d.id)) db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), target, i.media_id, i.pos, i.duration_s, i.transition, i.valid_from, i.valid_to);
+        db.prepare('DELETE FROM playlists WHERE id=?').run(d.id);
+      } else db.prepare("UPDATE playlists SET state='published' WHERE id=?").run(d.id);
+      if (d.is_default) { db.prepare('UPDATE playlists SET is_default=0').run(); db.prepare('UPDATE playlists SET is_default=1 WHERE id=?').run(target); }
+      const p = db.prepare('SELECT * FROM playlists WHERE id=?').get(target); snapshot(req, 'playlist', target, p.name, { name: p.name, isDefault: !!p.is_default, items: itemsOf(target) });
+    })();
+    A(req, 'liste.veroeffentlicht', target); app.pushAll(); return target;
+  }
   app.put('/api/v1/playlists/:id', { config: { perm: 'playlists.write' }, schema: { body: { type: 'object', additionalProperties: false, properties: {
-    name: { type: 'string', minLength: 1, maxLength: 80 }, isDefault: { type: 'boolean' }, items: { type: 'array', maxItems: 200, items: itemSchema } } } } }, async (req, reply) => {
-    const p = db.prepare('SELECT * FROM playlists WHERE id=?').get(req.params.id); if (!p) return reply.code(404).send({ error: 'Abspielliste nicht gefunden.' });
+    name: { type: 'string', minLength: 1, maxLength: 80 }, isDefault: { type: 'boolean' }, note: { type: 'string', maxLength: 300 }, publish: { type: 'boolean' }, items: { type: 'array', maxItems: 200, items: itemSchema } } } } }, async (req, reply) => {
+    let p = db.prepare('SELECT * FROM playlists WHERE id=?').get(req.params.id); if (!p) return reply.code(404).send({ error: 'Abspielliste nicht gefunden.' });
     const b = req.body;
     for (const it of b.items ?? []) if (!db.prepare('SELECT 1 FROM media WHERE id=?').get(it.mediaId)) return reply.code(400).send({ error: 'Ein Medium in der Liste gibt es nicht mehr.' });
+    if (b.publish && !mayPublish(req, 'playlists')) return noPublish(reply);
+    if (p.state === 'published') { // Änderung an Veröffentlichtem → Entwurfsversion; die veröffentlichte Liste läuft unverändert weiter
+      let d = db.prepare('SELECT * FROM playlists WHERE draft_of=?').get(p.id);
+      if (!d) { const id = randomUUID(); db.prepare("INSERT INTO playlists(id,name,is_default,state,draft_of,created_at) VALUES(?,?,?,'draft',?,?)").run(id, p.name, p.is_default, p.id, now());
+        for (const i of itemsOf(p.id).entries()) db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), id, i[1].mediaId, i[0], i[1].duration, i[1].transition, i[1].validFrom, i[1].validTo); d = db.prepare('SELECT * FROM playlists WHERE id=?').get(id); }
+      p = d;
+    }
     db.transaction(() => {
       if (b.name) db.prepare('UPDATE playlists SET name=? WHERE id=?').run(b.name, p.id);
-      if (b.isDefault) { db.prepare('UPDATE playlists SET is_default=0').run(); db.prepare('UPDATE playlists SET is_default=1 WHERE id=?').run(p.id); }
+      if (b.note !== undefined) db.prepare('UPDATE playlists SET note=? WHERE id=?').run(b.note, p.id);
+      if (b.isDefault !== undefined) db.prepare('UPDATE playlists SET is_default=? WHERE id=?').run(b.isDefault ? 1 : 0, p.id);
       if (b.items) { db.prepare('DELETE FROM playlist_items WHERE playlist_id=?').run(p.id);
         b.items.forEach((it, i) => db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), p.id, it.mediaId, i, it.duration ?? 10, it.transition ?? 'fade', it.validFrom ?? null, it.validTo ?? null)); }
     })();
-    A(req, 'liste.geaendert', p.id); app.pushAll(); return { ok: true };
+    A(req, 'liste.entwurf_gespeichert', p.id);
+    if (b.publish) { const id = publishPlaylist(req, p.id); return { ok: true, id, published: true }; }
+    return { ok: true, draftId: p.id, published: false };
+  });
+  app.post('/api/v1/playlists/:id/publish', { config: { perm: 'playlists.write' } }, async (req, reply) => {
+    if (!mayPublish(req, 'playlists')) return noPublish(reply);
+    const d = db.prepare("SELECT * FROM playlists WHERE id=? AND state='draft'").get(req.params.id); if (!d) return reply.code(404).send({ error: 'Es gibt keinen Entwurf zum Veröffentlichen.' });
+    if (!db.prepare('SELECT 1 FROM playlist_items WHERE playlist_id=?').get(d.id) && d.is_default) return reply.code(400).send({ error: 'Die Standard-Abspielliste darf nicht leer sein.' });
+    return { ok: true, id: publishPlaylist(req, d.id) };
+  });
+  app.post('/api/v1/playlists/:id/discard', { config: { perm: 'playlists.write' } }, async (req, reply) => {
+    const r = db.prepare("DELETE FROM playlists WHERE id=? AND state='draft'").run(req.params.id); if (!r.changes) return reply.code(404).send({ error: 'Es gibt keinen Entwurf.' });
+    A(req, 'liste.entwurf_verworfen', req.params.id); return { ok: true };
   });
   app.delete('/api/v1/playlists/:id', { config: { perm: 'playlists.write' } }, async (req, reply) => {
     const p = db.prepare('SELECT * FROM playlists WHERE id=?').get(req.params.id); if (!p) return reply.code(404).send({ error: 'Abspielliste nicht gefunden.' });
-    if (p.is_default) return reply.code(400).send({ error: 'Die Standard-Abspielliste kann nicht gelöscht werden. Lege zuerst eine andere als Standard fest.' });
+    if (p.is_default && p.state === 'published') return reply.code(400).send({ error: 'Die Standard-Abspielliste kann nicht gelöscht werden. Lege zuerst eine andere als Standard fest.' });
     const dep = db.prepare("SELECT COUNT(*) n FROM schedules WHERE content_type='playlist' AND content_id=?").get(p.id).n;
     if (dep && req.query.force !== '1') return reply.code(409).send({ error: `Diese Abspielliste wird in ${dep} Termin(en) verwendet. Wenn du sie löschst, werden diese Termine ebenfalls entfernt.`, needsConfirm: true });
     toTrash(req, 'playlist', p.id, { playlist: p, items: db.prepare('SELECT * FROM playlist_items WHERE playlist_id=?').all(p.id), schedules: db.prepare("SELECT * FROM schedules WHERE content_type='playlist' AND content_id=?").all(p.id) });
-    db.prepare("DELETE FROM schedules WHERE content_type='playlist' AND content_id=?").run(p.id); db.prepare('DELETE FROM playlists WHERE id=?').run(p.id);
+    db.prepare("DELETE FROM schedules WHERE content_type='playlist' AND content_id=?").run(p.id); db.prepare('DELETE FROM playlists WHERE draft_of=?').run(p.id); db.prepare('DELETE FROM playlists WHERE id=?').run(p.id);
     A(req, 'liste.geloescht', p.name); app.pushAll(); return { ok: true };
   });
 
@@ -151,7 +196,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     targetType: { enum: ['device', 'group'] }, targetId: { type: 'string', maxLength: 40 },
     content: { type: 'object', required: ['type', 'id'], additionalProperties: false, properties: { type: { enum: ['playlist', 'media'] }, id: { type: 'string', maxLength: 40 } } },
     startLocal: { type: 'string', pattern: LOCAL_DT }, endLocal: { type: 'string', pattern: LOCAL_DT }, rrule: { type: ['string', 'null'], maxLength: 200, pattern: '^[A-Z0-9=;,]*$' },
-    exdates: { type: 'array', maxItems: 400, items: { type: 'string', pattern: DATE } }, priority: { type: 'integer', minimum: 1, maximum: 10 },
+    exdates: { type: 'array', maxItems: 400, items: { type: 'string', pattern: DATE } }, priority: { type: 'integer', minimum: 1, maximum: 10 }, note: { type: 'string', maxLength: 300 }, publish: { type: 'boolean' },
     validFrom: { type: ['string', 'null'], pattern: DATE }, validTo: { type: ['string', 'null'], pattern: DATE } } };
 
   function checkSchedule(s) {
@@ -161,38 +206,98 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     try { expand({ ...s, id: 'check' }, 0, DAY); } catch (e) { return e.message.includes('Ende') ? 'Das Ende liegt vor dem Start.' : 'Die Wiederholung ist ungültig: ' + e.message; }
     return null;
   }
-  const schedRow = (s, id, req) => [id, s.targetType, s.targetId, s.content.type, s.content.id, s.startLocal, s.endLocal, s.rrule ?? null, JSON.stringify(s.exdates ?? []), s.priority ?? 5, s.validFrom ?? null, s.validTo ?? null, req.user.id, now()];
-  const conflictInfo = (id) => { const t = now(); return warnings(db, t).filter((w) => w.kind === 'konflikt' && w.ids.includes(id)); };
+  const schedRow = (s, id, req, state = 'draft', draftOf = null) => [id, s.targetType, s.targetId, s.content.type, s.content.id, s.startLocal, s.endLocal, s.rrule ?? null, JSON.stringify(s.exdates ?? []), s.priority ?? 5, s.validFrom ?? null, s.validTo ?? null, req.user.id, now(), state, draftOf, s.note ?? null];
+  const INS = 'INSERT INTO schedules(id,target_type,target_id,content_type,content_id,start_local,end_local,rrule,exdates,priority,valid_from,valid_to,created_by,created_at,state,draft_of,note) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+  const conflictInfo = (id) => warnings(db, now()).filter((w) => w.kind === 'konflikt' && w.ids.includes(id));
 
-  app.get('/api/v1/schedules', { config: { perm: 'schedules.read' } }, async () => loadSchedules(db));
+  /** Prüft vor dem Veröffentlichen: Inhalt veröffentlicht? Konflikte? Medien vorbereitet? */
+  function publishCheck(id) {
+    const d = db.prepare('SELECT * FROM schedules WHERE id=?').get(id); if (!d) return null;
+    const s = rowToSchedule(d); const problems = [];
+    if (s.content.type === 'playlist') { const pl = db.prepare('SELECT state,name FROM playlists WHERE id=?').get(s.content.id); if (pl?.state !== 'published') problems.push(`Die Abspielliste „${pl?.name ?? '?'}“ ist noch ein Entwurf. Bitte veröffentliche zuerst die Liste.`); }
+    const dev = s.targetType === 'device' ? [s.targetId] : db.prepare('SELECT id FROM devices WHERE group_id=?').all(s.targetId).map((r) => r.id);
+    const notReady = dev.filter((x) => { const st = db.prepare('SELECT state_json FROM devices WHERE id=?').get(x)?.state_json; const ss = st ? JSON.parse(st).syncState : null; return ss && ss.done < ss.total; });
+    // Konflikte testweise mit dem Entwurf als veröffentlicht berechnen
+    const all = loadSchedules(db).filter((x) => x.id !== (d.draft_of ?? d.id)).concat([{ ...s, id: d.draft_of ?? d.id }]);
+    const conflicts = findConflicts(all, now(), now() + 14 * DAY).filter((c) => [c.a, c.b].includes(d.draft_of ?? d.id));
+    return { s, summary: summarizeSchedule(db, s), problems, conflicts: conflicts.length ? [`Dieser Termin überschneidet sich mit einem anderen mit gleicher Wichtigkeit. Der später gestartete gewinnt. Gib einem der Termine eine höhere Wichtigkeit, wenn du das ändern willst.`] : [], notLoaded: notReady.length ? `${notReady.length} Bildschirm(e) laden noch Medien – der Termin greift dort erst danach.` : null, draft: d };
+  }
+  function publishSchedule(req, id) {
+    const c = publishCheck(id); const d = c.draft; const target = d.draft_of ?? d.id;
+    db.transaction(() => {
+      if (d.draft_of) { db.prepare('DELETE FROM schedules WHERE id=?').run(target); db.prepare(INS).run(...schedRow(c.s, target, req, 'published', null)); db.prepare('DELETE FROM schedules WHERE id=?').run(d.id); }
+      else db.prepare("UPDATE schedules SET state='published' WHERE id=?").run(d.id);
+      snapshot(req, 'schedule', target, c.summary, { schedule: { ...c.s, id: target, state: 'published', draftOf: null } });
+    })();
+    A(req, 'termin.veroeffentlicht', target, { zusammenfassung: c.summary }); app.pushAll(); return target;
+  }
+  app.get('/api/v1/schedules', { config: { perm: 'schedules.read' }, schema: { querystring: { type: 'object', properties: { drafts: { type: 'string' } } } } }, async (req) => loadSchedules(db, { drafts: req.query.drafts === '1' }));
   app.post('/api/v1/schedules', { config: { perm: 'schedules.write' }, schema: { body: schedSchema } }, async (req, reply) => {
     const bad = checkSchedule(req.body); if (bad) return reply.code(400).send({ error: bad });
-    const id = randomUUID(); db.prepare('INSERT INTO schedules VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...schedRow(req.body, id, req));
-    A(req, 'termin.angelegt', id); app.pushAll(); return reply.code(201).send({ id, conflicts: conflictInfo(id) });
+    if (req.body.publish && !mayPublish(req, 'schedules')) return noPublish(reply);
+    const id = randomUUID(); db.prepare(INS).run(...schedRow(req.body, id, req)); A(req, 'termin.entwurf_angelegt', id);
+    if (req.body.publish) { const c = publishCheck(id); if (c.problems.length) { db.prepare('DELETE FROM schedules WHERE id=?').run(id); return reply.code(400).send({ error: c.problems[0] }); } publishSchedule(req, id); return reply.code(201).send({ id, published: true, summary: c.summary, conflicts: conflictInfo(id) }); }
+    return reply.code(201).send({ id, published: false });
   });
   app.put('/api/v1/schedules/:id', { config: { perm: 'schedules.write' }, schema: { body: schedSchema } }, async (req, reply) => {
-    if (!db.prepare('SELECT 1 FROM schedules WHERE id=?').get(req.params.id)) return reply.code(404).send({ error: 'Termin nicht gefunden.' });
+    const cur = db.prepare('SELECT * FROM schedules WHERE id=?').get(req.params.id); if (!cur) return reply.code(404).send({ error: 'Termin nicht gefunden.' });
     const bad = checkSchedule(req.body); if (bad) return reply.code(400).send({ error: bad });
-    db.prepare('DELETE FROM schedules WHERE id=?').run(req.params.id); db.prepare('INSERT INTO schedules VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(...schedRow(req.body, req.params.id, req));
-    A(req, 'termin.geaendert', req.params.id); app.pushAll(); return { ok: true, conflicts: conflictInfo(req.params.id) };
+    if (req.body.publish && !mayPublish(req, 'schedules')) return noPublish(reply);
+    let targetId = cur.id;
+    if (cur.state === 'published') { // Änderung an einem veröffentlichten Termin → Entwurfsversion, der Termin läuft unverändert weiter
+      const ex = db.prepare('SELECT id FROM schedules WHERE draft_of=?').get(cur.id); db.prepare('DELETE FROM schedules WHERE draft_of=?').run(cur.id); void ex;
+      targetId = randomUUID(); db.prepare(INS).run(...schedRow(req.body, targetId, req, 'draft', cur.id));
+    } else { db.prepare('DELETE FROM schedules WHERE id=?').run(cur.id); db.prepare(INS).run(...schedRow(req.body, cur.id, req, 'draft', cur.draft_of)); }
+    A(req, 'termin.entwurf_gespeichert', targetId);
+    if (req.body.publish) { const c = publishCheck(targetId); if (c.problems.length) return reply.code(400).send({ error: c.problems[0], draftId: targetId }); publishSchedule(req, targetId); return { ok: true, published: true, summary: c.summary, conflicts: conflictInfo(cur.state === 'published' ? cur.id : (cur.draft_of ?? cur.id)) }; }
+    return { ok: true, published: false, draftId: targetId };
+  });
+  app.get('/api/v1/schedules/:id/publish-check', { config: { perm: 'schedules.read' } }, async (req, reply) => {
+    const c = publishCheck(req.params.id); if (!c) return reply.code(404).send({ error: 'Termin nicht gefunden.' }); const { draft, s, ...out } = c; return out;
+  });
+  app.post('/api/v1/schedules/:id/publish', { config: { perm: 'schedules.write' } }, async (req, reply) => {
+    if (!mayPublish(req, 'schedules')) return noPublish(reply);
+    const d = db.prepare("SELECT id FROM schedules WHERE id=? AND state='draft'").get(req.params.id); if (!d) return reply.code(404).send({ error: 'Es gibt keinen Entwurf zum Veröffentlichen.' });
+    const c = publishCheck(d.id); if (c.problems.length) return reply.code(400).send({ error: c.problems[0] });
+    const id = publishSchedule(req, d.id); return { ok: true, id, summary: c.summary, conflicts: conflictInfo(id) };
+  });
+  app.post('/api/v1/schedules/:id/discard', { config: { perm: 'schedules.write' } }, async (req, reply) => {
+    const r = db.prepare("DELETE FROM schedules WHERE id=? AND state='draft'").run(req.params.id); if (!r.changes) return reply.code(404).send({ error: 'Es gibt keinen Entwurf.' });
+    A(req, 'termin.entwurf_verworfen', req.params.id); return { ok: true };
   });
   app.delete('/api/v1/schedules/:id', { config: { perm: 'schedules.write' } }, async (req, reply) => {
     const s = db.prepare('SELECT * FROM schedules WHERE id=?').get(req.params.id); if (!s) return reply.code(404).send({ error: 'Termin nicht gefunden.' });
-    toTrash(req, 'schedule', s.id, { schedule: s }); db.prepare('DELETE FROM schedules WHERE id=?').run(s.id); A(req, 'termin.geloescht', s.id); app.pushAll(); return { ok: true };
+    if (s.state === 'draft') { db.prepare('DELETE FROM schedules WHERE id=?').run(s.id); A(req, 'termin.entwurf_verworfen', s.id); return { ok: true }; }
+    toTrash(req, 'schedule', s.id, { schedule: s }); db.prepare('DELETE FROM schedules WHERE draft_of=?').run(s.id); db.prepare('DELETE FROM schedules WHERE id=?').run(s.id); A(req, 'termin.geloescht', s.id); app.pushAll(); return { ok: true };
   });
-  /** Termine als konkrete Fenster für den Kalender (Tag/Woche/Monat). */
-  app.get('/api/v1/calendar', { config: { perm: 'schedules.read' }, schema: { querystring: { type: 'object', required: ['from', 'to'], properties: { from: { type: 'string', pattern: DATE }, to: { type: 'string', pattern: DATE } } } } }, async (req) => {
+  // Versionsverlauf (90 Tage): Stand wiederherstellen = neuer Entwurf mit altem Inhalt
+  app.get('/api/v1/versions', { config: { perm: 'schedules.read' }, schema: { querystring: { type: 'object', required: ['kind', 'refId'], properties: { kind: { enum: ['schedule', 'playlist'] }, refId: { type: 'string' } } } } }, async (req) => {
+    db.prepare('DELETE FROM versions WHERE ts<?').run(now() - 90 * DAY);
+    return db.prepare('SELECT id,label,ts,user_name AS user FROM versions WHERE kind=? AND ref_id=? ORDER BY ts DESC LIMIT 50').all(req.query.kind, req.query.refId);
+  });
+  app.post('/api/v1/versions/:id/restore', { config: { perm: 'schedules.write' } }, async (req, reply) => {
+    const v = db.prepare('SELECT * FROM versions WHERE id=?').get(req.params.id); if (!v) return reply.code(404).send({ error: 'Diese Version gibt es nicht mehr.' }); const p = JSON.parse(v.payload_json);
+    if (v.kind === 'schedule') { const s = p.schedule; const bad = checkSchedule(s); if (bad) return reply.code(400).send({ error: 'Diese Version kann nicht wiederhergestellt werden: ' + bad });
+      db.prepare('DELETE FROM schedules WHERE draft_of=?').run(v.ref_id); const id = randomUUID(); const exists = db.prepare('SELECT 1 FROM schedules WHERE id=?').get(v.ref_id);
+      db.prepare(INS).run(...schedRow(s, exists ? id : v.ref_id, req, 'draft', exists ? v.ref_id : null)); A(req, 'version.wiederhergestellt', v.ref_id); return { ok: true, draftId: exists ? id : v.ref_id }; }
+    const exists = db.prepare('SELECT * FROM playlists WHERE id=?').get(v.ref_id); if (!exists) return reply.code(400).send({ error: 'Die Abspielliste gibt es nicht mehr.' });
+    db.prepare('DELETE FROM playlists WHERE draft_of=?').run(v.ref_id); const id = randomUUID(); db.prepare("INSERT INTO playlists(id,name,is_default,state,draft_of,created_at) VALUES(?,?,?,'draft',?,?)").run(id, p.name, p.isDefault ? 1 : 0, v.ref_id, now());
+    p.items.filter((i) => db.prepare('SELECT 1 FROM media WHERE id=?').get(i.mediaId)).forEach((i, n) => db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), id, i.mediaId, n, i.duration, i.transition, i.validFrom, i.validTo));
+    A(req, 'version.wiederhergestellt', v.ref_id); return { ok: true, draftId: id };
+  });
+  /** Termine als konkrete Fenster für den Kalender; Entwürfe nur auf Wunsch (gestrichelt dargestellt) */
+  app.get('/api/v1/calendar', { config: { perm: 'schedules.read' }, schema: { querystring: { type: 'object', required: ['from', 'to'], properties: { from: { type: 'string', pattern: DATE }, to: { type: 'string', pattern: DATE }, drafts: { type: 'string' } } } } }, async (req) => {
     const f = localToEpoch(req.query.from, '00:00'), t = localToEpoch(req.query.to, '23:59');
-    return loadSchedules(db).flatMap((s) => expand(s, f, t).map((w) => ({ scheduleId: s.id, start: w.start, end: w.end, targetType: s.targetType, targetId: s.targetId, content: s.content, priority: s.priority })));
+    return loadSchedules(db, { drafts: req.query.drafts === '1' }).flatMap((s) => expand(s, f, t).map((w) => ({ scheduleId: s.id, state: s.state, draftOf: s.draftOf, start: w.start, end: w.end, targetType: s.targetType, targetId: s.targetId, content: s.content, priority: s.priority })));
   });
-  /** Vorschau: „So sieht der Bildschirm am Dienstag um 10:00 Uhr aus“ */
-  app.get('/api/v1/preview', { config: { perm: 'schedules.read' }, schema: { querystring: { type: 'object', required: ['deviceId', 'date', 'time'], properties: { deviceId: { type: 'string' }, date: { type: 'string', pattern: DATE }, time: { type: 'string', pattern: '^\\d{2}:\\d{2}$' } } } } }, async (req, reply) => {
+  /** Vorschau: „So sieht der Bildschirm am Dienstag um 10:00 Uhr aus“ – mit drafts=1 inkl. Entwürfen („Probelauf“) */
+  app.get('/api/v1/preview', { config: { perm: 'schedules.read' }, schema: { querystring: { type: 'object', required: ['deviceId', 'date', 'time'], properties: { deviceId: { type: 'string' }, date: { type: 'string', pattern: DATE }, time: { type: 'string', pattern: '^\\d{2}:\\d{2}$' }, drafts: { type: 'string' } } } } }, async (req, reply) => {
     const d = db.prepare('SELECT * FROM devices WHERE id=?').get(req.query.deviceId); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
     const t = localToEpoch(req.query.date, req.query.time);
-    const seg = currentSegment(buildTimeline(loadSchedules(db), { deviceId: d.id, groupId: d.group_id }, t - DAY, t + DAY), t);
+    const seg = currentSegment(buildTimeline(loadSchedules(db, { drafts: req.query.drafts === '1' }), { deviceId: d.id, groupId: d.group_id }, t - DAY, t + DAY), t);
     let playlistId = seg?.source?.content.type === 'playlist' ? seg.source.content.id : null, mediaIds = [];
     if (seg?.source?.content.type === 'media') mediaIds = [seg.source.content.id];
-    else { playlistId ??= db.prepare('SELECT id FROM playlists WHERE is_default=1').get()?.id; if (playlistId) mediaIds = db.prepare('SELECT media_id FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(playlistId).map((r) => r.media_id); }
+    else { playlistId ??= db.prepare("SELECT id FROM playlists WHERE is_default=1 AND state='published'").get()?.id; if (playlistId) mediaIds = db.prepare('SELECT media_id FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(playlistId).map((r) => r.media_id); }
     return { source: seg?.source ? 'termin' : mediaIds.length ? 'standard' : 'standby', scheduleId: seg?.source?.scheduleId ?? null, playlistId, mediaIds,
       text: seg?.source ? 'Ein Termin legt fest, was gezeigt wird.' : mediaIds.length ? 'Es läuft die Standard-Abspielliste.' : 'Es gibt nichts zu zeigen. Der Bildschirm zeigt das DFM-Standby-Bild.' };
   });
@@ -230,7 +335,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   });
 
   // ---------- Einstellungen ----------
-  const DEFAULTS = { 'site.name': 'Deutsches Fußballmuseum', 'feature.weburl': 'false', 'feature.rss': 'false', 'feature.weather': 'false', 'mail.enabled': 'false', 'ssh.enabled': 'false', 'sync.window': '', 'sync.bandwidthKbps': '0', 'demo.enabled': 'true', 'backup.extraDir': '', 'wizard.done': 'false' };
+  const DEFAULTS = { 'site.name': 'Deutsches Fußballmuseum', 'feature.weburl': 'false', 'feature.rss': 'false', 'feature.weather': 'false', 'mail.enabled': 'false', 'ssh.enabled': 'false', 'sync.window': '', 'sync.bandwidthKbps': '0', 'demo.enabled': 'true', 'backup.extraDir': '', 'wizard.done': 'false', 'publish.editor': 'true' };
   const getSettings = () => ({ ...DEFAULTS, ...Object.fromEntries(db.prepare('SELECT key,value FROM settings').all().map((r) => [r.key, r.value])) });
   app.decorate('settings', getSettings);
   app.get('/api/v1/settings', { config: { perm: 'settings.manage' } }, async () => getSettings());

@@ -78,7 +78,7 @@ test('Text-Ankündigung: Browser-Profile bekommen Text, Lite ein vorgerendertes 
   const lite = addDevice(h, 'lite'), std = addDevice(h, 'standard');
   const id = (await a('POST', '/api/v1/media/text', { name: 'Hinweis', title: 'Heute geschlossen <script>alert(1)</script>', body: 'Wegen Veranstaltung.', template: 'hinweis' })).json().id;
   const pl = (await a('POST', '/api/v1/playlists', { name: 'L' })).json().id;
-  await a('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: id, duration: 8 }] });
+  await a('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: id, duration: 8 }], publish: true });
   await h.app.variants.idle();
   const man = (devId) => { const d = h.db.prepare('SELECT * FROM devices WHERE id=?').get(devId); return import('../lib/plan.js').then((p) => p.manifestPayload(h.db, d)); };
   assert.equal((await man(std)).items[0].kind, 'text');
@@ -93,20 +93,20 @@ test('Abspielliste, Termin, Konflikt-Hinweis, Vorschau, Kalender', async () => {
   const dv = addDevice(h, 'standard');
   const mk = async (n) => (await a('POST', '/api/v1/media/text', { name: n, title: n })).json().id;
   const [m1, m2] = [await mk('Sommer-Aktion'), await mk('Winter')];
-  const p1 = (await a('POST', '/api/v1/playlists', { name: 'Sommer' })).json().id; await a('PUT', `/api/v1/playlists/${p1}`, { items: [{ mediaId: m1 }] });
-  const p2 = (await a('POST', '/api/v1/playlists', { name: 'Winter' })).json().id; await a('PUT', `/api/v1/playlists/${p2}`, { items: [{ mediaId: m2 }] });
+  const p1 = (await a('POST', '/api/v1/playlists', { name: 'Sommer' })).json().id; await a('PUT', `/api/v1/playlists/${p1}`, { items: [{ mediaId: m1 }], publish: true });
+  const p2 = (await a('POST', '/api/v1/playlists', { name: 'Winter' })).json().id; await a('PUT', `/api/v1/playlists/${p2}`, { items: [{ mediaId: m2 }], publish: true });
   const base = { targetType: 'device', targetId: dv, startLocal: '2026-10-13T10:00', endLocal: '2026-10-13T12:00', priority: 5 };
-  const s1 = await a('POST', '/api/v1/schedules', { ...base, content: { type: 'playlist', id: p1 } }); assert.equal(s1.statusCode, 201); assert.equal(s1.json().conflicts.length, 0);
-  const s2 = await a('POST', '/api/v1/schedules', { ...base, startLocal: '2026-10-13T11:00', content: { type: 'playlist', id: p2 } });
+  const s1 = await a('POST', '/api/v1/schedules', { ...base, publish: true, content: { type: 'playlist', id: p1 } }); assert.equal(s1.statusCode, 201); assert.equal(s1.json().conflicts.length, 0);
+  const s2 = await a('POST', '/api/v1/schedules', { ...base, publish: true, startLocal: '2026-10-13T11:00', content: { type: 'playlist', id: p2 } });
   assert.equal(s2.json().conflicts.length, 1); assert.match(s2.json().conflicts[0].text, /überschneiden sich/);
   const pv = (await a('GET', `/api/v1/preview?deviceId=${dv}&date=2026-10-13&time=10:30`)).json(); assert.equal(pv.source, 'termin'); assert.equal(pv.playlistId, p1);
   const pv2 = (await a('GET', `/api/v1/preview?deviceId=${dv}&date=2026-10-13&time=11:30`)).json(); assert.equal(pv2.playlistId, p2, 'später gestartet gewinnt');
   const pv3 = (await a('GET', `/api/v1/preview?deviceId=${dv}&date=2026-10-13&time=15:00`)).json(); assert.equal(pv3.source, 'standard');
   assert.equal((await a('GET', '/api/v1/calendar?from=2026-10-12&to=2026-10-18')).json().length, 2);
   // Validierung in verständlicher Sprache
-  assert.match((await a('POST', '/api/v1/schedules', { ...base, endLocal: '2026-10-13T09:00', content: { type: 'playlist', id: p1 } })).json().error, /Ende liegt vor dem Start/);
-  assert.equal((await a('POST', '/api/v1/schedules', { ...base, rrule: 'FREQ=DAILY;X=1', content: { type: 'playlist', id: p1 } })).statusCode, 400);
-  assert.equal((await a('POST', '/api/v1/schedules', { ...base, targetId: 'nix', content: { type: 'playlist', id: p1 } })).statusCode, 400);
+  assert.match((await a('POST', '/api/v1/schedules', { ...base, publish: true, endLocal: '2026-10-13T09:00', content: { type: 'playlist', id: p1 } })).json().error, /Ende liegt vor dem Start/);
+  assert.equal((await a('POST', '/api/v1/schedules', { ...base, publish: true, rrule: 'FREQ=DAILY;X=1', content: { type: 'playlist', id: p1 } })).statusCode, 400);
+  assert.equal((await a('POST', '/api/v1/schedules', { ...base, publish: true, targetId: 'nix', content: { type: 'playlist', id: p1 } })).statusCode, 400);
   // Plan für den Player
   const { schedulePayload } = await import('../lib/plan.js');
   const plan = schedulePayload(h.db, h.db.prepare('SELECT * FROM devices WHERE id=?').get(dv), new Date('2026-10-12T00:00:00Z').getTime());
@@ -117,7 +117,7 @@ test('Abspielliste, Termin, Konflikt-Hinweis, Vorschau, Kalender', async () => {
 test('Papierkorb: Löschen mit Bestätigung, Wiederherstellen, Rückgängig', async () => {
   const h = await makeHub(); const a = await h.as('admin');
   const m = (await a('POST', '/api/v1/media/text', { name: 'Wichtig', title: 'W' })).json().id;
-  const pl = (await a('POST', '/api/v1/playlists', { name: 'P' })).json().id; await a('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: m }] });
+  const pl = (await a('POST', '/api/v1/playlists', { name: 'P' })).json().id; await a('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: m }], publish: true });
   const del = await a('DELETE', `/api/v1/media/${m}`); assert.equal(del.statusCode, 409); assert.equal(del.json().needsConfirm, true);
   assert.equal((await a('DELETE', `/api/v1/media/${m}?force=1`)).statusCode, 200);
   assert.equal(h.db.prepare('SELECT COUNT(*) n FROM playlist_items WHERE playlist_id=?').get(pl).n, 0);

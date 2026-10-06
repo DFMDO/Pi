@@ -20,7 +20,7 @@ export function deviceStatus(d, now = Date.now()) {
   if (d.status === 'pending') return { level: 'pending', icon: '⏳', label: 'Wartet auf Bestätigung' };
   if (d.status === 'blocked') return { level: 'bad', icon: '⛔', label: 'Gesperrt' };
   const age = now - (d.last_seen ?? 0);
-  if (age < 90000) return { level: 'ok', icon: '●', label: 'Läuft' };
+  if (age < 65000) return { level: 'ok', icon: '●', label: 'Läuft' };
   if (age < 600000) return { level: 'warn', icon: '▲', label: 'Keine Verbindung' };
   return { level: 'bad', icon: '✖', label: 'Nicht erreichbar' };
 }

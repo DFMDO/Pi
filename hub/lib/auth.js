@@ -149,7 +149,7 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
     db.prepare('SELECT id,name,role,totp_secret_enc IS NOT NULL AS totp,created_at FROM users ORDER BY name').all());
   app.post('/api/v1/users', { config: { perm: 'users.manage' }, schema: { body: { type: 'object', required: ['name', 'password', 'role'],
     additionalProperties: false, properties: { name: { type: 'string', minLength: 2, maxLength: 60 }, password: { type: 'string', maxLength: 300 },
-      role: { enum: ['admin', 'editor', 'viewer'] } } } } }, async (req, reply) => {
+      role: { enum: ['admin', 'editor', 'anzeige'] } } } } }, async (req, reply) => {
     const { name, password, role } = req.body;
     const bad = checkPasswordPolicy(password, name);
     if (bad) return reply.code(400).send({ error: bad });
@@ -159,8 +159,23 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
     audit.log({ user: req.user, action: 'benutzer.angelegt', target: name, ip: req.ip, detail: { role } });
     return reply.code(201).send({ id });
   });
+  const adminCount = () => db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin'").get().n;
+  app.patch('/api/v1/users/:id', { config: { perm: 'users.manage' }, schema: { body: { type: 'object', required: ['role'], additionalProperties: false, properties: { role: { enum: ['admin', 'editor', 'anzeige'] } } } } }, async (req, reply) => {
+    const u = q.byId.get(req.params.id); if (!u) return reply.code(404).send({ error: 'Benutzer nicht gefunden.' });
+    if (u.role === 'admin' && req.body.role !== 'admin' && adminCount() <= 1) return reply.code(409).send({ error: 'Das ist der letzte Admin. Lege zuerst einen weiteren Admin an – sonst könnte niemand mehr alles verwalten.' });
+    db.prepare('UPDATE users SET role=? WHERE id=?').run(req.body.role, u.id); db.prepare('DELETE FROM sessions WHERE user_id=?').run(u.id);
+    audit.log({ user: req.user, action: 'benutzer.rolle_geaendert', target: u.name, ip: req.ip, security: true, detail: { von: u.role, zu: req.body.role } }); return { ok: true };
+  });
+  // Passwort zurücksetzen ohne E-Mail: durch einen Admin (Wiederherstellungscodes gelten für die 2-Faktor-Anmeldung)
+  app.post('/api/v1/users/:id/password', { config: { perm: 'users.manage' }, schema: { body: { type: 'object', required: ['password'], additionalProperties: false, properties: { password: { type: 'string', maxLength: 300 } } } } }, async (req, reply) => {
+    const u = q.byId.get(req.params.id); if (!u) return reply.code(404).send({ error: 'Benutzer nicht gefunden.' });
+    const bad = checkPasswordPolicy(req.body.password, u.name); if (bad) return reply.code(400).send({ error: bad });
+    db.prepare('UPDATE users SET pw_hash=?, failed=0, locked_until=0 WHERE id=?').run(await hashPassword(req.body.password), u.id); db.prepare('DELETE FROM sessions WHERE user_id=?').run(u.id);
+    audit.log({ user: req.user, action: 'benutzer.passwort_zurueckgesetzt', target: u.name, ip: req.ip, security: true }); return { ok: true };
+  });
   app.delete('/api/v1/users/:id', { config: { perm: 'users.manage' } }, async (req, reply) => {
     if (req.params.id === req.user.id) return reply.code(400).send({ error: 'Du kannst dich nicht selbst löschen.' });
+    const target = q.byId.get(req.params.id); if (target?.role === 'admin' && adminCount() <= 1) return reply.code(409).send({ error: 'Das ist der letzte Admin und kann nicht gelöscht werden.' });
     const r = db.prepare('DELETE FROM users WHERE id=?').run(req.params.id);
     if (!r.changes) return reply.code(404).send({ error: 'Benutzer nicht gefunden.' });
     audit.log({ user: req.user, action: 'benutzer.geloescht', target: req.params.id, ip: req.ip });
