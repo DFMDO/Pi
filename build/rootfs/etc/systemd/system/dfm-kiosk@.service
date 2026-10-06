@@ -1,0 +1,23 @@
+[Unit]
+Description=DFM Bildschirm (%i)
+After=dfm-setup.service systemd-user-sessions.service
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+# Cage = minimaler Wayland-Kiosk. Chromium darf NUR localhost erreichen (Host-Resolver-Regel).
+User=dfm-kiosk
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty-fail
+StandardOutput=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+EnvironmentFile=-/usr/lib/dfm/kiosk-%i.env
+ExecStart=/usr/bin/cage -s -- /usr/bin/chromium --kiosk --app=${URL} --user-data-dir=/run/dfm-kiosk-profile --noerrdialogs --disable-infobars --no-first-run --disable-sync --disable-features=Translate,MediaRouter --ozone-platform=wayland --host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE 127.0.0.1" --proxy-server=direct:// --disk-cache-size=1
+ExecStartPost=-/usr/bin/plymouth quit
+Restart=always
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+MemoryMax=300M

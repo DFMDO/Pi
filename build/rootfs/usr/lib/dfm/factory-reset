@@ -1,0 +1,8 @@
+#!/bin/sh
+# Werksreset: Datenpartition leeren (Schlüssel, WLAN, Datenbank, Medien) → nächster Start = Erststart.
+set -eu
+systemctl stop dfm-hub.target dfm-player.target dfm-setup.target 2>/dev/null || true
+DEV=$(blkid -L DFMDATA)
+umount -R /data 2>/dev/null || true
+mkfs.ext4 -F -q -L DFMDATA -m 0 "$DEV"
+systemctl reboot

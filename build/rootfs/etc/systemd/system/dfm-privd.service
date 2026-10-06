@@ -1,0 +1,9 @@
+[Unit]
+Description=DFM privilegierte Aktionen (feste Liste erlaubter Befehle)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/dfm/launch privd
+NoNewPrivileges=no
+ProtectHome=yes
+PrivateTmp=yes

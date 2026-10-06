@@ -1,0 +1,13 @@
+#!/bin/sh
+# Startet den Dienst aus dem zuletzt eingespielten Update (/data/app/current) oder aus dem Image (/opt/dfm).
+set -eu
+ROOT=/opt/dfm
+[ -e /data/app/current/hub/server.js ] && ROOT=/data/app/current
+case "$1" in
+  hub) exec /opt/node/bin/node "$ROOT/hub/server.js" ;;
+  agent) exec /opt/node/bin/node "$ROOT/player/agent/agent.js" ;;
+  setup) exec /opt/node/bin/node "$ROOT/setup/setup.js" ;;
+  privd) exec /opt/node/bin/node "$ROOT/player/agent/privd-main.js" ;;
+  netwatch) exec /opt/node/bin/node "$ROOT/setup/netwatch-main.js" ;;
+  firstboot) exec /opt/node/bin/node "$ROOT/setup/firstboot.js" ;;
+esac

@@ -60,7 +60,7 @@ export async function runFirstboot({ dataDir, bootDir, exec = async () => {}, rn
     const hw = detectHardware(); const serial = serialOf(cpuinfo), suffix = genSuffix(rnd);
     dev = { deviceId: randomUUID(), suffix, hostname: `dfm-${suffix}`, serial, hw, headless: !displayConnected(drmDir), createdAt: new Date().toISOString() };
     writeAtomic(devFile, JSON.stringify(dev), 0o644);
-    await exec('hostnamectl', ['set-hostname', dev.hostname]);
+    await exec('hostname', [dev.hostname]); // nur im Speicher; Root ist schreibgeschützt, select-mode.sh setzt ihn bei jedem Start
   }
   // Geräteinfo für den PC (Label drucken): Seriennummer + (bei Headless) Einrichtungs-PIN
   const info = [`Gerät: ${dev.hostname}`, `Seriennummer: ${dev.serial}`, `Modell: ${dev.hw.model}`, dev.headless ? `Einrichtungs-PIN (Headless): ${dev.serial.slice(-6).toUpperCase()}` : '', ''].filter((x, i, a) => x !== '' || i === a.length - 1).join('\n');

@@ -15,7 +15,7 @@ test('Erststart: zufällige ID/Hostname pro Gerät, Geräteinfo für den PC – 
   const ra = await runFirstboot({ ...a, cpuinfo: CPU, exec: async (...c) => calls.push(c), drmDir: '/nichts' });
   const rb = await runFirstboot({ ...b, cpuinfo: CPU, drmDir: '/nichts' });
   assert.equal(ra.mode, 'setup'); assert.notEqual(ra.device.deviceId, rb.device.deviceId); assert.match(ra.device.hostname, /^dfm-[a-hj-km-np-z2-9]{4}$/);
-  assert.deepEqual(calls[0], ['hostnamectl', ['set-hostname', ra.device.hostname]]);
+  assert.deepEqual(calls[0], ['hostname', [ra.device.hostname]]);
   const info = readFileSync(join(a.bootDir, 'geraeteinfo.txt'), 'utf8'); assert.match(info, /Seriennummer: 10000000a1b2c3d4/); assert.match(info, /PIN \(Headless\): [0-9A-F]{6}/);
   const again = await runFirstboot({ ...a, cpuinfo: CPU, drmDir: '/nichts' }); assert.equal(again.device.deviceId, ra.device.deviceId, 'idempotent');
   assert.equal(new Set(Array.from({ length: 200 }, () => genSuffix())).size > 150, true);

@@ -11,7 +11,7 @@ export const randPin = (rnd = randomInt) => String(rnd(1000000)).padStart(6, '0'
 
 export const IDLE_MS = 15 * 60000, MAX_PIN_FAILS = 5;
 
-export function createController({ nm, suffix, now = () => Date.now(), rnd = randomInt, writeConfig, hashPassword, policy, hw = {}, onDone = () => {}, discoverHub = async () => null, log = () => {}, serialPin = null, headless = false }) {
+export function createController({ nm, suffix, now = () => Date.now(), rnd = randomInt, writeConfig, hashPassword, policy, hw = {}, onDone = () => {}, discoverHub = async () => null, log = () => {}, serialPin = null, headless = false, wifiOnly = false, onWifiOnlyDone = async () => {} }) {
   const s = { phase: 'welcome', ssid: `DFM-Setup-${suffix}`, password: '', pin: '', fails: 0, sessions: new Set(), started: 0, last: 0, stations: 0, draft: {}, result: { state: 'idle' }, networks: [], hubFound: null };
 
   async function startMode() { // (Neu-)Start: neues Passwort + neue PIN, nur hier gültig
@@ -46,7 +46,7 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
 
   const api = {
     state: s, startMode, tick, enterPin, authed,
-    info(t) { if (!authed(t)) return null; touch(); return { model: hw.model ?? '', profile: hw.profile ?? 'standard', band24only: !/Pi (4|5|400|500)/.test(hw.model ?? ''), hubWarning: hw.profile && hw.profile !== 'pro' ? 'Dieses Gerät ist eher schwach. Als Hub empfehlen wir einen Raspberry Pi 4 (2 GB) oder besser.' : null,
+    info(t) { if (!authed(t)) return null; touch(); return { wifiOnly, model: hw.model ?? '', profile: hw.profile ?? 'standard', band24only: !/Pi (4|5|400|500)/.test(hw.model ?? ''), hubWarning: hw.profile && hw.profile !== 'pro' ? 'Dieses Gerät ist eher schwach. Als Hub empfehlen wir einen Raspberry Pi 4 (2 GB) oder besser.' : null,
       hubFound: s.hubFound, networks: s.networks, suffix, defaultName: `Bildschirm ${suffix}` }; },
 
     /** Schritt 1: WLAN prüfen. Wegen AP-only wird der Hotspot kurz abgeschaltet (Zwei-Phasen-Test). */
@@ -71,6 +71,13 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
     /** Alles abschließen: validieren, WLAN dauerhaft verbinden, Konfiguration schreiben. */
     async finish(t, d) {
       if (!authed(t)) return { ok: false, status: 401 }; touch();
+      if (wifiOnly) { // „Nur WLAN ändern“: Rolle und Zugangsdaten bleiben, es wird nur das neue WLAN verbunden
+        if (!s.draft.wifi) return { ok: false, errors: ['Bitte wähle zuerst ein WLAN.'] };
+        s.result = { state: 'finishing' }; s.phase = 'testing';
+        setTimeout(async () => { await nm.stopHotspot(); const r = await nm.connect(s.draft.wifi); if (!r.ok) { s.result = { state: 'failed', error: friendlyWifiError(r.reason) }; return restartHotspot(); }
+          await onWifiOnlyDone(); s.phase = 'done'; s.result = { state: 'done', role: 'wifi' }; onDone({ wifiOnly: true }); }, 1200);
+        return { ok: true };
+      }
       const draft = { ...s.draft, ...d, wifi: s.draft.wifi };
       const errors = validateDraft(draft, { adminPolicy: policy }); if (errors.length) return { ok: false, errors };
       s.draft = draft; s.result = { state: 'finishing' }; s.phase = 'testing';

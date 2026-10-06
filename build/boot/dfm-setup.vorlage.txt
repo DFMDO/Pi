@@ -1,0 +1,25 @@
+# DFM Signage – Einrichtung per Datei (dfm-setup.txt)
+# Diese Datei wird beim ersten Start eingelesen und danach GELÖSCHT (sie enthält Passwörter).
+# Zeilen mit # werden ignoriert. Format:  eintrag = wert
+# Benenne die Datei von "dfm-setup.vorlage.txt" in "dfm-setup.txt" um, wenn du sie nutzen willst.
+
+# --- WLAN (Pflicht für WLAN-Betrieb; bei Netzwerkkabel nicht nötig) ---
+wlan_name = Museum-Signage
+wlan_passwort = HIER-DAS-WLAN-PASSWORT
+# wlan_versteckt = true
+
+# --- Rolle: hub (Hauptrechner, nur einer pro Museum) oder player (Bildschirm) ---
+rolle = player
+
+# --- Für einen Bildschirm (player) ---
+geraetename = Shop-Screen
+hub_adresse = dfm-signage.local
+# Einmalcode aus dem Hub: "Neuen Bildschirm verbinden"
+einrichtungscode = XXXX-XXXX
+# Optional, aber empfohlen: Fingerabdruck des Hubs (steht auf der Startkarte)
+# hub_fingerabdruck = A3F2 91C0 7B44 D8E1 5C6A 0F73 B2E9 1D88 4A21 CC09 E7F5 3B60 92D1 08AE 6C47 F13B
+
+# --- Für den Hub (rolle = hub) ---
+# admin_name = Chefin
+# admin_passwort = mindestens-12-Zeichen-lang
+# standort = Deutsches Fußballmuseum

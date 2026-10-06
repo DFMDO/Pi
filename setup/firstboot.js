@@ -1,7 +1,8 @@
 // dfm-firstboot (Node-Teil): wird von /usr/lib/dfm/firstboot.sh nach dem Erweitern der Datenpartition gestartet.
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { runFirstboot } from './lib/firstboot.js';
+import { runFirstboot, resetRequested, clearPowerCounter } from './lib/firstboot.js';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { createNm } from './lib/nm.js';
 import { writeFinalConfig } from './lib/config.js';
 import { hashPassword } from '../hub/lib/crypto.js';
@@ -18,3 +19,8 @@ const applyConfig = async (d, dev) => { // Datei-Weg: gleiche Ergebnisse wie die
 };
 const res = await runFirstboot({ dataDir, bootDir, exec, cpuinfo: readFileSync('/proc/cpuinfo', 'utf8'), applyConfig });
 console.log(JSON.stringify({ mode: res.mode, errors: res.errors ?? [] }));
+
+// WLAN zurücksetzen ohne Tastatur: Datei „dfm-reset-wifi“ auf der SD-Karte oder 5× Strom aus/ein (je Zyklus < 30 s Laufzeit)
+mkdirSync(`${dataDir}/state`, { recursive: true });
+const why = existsSync(`${dataDir}/config.json`) ? resetRequested({ bootDir, counterFile: `${dataDir}/state/power-cycles` }) : null;
+if (why) { await exec('nmcli', ['connection', 'delete', 'dfm-wifi']); writeFileSync(`${dataDir}/state/force-setup`, why); clearPowerCounter(`${dataDir}/state/power-cycles`); console.log(JSON.stringify({ reset: why })); }

@@ -1,0 +1,11 @@
+[Unit]
+Description=DFM Netzwächter (WLAN-Verlust → Einrichtungsmodus nach 10 Minuten)
+After=NetworkManager.service
+
+[Service]
+ExecStart=/usr/lib/dfm/launch netwatch
+Restart=on-failure
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/run/dfm

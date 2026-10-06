@@ -1,0 +1,20 @@
+# Boot-Splash: dunkler Hintergrund, DFM-Logo, „Willkommen“, ruhiger Fortschrittsbalken. Nie Konsolentext.
+Window.SetBackgroundTopColor(0.10, 0.10, 0.10);
+Window.SetBackgroundBottomColor(0.10, 0.10, 0.10);
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetX(Window.GetWidth() / 2 - logo.image.GetWidth() / 2);
+logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight());
+text.image = Image.Text("Willkommen", 1, 1, 1, 1, "Sans 28");
+text.sprite = Sprite(text.image);
+text.sprite.SetX(Window.GetWidth() / 2 - text.image.GetWidth() / 2);
+text.sprite.SetY(Window.GetHeight() / 2 + 20);
+bar.w = Window.GetWidth() / 4; bar.x = Window.GetWidth() / 2 - bar.w / 2; bar.y = Window.GetHeight() / 2 + 100;
+fun refresh() { }
+Plymouth.SetRefreshFunction(refresh);
+fun progress(duration, progress) {
+  bar.image = Image.Text(" ", 1, 1, 1, 1);
+  bar.fill = Sprite(); bar.fill.SetImage(Image("bar.png").Scale(Math.Int(bar.w * progress) + 1, 8));
+  bar.fill.SetX(bar.x); bar.fill.SetY(bar.y);
+}
+Plymouth.SetBootProgressFunction(progress);

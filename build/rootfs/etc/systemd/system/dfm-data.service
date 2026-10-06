@@ -1,0 +1,14 @@
+[Unit]
+Description=DFM Datenpartition erweitern und einbinden
+DefaultDependencies=no
+After=systemd-udev-settle.service
+Before=local-fs.target dfm-firstboot.service systemd-journal-flush.service
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/dfm/datamount.sh
+
+[Install]
+WantedBy=local-fs.target

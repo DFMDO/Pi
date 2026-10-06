@@ -43,10 +43,16 @@
     for (;;) { // Seite bleibt offen, solange das Handy neu verbindet
       await new Promise((res) => setTimeout(res, 2500)); let s; try { s = await api('/result'); } catch { continue; }
       if (s.status === 401) return pinView('Die Verbindung wurde neu gestartet. Bitte gib die PIN noch einmal ein.');
-      if (s.state === 'wifi-ok') { info = await api('/info'); if (s.hub?.host && !d.hubAddress) { d.hubAddress = s.hub.host; if (!d.role) d.role = 'player'; } return roleView(); }
+      if (s.state === 'wifi-ok') { info = await api('/info'); if (info.wifiOnly) return finishWifiOnly(); if (s.hub?.host && !d.hubAddress) { d.hubAddress = s.hub.host; if (!d.role) d.role = 'player'; } return roleView(); }
       if (s.state === 'wifi-failed') return wifiView(s.error);
       if (++tries > 60) return wifiView('Das Prüfen dauert zu lange. Bitte versuche es noch einmal.');
     }
+  }
+
+  async function finishWifiOnly() {
+    view(4, 'WLAN wird geändert …', h('div', { class: 'spin', role: 'status' }), h('p', {}, 'Das Gerät verbindet sich jetzt mit dem neuen WLAN. Rolle und Einstellungen bleiben erhalten.'));
+    await api('/finish', {}); await new Promise((r) => setTimeout(r, 12000));
+    view(4, 'Fertig!', h('div', { class: 'card' }, h('p', { class: 'ok' }, '✔ Das WLAN wurde geändert.'), h('p', {}, 'Das Gerät startet neu und zeigt danach wieder seine Inhalte. Du kannst das Setup-WLAN jetzt verlassen.')));
   }
 
   function roleView() {

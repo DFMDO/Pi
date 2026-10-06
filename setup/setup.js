@@ -57,7 +57,7 @@ export function createServers(ctl, { toSvg = (t) => QRCode.toString(t, { type: '
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { hashPassword, checkPasswordPolicy } = await import('../hub/lib/crypto.js');
   const dev = JSON.parse(readFileSync(join(process.env.DFM_DATA ?? '/data', 'device.json'), 'utf8'));
-  const ctl = createController({ nm: createNm(), suffix: dev.suffix, hw: dev.hw, hashPassword, policy: checkPasswordPolicy, writeConfig: writeFinalConfig, serialPin: dev.headless ? dev.serial.slice(-6).toUpperCase() : null,
+  const ctl = createController({ nm: createNm(), suffix: dev.suffix, hw: dev.hw, hashPassword, policy: checkPasswordPolicy, writeConfig: writeFinalConfig, serialPin: dev.headless ? dev.serial.slice(-6).toUpperCase() : null, wifiOnly: existsSync('/data/state/force-setup'), onWifiOnlyDone: async () => (await import('node:fs/promises')).rm('/data/state/force-setup', { force: true }),
     onDone: () => setTimeout(() => import('node:child_process').then((c) => c.execFile('systemctl', ['reboot'])), 6000), log: (...a) => console.error(...a) });
   await ctl.startMode();
   const { portal, display } = createServers(ctl);

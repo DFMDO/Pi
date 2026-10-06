@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { uptime } from 'node:os';
 
+export const MIN_EPOCH = Date.UTC(2026, 0, 1);
 const read = (f) => { try { return readFileSync(f, 'utf8'); } catch { return null; } };
 const run = (c, a) => new Promise((res) => execFile(c, a, { timeout: 4000 }, (e, so) => res(e ? '' : so)));
 
@@ -15,8 +16,10 @@ export const parseSignal = (t) => { const m = /signal:\s*(-?\d+) dBm/.exec(t ?? 
 
 export async function timeSynced() {
   if (process.env.DFM_FAKE_TIMESYNC) return process.env.DFM_FAKE_TIMESYNC === '1';
-  const o = (await run('timedatectl', ['show', '-p', 'NTPSynchronized', '--value'])).trim();
-  return o === 'yes';
+  if (Date.now() < MIN_EPOCH) return false; // Datum vor dem Bau des Images = Uhr nicht gestellt
+  const t = (await run('chronyc', ['-c', 'tracking'])).trim().split(',');  // refid,name,stratum,…,leapstatus
+  if (t.length > 13) return Number(t[2]) < 16 && t[13] === 'Normal';
+  return (await run('timedatectl', ['show', '-p', 'NTPSynchronized', '--value'])).trim() === 'yes';
 }
 export async function collect({ version, extra = {} }) {
   const t = read('/sys/class/thermal/thermal_zone0/temp');

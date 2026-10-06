@@ -1,0 +1,35 @@
+[Unit]
+Description=DFM Player-Agent
+After=network-online.target dfm-firstboot.service
+Wants=network-online.target
+ConditionPathExists=/data/agent/agent.json
+
+[Service]
+User=dfm-agent
+Group=dfm-agent
+SupplementaryGroups=video render input audio
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty-fail
+UtmpIdentifier=tty1
+UtmpMode=user
+Environment=DFM_AGENT_DATA=/data/agent DFM_PRIVD_DIR=/run/dfm/privd DFM_DEVICE_FILE=/data/device.json DFM_BASE=/opt/dfm
+ExecStart=/usr/lib/dfm/launch agent
+ExecStartPost=-/usr/bin/plymouth quit
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+ReadWritePaths=/data/agent /run/dfm/privd /run/user
+MemoryMax=600M
+UMask=0077
+# Am Player gibt es keine eingehenden Ports: der lokale Server bindet nur 127.0.0.1
+
+[Install]
+WantedBy=multi-user.target

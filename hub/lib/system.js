@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { loadavg, totalmem, freemem, uptime, networkInterfaces } from 'node:os';
 import { setupBackupKey, encryptBackup, decryptBackup, createArchive, runScheduledBackup } from './backup.js';
 import { stage, activate, rollback } from './update.js';
+import { request as privRequest } from '../../player/agent/lib/privd.js';
 import { formatFingerprint } from './tls.js';
 
 const DAY = 86400000;
@@ -27,6 +28,13 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
   app.get('/api/v1/system/hub', { config: { perm: 'devices.read' } }, async () => ({ fingerprint: formatFingerprint(tls.spki), host: 'dfm-signage.local',
     addresses: Object.values(networkInterfaces()).flat().filter((i) => i && !i.internal && i.family === 'IPv4').map((i) => ({ ip: i.address, mac: i.mac })),
     tip: 'Bitte die IT, dieser Hardware-Adresse (MAC) immer dieselbe IP-Adresse zu geben.' }));
+  // Uhr: Der Pi hat keine Batterieuhr und im Museumsnetz oft kein Internet. Der Admin-Browser kennt die richtige Zeit.
+  app.get('/api/v1/system/time', { config: { perm: 'devices.read' } }, async () => ({ now: Date.now() }));
+  app.post('/api/v1/system/time', { config: { perm: 'settings.manage' }, schema: { body: { type: 'object', required: ['epoch'], additionalProperties: false, properties: { epoch: { type: 'integer' } } } } }, async (req, reply) => {
+    if (Math.abs(req.body.epoch - Date.now()) > 7 * 86400000 * 365) return reply.code(400).send({ error: 'Diese Uhrzeit ist nicht plausibel.' });
+    try { privRequest(process.env.DFM_PRIVD_DIR ?? '/run/dfm/privd', 'set-time', { epoch: Math.floor(req.body.epoch / 1000) }); } catch { return reply.code(500).send({ error: 'Die Uhr konnte nicht gestellt werden.' }); }
+    audit.log({ user: req.user, action: 'uhr.gestellt', ip: req.ip, security: true, detail: { epoch: req.body.epoch } }); return { ok: true };
+  });
   app.get('/api/v1/system/certificate', { config: { perm: 'settings.manage' } }, async (_req, reply) =>
     reply.header('Content-Type', 'application/x-pem-file').header('Content-Disposition', 'attachment; filename="dfm-signage-hub.crt"').send(tls.cert));
   app.get('/api/v1/system/audit-verify', { config: { perm: 'audit.read' } }, async () => audit.verify());

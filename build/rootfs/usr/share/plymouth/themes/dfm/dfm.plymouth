@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=DFM
+Description=DFM Willkommen
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/dfm
+ScriptFile=/usr/share/plymouth/themes/dfm/dfm.script

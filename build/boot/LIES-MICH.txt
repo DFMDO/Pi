@@ -1,0 +1,8 @@
+DFM Signage – SD-Karte
+======================
+Diese SD-Karte ist ein fertiges System. Einfach in den Raspberry Pi stecken und einschalten.
+Auf dem Bildschirm erscheint ein QR-Code – scanne ihn mit dem Handy und folge den Schritten.
+
+Ohne Handy einrichten:   Datei "dfm-setup.vorlage.txt" in "dfm-setup.txt" umbenennen, ausfüllen, speichern.
+WLAN zurücksetzen:       Leere Datei mit dem Namen "dfm-reset-wifi" hier ablegen (oder 5x Strom aus/ein innerhalb von je 30 Sekunden).
+Geräteinfo:              Nach dem ersten Start steht in "geraeteinfo.txt" die Seriennummer (z. B. für ein Gerätelabel).

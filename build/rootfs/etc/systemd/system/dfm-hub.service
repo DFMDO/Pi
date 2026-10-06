@@ -1,0 +1,31 @@
+[Unit]
+Description=DFM Hub (Backend, Admin-Oberfläche)
+After=network-online.target dfm-firstboot.service
+Wants=network-online.target
+
+[Service]
+User=dfm-hub
+Group=dfm-hub
+Environment=DFM_DATA=/data/hub DFM_BOOT=/boot/firmware DFM_PRIVD_DIR=/run/dfm/privd NODE_ENV=production DFM_BASE=/opt/dfm
+ExecStart=/usr/lib/dfm/launch hub
+Restart=on-failure
+RestartSec=3
+# Härtung
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ReadWritePaths=/data/hub /run/dfm/privd
+MemoryMax=450M
+UMask=0077

@@ -1,0 +1,20 @@
+# pi-gen-Konfiguration für DFM Signage (arm64). Wird von build-image.sh mit Werten gefüllt.
+IMG_NAME='dfm-signage-arm64'
+IMG_VERSION='@VERSION@'
+RELEASE=bookworm
+ARCH=arm64
+STAGE_LIST="stage0 stage1 stage2 stage-dfm"
+TARGET_HOSTNAME=dfm-signage
+LOCALE_DEFAULT=de_DE.UTF-8
+KEYBOARD_KEYMAP=de
+KEYBOARD_LAYOUT="German"
+TIMEZONE_DEFAULT=Europe/Berlin
+WPA_COUNTRY=DE
+# Kein Standardbenutzer mit bekanntem Passwort: Das Konto wird in stage-dfm gelöscht, SSH bleibt aus
+FIRST_USER_NAME=dfmtmp
+FIRST_USER_PASS='@RANDOM_PASS@'
+DISABLE_FIRST_BOOT_USER_RENAME=1
+ENABLE_SSH=0
+DEPLOY_COMPRESSION=none
+DEPLOY_ZIP=0
+USE_QCOW2=0

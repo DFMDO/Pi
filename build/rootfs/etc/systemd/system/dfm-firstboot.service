@@ -1,0 +1,22 @@
+[Unit]
+Description=DFM Erststart (Geräte-ID, Hostname, Konfigurationsdatei)
+After=dfm-data.service
+Requires=dfm-data.service
+Before=NetworkManager.service avahi-daemon.service chrony.service network-pre.target
+ConditionPathExists=/data
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=DFM_DATA=/data DFM_BOOT=/boot/firmware
+# Persistente, pro Gerät zufällige machine-id (das Image enthält keine)
+ExecStartPre=/bin/sh -c 'f=/data/state/machine-id; [ -s $f ] || systemd-id128 new > $f; mount --bind $f /etc/machine-id'
+ExecStartPre=/bin/mount -o remount,rw /boot/firmware
+ExecStart=/usr/lib/dfm/launch firstboot
+ExecStartPost=/bin/mount -o remount,ro /boot/firmware
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+# DFM: Root schreibgeschützt. Nur /data (Datenpartition) ist beschreibbar.
+proc                   /proc            proc    defaults                          0 0
+PARTUUID=@PTUUID@-01   /boot/firmware   vfat    defaults,ro,noatime,umask=0077    0 2
+PARTUUID=@PTUUID@-02   /                ext4    defaults,ro,noatime               0 1
+tmpfs                  /tmp             tmpfs   defaults,nosuid,nodev,size=64m    0 0
+tmpfs                  /var/tmp         tmpfs   defaults,nosuid,nodev,size=16m    0 0
+tmpfs                  /var/log         tmpfs   defaults,nosuid,nodev,noexec,size=24m  0 0
+tmpfs                  /var/lib/systemd tmpfs   defaults,nosuid,nodev,size=8m     0 0
+# Zustand, der Neustarts überleben muss, liegt auf /data (Bind-Mounts nach dem Einbinden der Datenpartition)
+/data/state/nm         /etc/NetworkManager/system-connections none bind,nofail,x-systemd.requires=dfm-data.service 0 0
+/data/state/nm-lib     /var/lib/NetworkManager                none bind,nofail,x-systemd.requires=dfm-data.service 0 0
+/data/state/chrony     /var/lib/chrony                        none bind,nofail,x-systemd.requires=dfm-data.service 0 0
+/data/state/fake-hwclock /etc/fake-hwclock.data               none bind,nofail,x-systemd.requires=dfm-data.service 0 0
+/data/state/machine-id /etc/machine-id                        none bind,nofail,x-systemd.requires=dfm-data.service 0 0
+/data/journal          /var/log/journal                       none bind,nofail,x-systemd.requires=dfm-data.service 0 0

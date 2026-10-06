@@ -54,7 +54,7 @@ test('privd: nur erlaubte Aktionen, Argumente streng geprüft, keine Shell', asy
   assert.throws(() => plan({ action: 'wifi-connect', args: { ssid: 'ok', password: 'kurz' } }));
   assert.throws(() => plan({ action: 'display-rotate', args: { degrees: 45 } }));
   const inj = '"; reboot; echo "';
-  const [[cmd, ...args]] = plan({ action: 'wifi-connect', args: { ssid: inj, password: 'abcdefgh' } });
+  const cmds = plan({ action: 'wifi-connect', args: { ssid: inj, password: 'abcdefgh' } }); const [cmd, ...args] = cmds[1];
   assert.equal(cmd, 'nmcli'); assert.ok(args.includes(inj), 'SSID bleibt EIN Argument'); assert.equal(args.filter((a) => a === inj).length, 1);
   const dir = tmp(), ran = []; privReq(dir, 'reboot'); privReq(dir, 'hack'); writeFileSync(join(dir, 'x.req'), '{kaputt');
   await processDir(dir, async (c, a) => ran.push([c, ...a]), () => {});

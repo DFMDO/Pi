@@ -1,0 +1,3 @@
+#!/bin/sh
+# Ausrichtung speichern (0/90/180/270). Chromium dreht per Seite, mpv (Lite) liest den Wert beim Start.
+case "$1" in 0|90|180|270) echo "$1" > /data/state/rotation ;; *) exit 1 ;; esac

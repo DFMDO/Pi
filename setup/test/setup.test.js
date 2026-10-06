@@ -152,3 +152,13 @@ test('Konfiguration wird atomar geschrieben; config.json zuletzt', async () => {
   assert.ok(existsSync(join(d, 'hub-bootstrap.json')) && existsSync(join(d, 'config.json')));
   assert.equal((await import('node:fs')).statSync(join(d, 'hub-bootstrap.json')).mode & 0o777, 0o600);
 });
+
+test('„Nur WLAN ändern“ (Reset ohne Tastatur): keine Rolle/Konten nötig, Marker wird entfernt', async () => {
+  let t = 1e6; const nm = fakeNm(), done = [], cleared = [];
+  const ctl = createController({ nm, suffix: 'ab12', now: () => t, rnd: fakeRnd, hashPassword, policy: checkPasswordPolicy, hw: { model: 'Raspberry Pi 4', profile: 'pro' }, writeConfig: async () => assert.fail('keine Konfiguration überschreiben'), wifiOnly: true, onWifiOnlyDone: async () => cleared.push(1), onDone: (c) => done.push(c) });
+  await ctl.startMode(); const s = ctl.enterPin(ctl.state.pin).session; assert.equal(ctl.info(s).wifiOnly, true);
+  assert.equal((await ctl.finish(s, {})).ok, false, 'ohne WLAN-Wahl nicht möglich');
+  await ctl.testWifi(s, { ssid: 'Neu', password: 'neuespasswort' }); await new Promise((r) => setTimeout(r, 1500));
+  assert.equal((await ctl.finish(s, {})).ok, true); await new Promise((r) => setTimeout(r, 1500));
+  assert.deepEqual(done, [{ wifiOnly: true }]); assert.equal(cleared.length, 1); assert.equal(ctl.state.phase, 'done');
+});

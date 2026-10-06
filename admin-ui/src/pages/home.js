@@ -1,5 +1,5 @@
 import { h, statusEl, empty, fmtDate, fmtBytes } from '../ui.js';
-import { get, state, can } from '../api.js';
+import { get, post, state, can } from '../api.js';
 import { pairDialog } from './devices.js';
 
 /** Vorschaubild (Screenshot) eines Bildschirms; wenn keins da ist, ein ruhiger Platzhalter */
@@ -14,6 +14,7 @@ export async function homePage({ route }) {
     h('div', { class: 'grid', style: 'margin-bottom:16px' }, ...(can('media.write') ? quick.map(([i, t, d, href]) => h('button', { class: 'quick', onclick: () => { location.hash = href; } }, h('b', {}, `${i} ${t}`), h('span', { class: 'hint' }, d))) : []),
       can('devices.manage') ? h('button', { class: 'quick main', 'data-tour': 'pair', onclick: () => pairDialog(route) }, h('b', {}, '➕ Neuen Bildschirm verbinden'), h('span', {}, 'Zeigt einen Code für den neuen Bildschirm')) : null),
     pending.length ? h('div', { class: 'notice' }, h('b', {}, '⏳ Ein neuer Bildschirm wartet auf dich. '), pending.map((d) => `„${d.name}“ (${d.model ?? 'unbekanntes Gerät'})`).join(', '), ' – ', h('a', { href: '#/bildschirme' }, 'Jetzt bestätigen')) : null,
+    await clockNotice(),
     ...issues.map((t) => h('div', { class: 'notice', role: 'status' }, '⚠ ', t)),
     h('h2', {}, 'Meine Bildschirme'),
     active.length ? h('div', { class: 'grid' }, active.map((d) => h('article', { class: 'card' }, h('h3', { style: 'margin:0 0 4px' }, d.name), statusEl(d.status), h('p', {}, d.summary), shot(d), h('p', { class: 'hint' }, d.lastSeen ? `Letzte Meldung: ${fmtDate(d.lastSeen)}` : 'Noch keine Meldung')))) : empty('Noch kein Bildschirm verbunden', 'Verbinde deinen ersten Bildschirm. Das dauert nur wenige Minuten.', can('devices.manage') ? h('button', { class: 'btn big', onclick: () => pairDialog(route) }, 'Neuen Bildschirm verbinden') : null),
@@ -25,4 +26,14 @@ async function today(devices, sched) {
   const ev = await get(`/calendar?from=${day}&to=${day}`); const names = Object.fromEntries(devices.map((x) => [x.id, x.name]));
   if (!ev.length) return h('p', {}, 'Heute sind keine besonderen Termine geplant. Es läuft die Standard-Abspielliste.');
   return h('ul', {}, ev.sort((a, b) => a.start - b.start).map((e) => h('li', {}, `${new Date(e.start).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' })}–${new Date(e.end).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' })} Uhr: ${names[e.targetId] ?? 'Gruppe'}`)));
+}
+
+/** Der Hub hat keine Batterieuhr: Weicht seine Uhr von diesem Computer ab, bietet die Seite den Abgleich an. */
+async function clockNotice() {
+  try {
+    const { now } = await get('/system/time'); const diff = Math.abs(now - Date.now());
+    if (diff < 120000) return null;
+    return h('div', { class: 'notice bad', role: 'alert' }, h('b', {}, '🕒 Die Uhr des Hubs geht falsch. '), 'Termine starten dadurch zur falschen Zeit. ',
+      can('settings.manage') ? h('button', { class: 'btn', onclick: async (e) => { e.target.disabled = true; await post('/system/time', { epoch: Date.now() }); location.reload(); } }, 'Uhr mit diesem Computer abgleichen') : 'Bitte einen Admin informieren.');
+  } catch { return null; }
 }

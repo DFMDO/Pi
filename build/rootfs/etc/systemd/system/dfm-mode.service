@@ -1,0 +1,13 @@
+[Unit]
+Description=DFM Betriebsart wählen
+After=dfm-firstboot.service
+Requires=dfm-firstboot.service
+Before=avahi-daemon.service chrony.service NetworkManager.service network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/dfm/select-mode.sh
+
+[Install]
+WantedBy=multi-user.target

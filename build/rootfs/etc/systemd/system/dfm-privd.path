@@ -1,0 +1,6 @@
+[Unit]
+Description=DFM privilegierte Anfragen beobachten
+
+[Path]
+DirectoryNotEmpty=/run/dfm/privd
+Unit=dfm-privd.service

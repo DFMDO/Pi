@@ -1,0 +1,11 @@
+[Unit]
+Description=DFM Strom-Zähler zurücksetzen (30 s nach dem Start)
+After=dfm-firstboot.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 30
+ExecStart=/bin/sh -c 'echo 0 > /data/state/power-cycles'
+
+[Install]
+WantedBy=multi-user.target
