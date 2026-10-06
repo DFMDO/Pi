@@ -20,7 +20,7 @@ export function chromiumRenderer({ url, profileDir, log = () => {} }) {
   // cage = minimaler Wayland-Kiosk-Compositor. Der Host-Resolver erlaubt NUR localhost:
   // der Browser KANN keine externen Server erreichen (Prinzip „lokal“).
   const args = ['-s', '--', 'chromium', '--kiosk', `--app=${url}`, `--user-data-dir=${profileDir}`, '--noerrdialogs', '--disable-infobars', '--no-first-run',
-    '--disable-features=Translate,MediaRouter,OptimizationHints', '--disable-sync', '--no-default-browser-check', '--disable-component-update',
+    '--disable-crash-reporter', '--disable-features=Translate,MediaRouter,OptimizationHints', '--disable-sync', '--no-default-browser-check', '--disable-component-update',
     '--autoplay-policy=no-user-gesture-required', '--overscroll-history-navigation=0', '--disable-pinch', '--ozone-platform=wayland', '--enable-features=VaapiVideoDecoder',
     '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', '--proxy-server=direct://', '--disk-cache-size=1', '--password-store=basic'];
   const sup = supervise(() => spawn('cage', args, { stdio: 'ignore', env: { ...process.env, WLR_LIBINPUT_NO_DEVICES: '1' } }), log);
