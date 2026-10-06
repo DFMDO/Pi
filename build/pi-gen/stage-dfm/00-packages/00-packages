@@ -2,7 +2,6 @@ network-manager
 dnsmasq-base
 wireless-regdb
 iw
-crda
 chrony
 fake-hwclock
 avahi-daemon
@@ -28,7 +27,6 @@ zbar-tools
 v4l-utils
 libcec6
 cec-utils
-libvips42
 ca-certificates
 curl
 libnss-myhostname

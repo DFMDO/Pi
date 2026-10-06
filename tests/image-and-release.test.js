@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, readFileSync, exist
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { checkTrees } from '../build/check-image.js';
+import { checkTrees } from '../build/check-image.mjs';
 import { stage, activate } from '../hub/lib/update.js';
 import { ensureCertificate } from '../hub/lib/tls.js';
 import { loadOrCreateKey } from '../hub/lib/crypto.js';

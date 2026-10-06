@@ -39,7 +39,7 @@ argon2id (19 MiB, t=2), Passwort ≥ 12 Zeichen mit lokaler Liste häufiger Pass
 - Updates: Ed25519-signiertes Paket (öffentlicher Schlüssel im Image), Signatur und SHA-256 Pflicht, Rollback nach 3 Fehlstarts; nie aus dem Internet.
 
 ## Keine Geheimnisse im Image
-TLS-Schlüssel, Hub-Master-Schlüssel, Geräte-ID, Hostname, machine-id, Hotspot-Passwort/PIN und Tokens entstehen **pro Gerät beim ersten Start**. `build/check-image.js` prüft jedes gebaute Image (kein `pi`-Benutzer, kein Passwort-Hash, SSH aus und maskiert, keine Hostschlüssel, `machine-id` leer, keine privaten Schlüssel, keine WLAN-Profile, Datenpartition leer, fstab/cmdline). `tests/image-and-release.test.js` belegt, dass zwei Karten unterschiedliche Schlüssel, IDs, Hostnamen und Hotspot-Passwörter haben.
+TLS-Schlüssel, Hub-Master-Schlüssel, Geräte-ID, Hostname, machine-id, Hotspot-Passwort/PIN und Tokens entstehen **pro Gerät beim ersten Start**. `build/check-image.mjs` prüft jedes gebaute Image (kein `pi`-Benutzer, kein Passwort-Hash, SSH aus und maskiert, keine Hostschlüssel, `machine-id` leer, keine privaten Schlüssel, keine WLAN-Profile, Datenpartition leer, fstab/cmdline). `tests/image-and-release.test.js` belegt, dass zwei Karten unterschiedliche Schlüssel, IDs, Hostnamen und Hotspot-Passwörter haben.
 
 ## Bewusst nicht abgedeckt
 - Physischer Zugriff auf Pi oder SD-Karte (Schlüssel liegen unverschlüsselt auf der Datenpartition; WLAN-Passwörter ebenfalls).

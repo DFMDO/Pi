@@ -41,28 +41,34 @@ cp -a admin-ui/dist "$APP/admin-ui/dist"
 # Workspaces: nur die Laufzeit-Pakete (kein admin-ui, keine Entwicklungswerkzeuge)
 node -e "const p=require('$APP/package.json');p.workspaces=['hub','player/agent','setup'];delete p.devDependencies;require('fs').writeFileSync('$APP/package.json',JSON.stringify(p,null,2))"
 (cd "$APP" && npm install --package-lock-only --omit=dev --no-audit --no-fund >/dev/null)
+# Abhängigkeiten für den Pi (linux/arm64) auf dem Entwicklungsrechner installieren: vorgebaute Binärdateien für better-sqlite3, sharp, argon2
+(cd "$APP" && npm_config_arch=arm64 npm_config_platform=linux npm_config_target_arch=arm64 npm ci --omit=dev --os=linux --cpu=arm64 --libc=glibc --no-audit --no-fund >/dev/null)
+node build/check-native.js "$APP/node_modules" || die "Native Module sind nicht für arm64 gebaut"
+echo "Lade Node $NODE_VERSION (arm64) …"
+curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-arm64.tar.xz" -o "$WORK/node.tar.xz"
+echo "$NODE_SHA256  $WORK/node.tar.xz" | sha256sum -c - >/dev/null || die "Node-Prüfsumme stimmt nicht"
 
 echo "== 3/7 Boot-Bilder erzeugen =="
 node build/make-boot-assets.js "$WORK/assets"
 
 echo "== 4/7 pi-gen holen ($PIGEN_REF) =="
-git clone --quiet "$PIGEN_REPO" "$WORK/pi-gen"; git -C "$WORK/pi-gen" checkout --quiet "$PIGEN_REF"
+if [ $CONTINUE = 1 ] && [ -d "$WORK/pi-gen/.git" ]; then echo "Setze den vorherigen Lauf fort (Stufen 0–2 werden übersprungen)"; rm -rf "$WORK/pi-gen/stage-dfm"; touch "$WORK/pi-gen/stage0/SKIP" "$WORK/pi-gen/stage1/SKIP" "$WORK/pi-gen/stage2/SKIP"
+else git clone --quiet "$PIGEN_REPO" "$WORK/pi-gen"; git -C "$WORK/pi-gen" checkout --quiet "$PIGEN_REF"; fi
 echo "pi-gen Commit: $(git -C "$WORK/pi-gen" rev-parse HEAD)" | tee "$OUT/build-info-$VERSION.txt"
 cp -a build/pi-gen/stage-dfm "$WORK/pi-gen/stage-dfm"
-# Nur das fertige DFM-Image exportieren (nicht die Zwischenstufen von pi-gen)
-rm -f "$WORK/pi-gen/stage2/EXPORT_IMAGE" "$WORK/pi-gen/stage2/EXPORT_NOOBS"; touch "$WORK/pi-gen/stage-dfm/EXPORT_IMAGE"
+# pi-gen baut nur das Root-Dateisystem; das Image setzen wir selbst zusammen (assemble-image.sh, ohne Loop-Geräte)
+rm -f "$WORK/pi-gen/stage2/EXPORT_IMAGE" "$WORK/pi-gen/stage2/EXPORT_NOOBS" "$WORK/pi-gen/stage-dfm/EXPORT_IMAGE"
 sed -e "s/@VERSION@/$VERSION/" -e "s/@RANDOM_PASS@/$(openssl rand -hex 24)/" build/pi-gen/config.template > "$WORK/pi-gen/config"
 # „export“ ist nötig: pi-gen führt jedes Stage-Skript als eigenen Prozess aus
 cat >> "$WORK/pi-gen/config" <<CFG
 export DFM_VERSION='$VERSION'
-export DFM_NODE_VERSION='$NODE_VERSION'
-export DFM_NODE_SHA256='$NODE_SHA256'
 CFG
 # Verzeichnisse, die die Stage-Skripte lesen (im Container unter /pi-gen)
 mkdir -p "$WORK/pi-gen/stage-dfm/files"; cp -a "$APP" "$WORK/pi-gen/stage-dfm/files/app"; cp -a build/rootfs "$WORK/pi-gen/stage-dfm/files/rootfs"
-cp -a "$WORK/assets" "$WORK/pi-gen/stage-dfm/files/assets"; cp "$UPDATE_PUBKEY" "$WORK/pi-gen/stage-dfm/files/update-key.pub"
+cp -a "$WORK/assets" "$WORK/pi-gen/stage-dfm/files/assets"; cp "$WORK/node.tar.xz" "$WORK/pi-gen/stage-dfm/files/node.tar.xz"; cp "$UPDATE_PUBKEY" "$WORK/pi-gen/stage-dfm/files/update-key.pub"
 cat >> "$WORK/pi-gen/config" <<CFG
 export DFM_APP_STAGE=/pi-gen/stage-dfm/files/app
+export DFM_NODE_TARBALL=/pi-gen/stage-dfm/files/node.tar.xz
 export DFM_ROOTFS_OVERLAY=/pi-gen/stage-dfm/files/rootfs
 export DFM_BOOT_ASSETS=/pi-gen/stage-dfm/files/assets
 export DFM_UPDATE_PUBKEY=/pi-gen/stage-dfm/files/update-key.pub
@@ -71,16 +77,17 @@ CFG
 echo "== 5/7 pi-gen (Docker) – das dauert 30–90 Minuten =="
 # Container bleibt bei Fehlern erhalten: mit  build/build-image.sh --continue  geht es dort weiter (statt von vorn)
 (cd "$WORK/pi-gen" && PRESERVE_CONTAINER=1 CONTAINER_NAME=dfm-pigen CONTINUE=$CONTINUE ./build-docker.sh)
-IMG=$(ls "$WORK"/pi-gen/deploy/*.img | head -1); [ -f "$IMG" ] || die "pi-gen hat kein Image erzeugt"
 
-echo "== 6/7 Partitionen (Boot, Root schreibgeschützt, Daten) und Prüfungen =="
-docker run --rm --privileged -v "$ROOT/build:/build:ro" -v "$WORK/pi-gen/deploy:/deploy" debian:bookworm-slim \
-  bash -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends parted e2fsprogs dosfstools util-linux nodejs >/dev/null && bash /build/postprocess.sh /deploy/'"$(basename "$IMG")"
-cp "$WORK/pi-gen/deploy/check.txt" "$OUT/check-$VERSION.txt"; cat "$OUT/check-$VERSION.txt"; grep -q 'FEHLGESCHLAGEN' "$OUT/check-$VERSION.txt" && die "Image-Prüfung fehlgeschlagen" || true
+echo "== 6/7 Partitionen (Boot, Root schreibgeschützt, Daten) zusammensetzen und prüfen =="
+rm -rf "$WORK/img"; mkdir -p "$WORK/img"
+docker run --rm --volumes-from dfm-pigen -v "$ROOT/build:/build:ro" -v "$WORK/img:/out" -e DFM_VERSION="$VERSION" debian:bookworm-slim \
+  bash -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends e2fsprogs dosfstools mtools fdisk xz-utils nodejs >/dev/null && bash /build/assemble-image.sh'
+IMG=$WORK/img/dfm-signage-arm64-$VERSION.img; cp "$WORK/img/check.txt" "$OUT/check-$VERSION.txt"
+grep -q 'FEHLGESCHLAGEN' "$OUT/check-$VERSION.txt" && die "Image-Prüfung fehlgeschlagen (siehe build/out/check-$VERSION.txt)"
 
 echo "== 7/7 Komprimieren, Prüfsumme, Signatur =="
 FINAL=$OUT/dfm-signage-arm64-$VERSION.img
-mv "$IMG" "$FINAL"; xz -T0 -9 -f "$FINAL"
+mv "$IMG" "$FINAL"; xz -T0 -6 -f "$FINAL"
 (cd "$OUT" && sha256sum "dfm-signage-arm64-$VERSION.img.xz" > "dfm-signage-arm64-$VERSION.img.xz.sha256")
 if [ -n "${DFM_SIGN_KEY:-}" ]; then build/sign-release.sh "$FINAL.xz"; else echo "HINWEIS: Keine Signatur erzeugt (DFM_SIGN_KEY nicht gesetzt)."; fi
 echo "Fertig: $FINAL.xz  ($(du -h "$FINAL.xz" | cut -f1) komprimiert, $(xz -l --robot "$FINAL.xz" | awk '/^totals/{printf "%.2f GB", $5/1e9}') entpackt)"

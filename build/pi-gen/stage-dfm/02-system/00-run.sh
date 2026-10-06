@@ -19,15 +19,17 @@ getent passwd dfm-kiosk >/dev/null || useradd --system --uid 992 --user-group --
 userdel -r dfmtmp 2>/dev/null || true; userdel -r pi 2>/dev/null || true
 passwd -l root
 rm -f /etc/sudoers.d/010_pi-nopasswd /etc/sudoers.d/010_dfmtmp-nopasswd /etc/systemd/system/getty@tty1.service.d/autologin.conf
-systemctl disable ssh.service sshd.service userconfig.service raspi-config.service rpi-resize.service resize2fs_once.service apt-daily.timer apt-daily-upgrade.timer man-db.timer bluetooth.service hciuart.service triggerhappy.service 2>/dev/null || true
-systemctl mask ssh.service sshd.service ssh.socket userconfig.service apt-daily.service apt-daily-upgrade.service systemd-timesyncd.service getty@tty1.service
+systemctl disable ssh.service sshd.service sshswitch.service regenerate_ssh_host_keys.service ModemManager.service cron.service rpi-eeprom-update.service userconfig.service raspi-config.service rpi-resize.service resize2fs_once.service apt-daily.timer apt-daily-upgrade.timer man-db.timer bluetooth.service hciuart.service triggerhappy.service 2>/dev/null || true
+systemctl mask ssh.service sshd.service ssh.socket sshswitch.service regenerate_ssh_host_keys.service ModemManager.service rpi-eeprom-update.service userconfig.service apt-daily.service apt-daily-upgrade.service systemd-timesyncd.service getty@tty1.service
 systemctl enable dfm-data.service dfm-firstboot.service dfm-mode.service dfm-powercounter-reset.service NetworkManager.service avahi-daemon.service chrony.service nftables.service fake-hwclock.service
 plymouth-set-default-theme dfm || true
 # Geheimnisse dürfen NICHT im Image stecken: werden beim ersten Start pro Gerät erzeugt
 rm -f /etc/ssh/ssh_host_* /var/lib/dbus/machine-id; : > /etc/machine-id
 rm -rf /var/lib/NetworkManager/* /etc/NetworkManager/system-connections/* /var/lib/chrony/* /root/.* 2>/dev/null || true
 hostname dfm-signage || true; echo dfm-signage > /etc/hostname
-# Platz sparen
+# Platz sparen: Chromium-Übersetzungen (nur de/en-US behalten), Vulkan-Testtreiber, Debug-Schichten
+find /usr/lib/chromium/locales -name '*.pak' ! -name 'de.pak' ! -name 'en-US.pak' -delete 2>/dev/null || true
+rm -f /usr/lib/chromium/libVkLayer_khronos_validation.so /usr/lib/chromium/libVkICD_mock_icd.so /usr/lib/aarch64-linux-gnu/libvulkan_{radeon,freedreno,lvp,intel,intel_hasvk,virtio,nouveau,panfrost,asahi,gfxstream}.so /usr/share/vulkan/icd.d/{radeon,freedreno,lvp,intel,intel_hasvk,virtio,nouveau,panfrost,asahi,gfxstream}_icd*.json 2>/dev/null || true
 apt-get -y clean; rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/[a-ce-z]* /var/cache/* /usr/share/info/*
 CHEOF
 # Avahi-Dienstdateien kommen zur Laufzeit (nur im Hub-Betrieb) aus /run/dfm/avahi-services

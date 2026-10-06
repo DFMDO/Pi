@@ -1,7 +1,9 @@
 // Prüft ein gebautes Image (als eingebundene Verzeichnisse) auf die Sicherheits- und Layout-Vorgaben:
 // keine Geheimnisse, kein Standardbenutzer, SSH aus, Root schreibgeschützt, Vorlage vorhanden …
-// Aufruf:  node build/check-image.js --rootfs <dir> --boot <dir> --data <dir> [--max-gb 2.5]
+// Aufruf:  node build/check-image.mjs --rootfs <dir> --boot <dir> --data <dir> [--max-gb 2.5]
 import { readFileSync, existsSync, readdirSync, statSync, lstatSync, readlinkSync } from 'node:fs';
+/** Auch Verweise (Symlinks) zählen, deren Ziel von außen nicht auflösbar ist (absolute Pfade im Image) */
+const linkExists = (p) => { try { lstatSync(p); return true; } catch { return false; } };
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -22,7 +24,7 @@ export function checkTrees({ rootfs, boot, data, maxGb = 2.5 }) {
   add('root ist gesperrt', /^root:[!*]/m.test(shadow) || shadow === '', (shadow.match(/^root:[^:]*/m) ?? [''])[0].slice(0, 12));
   add('Keine SSH-Hostschlüssel im Image', !(existsSync(join(rootfs, 'etc/ssh')) && readdirSync(join(rootfs, 'etc/ssh')).some((f) => /^ssh_host_/.test(f))));
   const wants = join(rootfs, 'etc/systemd/system/multi-user.target.wants');
-  add('SSH ist nicht aktiviert', !(existsSync(wants) && readdirSync(wants).some((f) => /^ssh/.test(f))));
+  add('SSH ist nicht aktiviert (auch kein sshswitch/Hostschlüssel-Dienst)', !(existsSync(wants) && readdirSync(wants).some((f) => /^(ssh|regenerate_ssh)/.test(f))));
   const masked = (u) => { try { return readlinkSync(join(rootfs, 'etc/systemd/system', u)) === '/dev/null'; } catch { return false; } };
   add('SSH-Dienst ist maskiert', masked('ssh.service') || !existsSync(join(rootfs, 'usr/sbin/sshd')), 'ssh.service');
   add('Konsole auf tty1 ist abgeschaltet (kein Anmeldebildschirm)', masked('getty@tty1.service'));
@@ -56,7 +58,7 @@ export function checkTrees({ rootfs, boot, data, maxGb = 2.5 }) {
     for (const m of (read(f) ?? '').matchAll(/https?:\/\/([a-zA-Z0-9.-]+)/g)) if (!/^(127\.0\.0\.1|localhost|10\.42\.0\.1|www\.w3\.org|dfm-signage\.local|0\.0\.0\.0)$/.test(m[1]) && !/^(\d+\.){3}\d+$/.test(m[1]) && !/(example|\.local)$/.test(m[1]) && !/^(react|reactjs|developer|bit|esbuild)\./.test(m[1])) ext.push(`${relative(rootfs, f)} → ${m[1]}`);
   }
   add('Oberflächen verweisen auf keine externen Hosts', ext.length === 0, [...new Set(ext)].slice(0, 5).join(', '));
-  for (const u of ['dfm-data.service', 'dfm-firstboot.service', 'dfm-mode.service']) add(`Dienst ${u} ist aktiviert`, existsSync(join(rootfs, 'etc/systemd/system/multi-user.target.wants', u)) || existsSync(join(rootfs, 'etc/systemd/system/local-fs.target.wants', u)));
+  for (const u of ['dfm-data.service', 'dfm-firstboot.service', 'dfm-mode.service']) add(`Dienst ${u} ist aktiviert`, linkExists(join(rootfs, 'etc/systemd/system/multi-user.target.wants', u)) || linkExists(join(rootfs, 'etc/systemd/system/local-fs.target.wants', u)));
   add('Journal auf 50 MB begrenzt', /SystemMaxUse=50M/.test(read(join(rootfs, 'etc/systemd/journald.conf.d/dfm.conf')) ?? ''));
   add('WLAN-Energiesparen dauerhaft aus', /wifi\.powersave=2/.test(read(join(rootfs, 'etc/NetworkManager/conf.d/dfm.conf')) ?? ''));
   let size = 0; for (const f of walk(rootfs)) { try { size += lstatSync(f).size; } catch {} }
