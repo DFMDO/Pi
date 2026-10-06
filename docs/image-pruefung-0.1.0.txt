@@ -24,5 +24,5 @@ OK           Dienst dfm-firstboot.service ist aktiviert
 OK           Dienst dfm-mode.service ist aktiviert
 OK           Journal auf 50 MB begrenzt
 OK           WLAN-Energiesparen dauerhaft aus
-OK           Root-Größe unter 2.5 GB (2.01 GB)
+OK           Root-Größe unter 2.5 GB (2.00 GB)
 Alle Prüfungen bestanden.
