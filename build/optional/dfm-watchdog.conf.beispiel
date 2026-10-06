@@ -1,0 +1,8 @@
+# OPTIONAL: Hardware-Watchdog (Pi startet bei Systemhänger von selbst neu).
+# NICHT standardmäßig im Image: Im QEMU-Test führte RuntimeWatchdogSec zu einer Neustart-Schleife, und eine
+# Neustart-Schleife wäre bei unbeaufsichtigten Bildschirmen schlimmer als ein Hänger. Erst nach Test auf
+# echter Hardware aktivieren (Datei nach /etc/systemd/system.conf.d/ im Image-Bau kopieren).
+# Der Pi-Watchdog (bcm2835_wdt) erlaubt höchstens ~15 s.
+[Manager]
+RuntimeWatchdogSec=15
+ShutdownWatchdogSec=2min

@@ -1,0 +1,28 @@
+OK           Kein Standardbenutzer „pi“
+OK           Kein Benutzer mit Passwort (kein Standardpasswort)
+OK           root ist gesperrt (root:!*)
+OK           Keine SSH-Hostschlüssel im Image
+OK           SSH ist nicht aktiviert (auch kein sshswitch/Hostschlüssel-Dienst)
+OK           SSH-Dienst ist maskiert (ssh.service)
+OK           Konsole auf tty1 ist abgeschaltet (kein Anmeldebildschirm)
+OK           machine-id ist leer (entsteht pro Gerät)
+OK           Keine NetworkManager-Verbindungen (WLAN-Daten) im Image
+OK           Keine privaten Schlüssel oder Konfigurationsgeheimnisse im Root
+OK           Öffentlicher Update-Schlüssel vorhanden (kein privater)
+OK           Version eingetragen
+OK           Root-Dateisystem ist schreibgeschützt (fstab)
+OK           Datenpartition und Bind-Mounts vorbereitet
+OK           Boot-Parameter: ro, ruhiger Start, WLAN-Land DE, kein init= (console=tty3 quiet splash loglevel=0 vt.global_cursor_default=0 consoleblank=0 l)
+OK           Einrichtungsvorlage liegt auf der Boot-Partition
+OK           Keine echte Einrichtungsdatei / SSH-Marker auf der Boot-Partition
+OK           Keine Schlüssel auf der Boot-Partition
+OK           Datenpartition enthält keine Geheimnisse/IDs (leer)
+OK           Admin-Oberfläche ist fertig gebaut
+OK           Oberflächen verweisen auf keine externen Hosts
+OK           Dienst dfm-data.service ist aktiviert
+OK           Dienst dfm-firstboot.service ist aktiviert
+OK           Dienst dfm-mode.service ist aktiviert
+OK           Journal auf 50 MB begrenzt
+OK           WLAN-Energiesparen dauerhaft aus
+OK           Root-Größe unter 2.5 GB (2.01 GB)
+Alle Prüfungen bestanden.

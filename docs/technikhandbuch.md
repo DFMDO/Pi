@@ -42,7 +42,9 @@ Für die IT und alle, die das System bauen, betreiben oder erweitern. Sicherheit
 
 ## 2. Image bauen
 
-**Voraussetzungen (Entwicklungsrechner, nicht der Pi):** Linux, Docker mit privilegierten Containern, `qemu-user-static` mit registriertem `aarch64`-Handler (bei x86), Node ≥ 22, git, xz, openssl, curl, ~25 GB frei, Internet **nur zur Bauzeit** (Debian-Pakete, Node-Archiv, npm).
+**Voraussetzungen (Entwicklungsrechner, nicht der Pi):** Linux, Docker mit privilegierten Containern (für pi-gen), `qemu-user-static` mit registriertem `aarch64`-Handler (bei x86-Rechnern), Node ≥ 22, git, xz, openssl, curl, ~25 GB frei, Internet **nur zur Bauzeit** (Debian-/Raspberry-Pi-Pakete, Node-Archiv, npm-Binärpakete).
+
+**Ablauf des Bauskripts:** (1) Tests + Oberfläche bauen, (2) Anwendung zusammenstellen und die Laufzeit-Abhängigkeiten **auf dem Entwicklungsrechner für linux/arm64 installieren** (`npm ci --os=linux --cpu=arm64`; `build/check-native.js` prüft jedes `.node`-Modul auf ARM64), Node-Archiv laden und per SHA-256 prüfen, (3) Boot-Bilder erzeugen, (4) pi-gen (`bookworm-arm64`) baut das Root-Dateisystem (Stufen 0–2 + `stage-dfm`: Pakete, Aufräumen, Dienste, Härtung), (5) `build/assemble-image.sh` setzt daraus das Image zusammen – **ohne Loop-Geräte und ohne Einbinden**: `mkfs.ext4 -d` und `mtools` erzeugen die Dateisysteme direkt aus Verzeichnissen, `sfdisk` schreibt die Partitionstabelle –, danach läuft `build/check-image.mjs` (siehe `sicherheit.md`), (6) xz, SHA-256, Ed25519-Signatur. Bricht der Bau in `stage-dfm` ab, setzt `build/build-image.sh --continue` dort fort (der Container `dfm-pigen` bleibt erhalten).
 
 ```bash
 build/gen-release-key.sh ~/dfm-release-key.pem     # einmalig: Ed25519-Schlüsselpaar (privat NIE ins Repository)
@@ -63,7 +65,7 @@ Prüfen: `build/verify-release.sh build/out/dfm-signage-arm64-<version>.img.xz` 
 | p2 | root | ext4 | **schreibgeschützt** | System, Node, Chromium, Anwendung (`/opt/dfm`) |
 | p3 | `DFMDATA` | ext4 | schreibbar | `/data`: Hub-Daten, Agent-Cache, NetworkManager-Profile, Journal (50 MB), Schlüssel; wächst beim ersten Start auf die ganze Karte (`growpart`) |
 
-`/tmp`, `/var/log` u. a. liegen im RAM (tmpfs). Zustand, der Neustarts überleben muss, wird per Bind-Mount von `/data/state/*` eingeblendet (machine-id, NetworkManager, chrony, fake-hwclock, Journal). SQLite läuft im WAL-Modus; Cache der Lite-Geräte ist klein; Hub-Daten können später auf eine USB-SSD verschoben werden (Medienordner).
+`/tmp`, `/var/log` u. a. liegen im RAM (tmpfs). Eine **Hardware-Watchdog**-Vorlage liegt unter `build/optional/` (nicht aktiv: im QEMU-Test erzeugte sie eine Neustart-Schleife; erst nach Hardware-Test einschalten). Zustand, der Neustarts überleben muss, wird per Bind-Mount von `/data/state/*` eingeblendet (machine-id, NetworkManager, chrony, fake-hwclock, Journal). SQLite läuft im WAL-Modus; Cache der Lite-Geräte ist klein; Hub-Daten können später auf eine USB-SSD verschoben werden (Medienordner).
 
 ### Erststart (`dfm-data` → `dfm-firstboot` → `dfm-mode`)
 1. Datenpartition erweitern und mounten. 2. Persistente zufällige `machine-id`. 3. Geräte-ID, Hostname-Suffix, Seriennummer, Hardware/Profilvorschlag, `geraeteinfo.txt`. 4. Konfigurationsdatei auf der Boot-Partition? → anwenden und **überschreiben + löschen**. 5. Reset-Auslöser prüfen (`dfm-reset-wifi`, 5× Strom). 6. Betriebsart wählen: *nicht eingerichtet* → Einrichtungsmodus; *Hub* → `dfm-hub.target`; *Player* → `dfm-player.target`.
