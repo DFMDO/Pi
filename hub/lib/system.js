@@ -26,7 +26,7 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
       tempC: temp, node: process.version, rssMB: Math.round(process.memoryUsage().rss / 1048576), db: db.pragma('journal_mode', { simple: true }) };
   });
   app.get('/api/v1/system/hub', { config: { perm: 'devices.read' } }, async () => ({ fingerprint: formatFingerprint(tls.spki), host: 'dfm-signage.local',
-    addresses: Object.values(networkInterfaces()).flat().filter((i) => i && !i.internal && i.family === 'IPv4').map((i) => ({ ip: i.address, mac: i.mac })),
+    addresses: Object.values((() => { try { return networkInterfaces(); } catch { return {}; } })()).flat().filter((i) => i && !i.internal && i.family === 'IPv4').map((i) => ({ ip: i.address, mac: i.mac })),
     tip: 'Bitte die IT, dieser Hardware-Adresse (MAC) immer dieselbe IP-Adresse zu geben.' }));
   // Uhr: Der Pi hat keine Batterieuhr und im Museumsnetz oft kein Internet. Der Admin-Browser kennt die richtige Zeit.
   app.get('/api/v1/system/time', { config: { perm: 'devices.read' } }, async () => ({ now: Date.now() }));

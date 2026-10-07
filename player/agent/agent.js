@@ -23,7 +23,7 @@ const readText = (f) => { try { return readFileSync(f, 'utf8').trim(); } catch {
 export const backoff = (n, rnd = Math.random) => Math.min(60000, 1000 * 2 ** Math.min(n, 6)) * (0.75 + rnd() * 0.5); // 1 s … 60 s mit Jitter
 
 export class Agent {
-  constructor({ dataDir, version = '0.2.4', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.5', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });

@@ -24,7 +24,7 @@ ProtectHome=yes
 PrivateTmp=yes
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 LockPersonality=yes
 ReadWritePaths=/data/agent /run/dfm/privd /run/user
 # Keine feste Speichergrenze: Anzeige und Browser dürfen den ganzen Pi nutzen; bei Speichermangel wird sie als Letztes beendet.

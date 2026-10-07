@@ -12,7 +12,9 @@ const httpsPort = Number(process.env.DFM_HTTPS_PORT ?? 443), httpPort = Number(p
 const appDir = join(dataDir, 'app');
 const guard = bootGuard(appDir); if (guard === 'rolled-back') { console.error('Update fehlgeschlagen, Rollback'); process.exit(75); }
 
-const ips = Object.values(networkInterfaces()).flat().filter((i) => i && !i.internal && i.family === 'IPv4').map((i) => i.address);
+// Die Abfrage darf den Start nie verhindern (z. B. wenn das System Netlink-Zugriff sperrt): dann ohne IP-Adressen im Zertifikat weiter.
+let ifaces = {}; try { ifaces = networkInterfaces(); } catch (e) { console.error('Netzwerkadressen nicht lesbar:', e.message); }
+const ips = Object.values(ifaces).flat().filter((i) => i && !i.internal && i.family === 'IPv4').map((i) => i.address);
 const sans = ['DNS:dfm-signage.local', `DNS:${hostname()}`, 'DNS:localhost', ...ips.map((i) => `IP:${i}`), 'IP:127.0.0.1'];
 const tls = ensureCertificate(join(dataDir, 'tls'), sans);
 const pubKeyFile = process.env.DFM_UPDATE_KEY ?? '/etc/dfm/update-key.pub';
