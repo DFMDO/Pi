@@ -22,4 +22,4 @@ Restart=always
 RestartSec=2
 NoNewPrivileges=yes
 PrivateTmp=yes
-MemoryMax=300M
+OOMScoreAdjust=-500

@@ -1,0 +1,14 @@
+[Unit]
+Description=DFM Arbeitsspeicher besser nutzen (komprimierter Auslagerungsspeicher im RAM, schont die SD-Karte)
+DefaultDependencies=no
+After=local-fs.target
+Before=dfm-mode.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/dfm/zram.sh start
+ExecStop=/usr/lib/dfm/zram.sh stop
+
+[Install]
+WantedBy=multi-user.target

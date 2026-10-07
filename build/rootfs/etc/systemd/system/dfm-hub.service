@@ -27,5 +27,7 @@ SystemCallArchitectures=native
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 ReadWritePaths=/data/hub /run/dfm/privd
-MemoryMax=450M
+# Keine feste Speichergrenze: der Hub darf den ganzen Pi nutzen. Wird der Speicher knapp, trifft es zuerst den Hub,
+# nie die Anzeige (OOMScoreAdjust) – Besucher sehen also weiter Inhalte, der Hub startet von selbst neu.
+OOMScoreAdjust=300
 UMask=0077

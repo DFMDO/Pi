@@ -14,7 +14,7 @@ export const PROFILE_SPEC = {
 };
 
 /** Schutz vor „Bild-Bomben“ (riesige Bilder) und zu hohem Speicherverbrauch auf dem Pi */
-sharp.cache(false); sharp.concurrency(1);
+sharp.cache(false); sharp.concurrency(0); // alle Prozessorkerne nutzen (Priorität bleibt niedrig: die Anzeige geht vor)
 export const SHARP_OPTS = { failOn: 'error', limitInputPixels: 80_000_000 };
 
 /** Container anhand der ersten Bytes → ffmpeg bekommt den Demuxer fest vorgegeben (kein „Raten“ durch Inhalt der Datei) */

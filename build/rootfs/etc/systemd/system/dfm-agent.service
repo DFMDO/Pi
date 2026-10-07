@@ -27,7 +27,8 @@ ProtectControlGroups=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=yes
 ReadWritePaths=/data/agent /run/dfm/privd /run/user
-MemoryMax=600M
+# Keine feste Speichergrenze: Anzeige und Browser dürfen den ganzen Pi nutzen; bei Speichermangel wird sie als Letztes beendet.
+OOMScoreAdjust=-500
 UMask=0077
 # Am Player gibt es keine eingehenden Ports: der lokale Server bindet nur 127.0.0.1
 

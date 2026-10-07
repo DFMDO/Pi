@@ -1,0 +1,17 @@
+// Der Pi wird ganz genutzt: keine festen Speichergrenzen für Hub und Anzeige, die Anzeige hat bei Speichermangel Vorrang,
+// komprimierter Auslagerungsspeicher (zram) ist eingerichtet, Bildumwandlung nutzt alle Kerne.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const R = new URL('..', import.meta.url).pathname, unit = (n) => readFileSync(`${R}build/rootfs/etc/systemd/system/${n}`, 'utf8');
+const oom = (u) => Number((/^OOMScoreAdjust=(-?\d+)/m.exec(u) ?? [])[1]);
+
+test('Volle Leistung: keine festen Speichergrenzen, Anzeige vor Hub, zram aktiv, alle Kerne', () => {
+  for (const n of ['dfm-hub.service', 'dfm-agent.service', 'dfm-kiosk@.service']) assert.doesNotMatch(unit(n), /^MemoryMax=/m, `${n} ohne feste Grenze`);
+  assert.ok(oom(unit('dfm-agent.service')) < 0 && oom(unit('dfm-hub.service')) > 0, 'bei Speichermangel trifft es zuerst den Hub, nie die Anzeige');
+  assert.match(unit('dfm-zram.service'), /ExecStart=\/usr\/lib\/dfm\/zram\.sh start/);
+  assert.match(readFileSync(`${R}build/pi-gen/stage-dfm/02-system/00-run.sh`, 'utf8'), /systemctl enable dfm-zram\.service/);
+  const z = readFileSync(`${R}build/rootfs/usr/lib/dfm/zram.sh`, 'utf8'); assert.match(z, /MEM_KB \/ 2/); assert.match(z, /swapon/);
+  assert.match(readFileSync(`${R}hub/lib/variants.js`, 'utf8'), /sharp\.concurrency\(0\)/);
+  assert.match(readFileSync(`${R}hub/lib/variants.js`, 'utf8'), /'nice', '-n', '19'/, 'Umwandlungen bleiben niedrig priorisiert');
+});
