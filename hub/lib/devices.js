@@ -142,6 +142,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const token = randomToken(32);
     const old = req.body?.replaces ? getDevice(req.body.replaces) : null;
     if (req.body?.replaces && (!old || old.status === 'pending' || old.id === d.id)) return reply.code(400).send({ error: 'Der zu ersetzende Bildschirm wurde nicht gefunden.' });
+    if (old && isHubDevice(old.id)) return reply.code(409).send({ error: HUB_MSG });
     const required = !old && db.prepare("SELECT value FROM settings WHERE key='commissioning.required'").get()?.value !== 'false';
     db.prepare("UPDATE devices SET status='active', token_hash=?, name=?, group_id=?, ready=? WHERE id=?").run(sha256hex(token), old?.name ?? req.body?.name ?? d.name, old ? old.group_id : req.body?.groupId ?? null, required ? 0 : 1, d.id);
     if (old) { // Austausch (Z.4): Name, Gruppe, Zeitplan und Einstellungen wandern zum neuen Gerät; der alte Token wird gesperrt

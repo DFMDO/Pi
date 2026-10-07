@@ -16,7 +16,7 @@ import { createServers } from '../setup/setup.js';
 import { Agent } from '../player/agent/agent.js';
 import { checkPasswordPolicy, hashPassword } from '../hub/lib/crypto.js';
 
-const EXE = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome'].find(existsSync);
+const EXE = [process.env.DFM_CHROMIUM, '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome'].filter(Boolean).find(existsSync);
 const ARGS = ['--no-sandbox', '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', '--ignore-certificate-errors'];
 const skip = !EXE && 'Chromium nicht vorhanden';
 

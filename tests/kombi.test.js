@@ -44,6 +44,10 @@ test('Hub + Bildschirm: das Hub-Gerät lässt sich nicht sperren, entfernen oder
   for (const [m, u, b] of [['POST', `/api/v1/devices/${deviceId}/block`], ['DELETE', `/api/v1/devices/${deviceId}`], ['POST', `/api/v1/devices/${deviceId}/commands`, { command: 'factory_reset' }]]) {
     const r = await a(m, u, b); assert.equal(r.statusCode, 409, `${m} ${u}`); assert.match(r.json().error, /Hub/);
   }
+  // auch der Austausch („Ersetzen“) würde das Hub-Gerät sperren
+  const nw = randomUUID(); h.db.prepare("INSERT INTO devices(id,name,profile,status,created_at) VALUES(?,?, 'standard','pending',?)").run(nw, 'Neuer Pi', Date.now());
+  const rr = await a('POST', `/api/v1/devices/${nw}/approve`, { replaces: deviceId }); assert.equal(rr.statusCode, 409); assert.match(rr.json().error, /Hub/);
+  assert.equal(h.db.prepare('SELECT status FROM devices WHERE id=?').get(nw).status, 'pending', 'neuer Bildschirm bleibt unbestätigt');
   assert.equal(h.db.prepare('SELECT status FROM devices WHERE id=?').get(deviceId).status, 'active');
   await h.cleanup();
 });

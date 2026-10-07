@@ -1,0 +1,40 @@
+# Prüft ein fertig gebautes Image OHNE Raspberry Pi: bindet es ein, startet darin Hub und Chromium (arm64 per Emulation)
+# und prüft die Browser-Richtlinie. Dauert ca. 10-20 Minuten. Ergebnis: Protokoll unter "Artifacts" und in der Zusammenfassung.
+# Start: GitHub → Actions → „Image prüfen“ → „Run workflow“ → Version (Tag) eingeben, z. B. v0.2.3
+name: Image prüfen
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag des Images unter Releases, z. B. v0.2.3"
+        default: "v0.2.3"
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Werkzeuge
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-user-static binfmt-support xz-utils curl
+      - name: Image herunterladen und entpacken
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.version }}" --repo "$GITHUB_REPOSITORY" --pattern '*.img.xz' --dir "$RUNNER_TEMP"
+          unxz -f "$RUNNER_TEMP"/*.img.xz
+          ls -lh "$RUNNER_TEMP"/*.img
+      - name: Rauchtest
+        run: |
+          chmod +x build/smoke-test-image.sh
+          sudo build/smoke-test-image.sh "$(ls "$RUNNER_TEMP"/*.img)" "$GITHUB_WORKSPACE/smoke-result.txt"
+      - name: Ergebnis anzeigen
+        if: always()
+        run: |
+          { echo '## Image-Rauchtest ${{ inputs.version }}'; echo '```'; cat smoke-result.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-result
+          path: smoke-result.txt

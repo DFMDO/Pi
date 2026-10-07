@@ -1,0 +1,25 @@
+# Führt bei jedem Hochladen alle automatischen Tests unter Linux aus (wie auf dem Pi, nur ohne Hardware).
+# Ergebnis: GitHub → Actions → „Tests“. Grün = alles bestanden.
+name: Tests
+on:
+  push:
+    branches: [claude/hallo-ip4164, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: Werkzeuge
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg poppler-utils openssl
+      - run: npm ci
+      - name: Chromium für die Oberflächen-Tests
+        run: |
+          npx playwright-core install --with-deps chromium
+          echo "DFM_CHROMIUM=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome | head -1)" >> "$GITHUB_ENV"
+      - run: npm test
