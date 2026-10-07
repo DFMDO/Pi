@@ -39,10 +39,10 @@ table{border-collapse:collapse;width:100%;font-size:9.5pt} td,th{border-bottom:1
 <p>Übersicht für die Entscheidung: Was das System kann, wie es aussieht, wie sicher und robust es ist, was es braucht und was als Nächstes zu tun ist.</p><p>Version 0.2.1 · Stand ${datum}</p></section>
 
 <section class="p"><h2>Zusammenfassung</h2>
-<div class="kpi"><div><b>0 €</b><span>Lizenzkosten, keine Cloud, kein Abo</span></div><div><b>14 Tage</b><span>Inhalte laufen auch ohne Netz und ohne Hub weiter</span></div><div><b>~10 Min.</b><span>Einrichtung eines Bildschirms per QR-Code und Handy</span></div><div><b>129 / 129</b><span>automatische Tests bestanden</span></div></div>
+<div class="kpi"><div><b>0 €</b><span>Lizenzkosten, keine Cloud, kein Abo</span></div><div><b>14 Tage</b><span>Inhalte laufen auch ohne Netz und ohne Hub weiter</span></div><div><b>~10 Min.</b><span>Einrichtung eines Bildschirms per QR-Code und Handy</span></div><div><b>131 / 131</b><span>automatische Tests bestanden</span></div></div>
 <div class="cols"><div><h3>Was ist DFM Signage?</h3><p>Ein eigenes, lokales System für alle Bildschirme im Haus (Foyer, Kasse, Shop, Ausstellung, Café). Ein kleiner Rechner (Raspberry Pi) als zentraler „Hub“ verwaltet die Inhalte; an jedem Bildschirm steckt ein Raspberry Pi als „Player“. <b>Für den Anfang reicht ein einziger Pi, der Hub und Bildschirm zugleich ist.</b> Bedient wird alles über den Browser – vom PC, Tablet oder Handy.</p>
 <h3>Warum?</h3><ul><li>Keine laufenden Kosten für Cloud-Dienste (wie Yodeck) und keine Abhängigkeit vom Internet.</li><li>Alle Daten bleiben im Haus (Datenschutz).</li><li>Bedienung für Menschen ohne Technikwissen, komplett auf Deutsch und im DFM-Design.</li></ul></div>
-<div><h3>Stand heute</h3><ul><li><span class="ok">✔</span> Software vollständig entwickelt, inklusive aller Erweiterungswünsche.</li><li><span class="ok">✔</span> Fertiges SD-Karten-Image (Version 0.2.1) gebaut, signiert und automatisch geprüft (27 von 27 Prüfungen bestanden).</li><li><span class="ok">✔</span> 129 automatische Tests bestanden, darunter Tests im echten Browser.</li><li><span class="warn">▲</span> Noch <b>nicht auf echten Bildschirmen im Haus getestet</b>.</li></ul>
+<div><h3>Stand heute</h3><ul><li><span class="ok">✔</span> Software vollständig entwickelt, inklusive aller Erweiterungswünsche.</li><li><span class="ok">✔</span> Fertiges SD-Karten-Image (Version 0.2.1) gebaut, signiert und automatisch geprüft (27 von 27 Prüfungen bestanden).</li><li><span class="ok">✔</span> 131 automatische Tests bestanden, darunter Tests im echten Browser.</li><li><span class="warn">▲</span> Noch <b>nicht auf echten Bildschirmen im Haus getestet</b>.</li></ul>
 <h3>Empfehlung</h3><p class="box">Pilotbetrieb mit <b>einem Pi als Hub und Bildschirm zugleich</b> (z. B. im Foyer) plus 1–2 weiteren Bildschirmen (z. B. Kasse, Shop) für 2–4 Wochen. Dabei die Hardware-Abnahme (Seite „Nächste Schritte“) abarbeiten. Danach Entscheidung über den Ausbau.</p></div></div></section>
 
 <section class="p"><h2>Das Wichtigste auf einen Blick</h2><div class="cols"><div><ul>
@@ -108,7 +108,7 @@ ${divider('Sicherheit, Betrieb, Kosten', 'Was das System absichert, was es brauc
 
 <section class="p"><h2>Technischer Stand – ehrlich</h2><div class="cols"><div><h3>Erledigt und nachgewiesen</h3><table>
 <tr><td><span class="ok">✔</span></td><td>Alle Funktionen der Aufgabenstellung inklusive Erweiterung und Zusatzwünschen umgesetzt – auch der Betrieb mit nur einem Gerät (Hub + Bildschirm)</td></tr>
-<tr><td><span class="ok">✔</span></td><td>129 automatische Tests bestanden (Hub, Player, Einrichtung, Browser-Tests, simulierte Bildschirme)</td></tr>
+<tr><td><span class="ok">✔</span></td><td>131 automatische Tests bestanden (Hub, Player, Einrichtung, Browser-Tests, simulierte Bildschirme)</td></tr>
 <tr><td><span class="ok">✔</span></td><td>SD-Karten-Image 0.2.1 gebaut, signiert, 27/27 Sicherheits- und Qualitätsprüfungen bestanden</td></tr>
 <tr><td><span class="ok">✔</span></td><td>Live-Kachelansicht mit 10 Bildschirmen öffnet in 0,1 s (Ziel: unter 3 s)</td></tr>
 <tr><td><span class="ok">✔</span></td><td>Bildschirm gilt nach höchstens 65 s ohne Meldung als „keine Verbindung“</td></tr>
