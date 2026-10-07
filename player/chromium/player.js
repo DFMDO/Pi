@@ -27,16 +27,18 @@ function standby() {
 function build(item) {
   if (item.kind === 'text') { const t = item.text ?? {}; return el('div', 'text ' + (t.template ?? 'standard'), el('h1', '', t.title ?? ''), el('p', '', t.body ?? '')); }
   const src = '/media/' + item.mediaId;
-  if (item.kind === 'video') { const v = el('video'); v.muted = true; v.playsInline = true; v.src = src; return v; }
+  if (item.kind === 'video') { const v = el('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.disableRemotePlayback = true; v.src = src; return v; }
   const i = el('img'); i.src = src; i.alt = item.name ?? ''; return i;
 }
+/** Video-Decoder sofort freigeben: Der Pi hat nur wenige Hardware-Decoder – ein „vergessenes“ Video würde den nächsten ausbremsen */
+function release(layer) { for (const v of layer.querySelectorAll('video')) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch {} } }
 async function show(node, transition) {
   const layer = el('div', 'layer' + (transition === 'cut' ? ' cut' : ''), node); stage.append(layer);
   const media = node.tagName === 'VIDEO' || node.tagName === 'IMG' ? node : null;
   if (media) await new Promise((res) => { media.onloadeddata = media.onload = res; media.onerror = res; setTimeout(res, 8000); });
   requestAnimationFrame(() => layer.classList.add('on'));
   const old = front; front = layer;
-  if (old) setTimeout(() => old.remove(), transition === 'cut' ? 50 : 700);
+  if (old) setTimeout(() => { release(old); old.remove(); }, transition === 'cut' ? 50 : 700);
   return node;
 }
 

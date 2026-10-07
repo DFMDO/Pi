@@ -73,6 +73,7 @@ function editDlg(d, groups, route) {
   const off = h('input', { type: 'checkbox', checked: !!d.display?.off }), from = h('input', { type: 'time', class: 'inline', value: d.display?.off?.from ?? '22:00', 'aria-label': 'Aus ab' }), to = h('input', { type: 'time', class: 'inline', value: d.display?.off?.to ?? '07:00', 'aria-label': 'An ab' });
   const dlg0 = dialog('Bildschirm bearbeiten', h('div', {}, field('Name', name), field('Gruppe', grp, 'Bildschirme in einer Gruppe können gemeinsam geplant werden.'),
     h('div', { class: 'card' }, h('label', {}, off, ' Bildschirm automatisch ausschalten'), h('p', {}, 'von ', from, ' bis ', to, ' Uhr'), h('p', { class: 'hint' }, 'Wenn sich der Bildschirm nicht abschalten lässt (kein HDMI-CEC), zeigt er in dieser Zeit stattdessen ein schwarzes Bild.'), d.state?.displayPower === 'nicht möglich' ? h('p', { class: 'bad' }, '⚠ Dieser Bildschirm lässt sich nicht abschalten – er zeigt ein schwarzes Bild.') : null),
+    h('details', {}, h('summary', {}, 'Wiedergabe (für Video-Bildschirme)'), playbackBox(d)),
     h('details', {}, h('summary', {}, 'Hochkant und Seitenverhältnis'), h('div', { id: 'fitbox' }, h('p', { class: 'hint' }, 'Wird geladen …'))),
     h('details', {}, h('summary', {}, 'Erweitert'), field('Leistungsprofil', prof, 'Wird automatisch passend zum Gerät gewählt. Ändere es nur, wenn du genau weißt, warum.'), h('p', { class: 'hint' }, `Fingerabdruck des Hubs, den dieser Bildschirm kennt: ${d.spki ?? '–'}`))),
     [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await patch(`/devices/${d.id}`, { name: name.value, groupId: grp.value || null, profile: prof.value, display: off.checked ? { off: { from: from.value, to: to.value } } : null }); toast('Gespeichert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
@@ -126,4 +127,11 @@ function copyDlg(d, route) {
 function replaceInfo(route) {
   dialog('Bildschirm ersetzen', h('div', {}, h('ol', {}, h('li', {}, 'Baue den neuen Raspberry Pi auf und schalte ihn ein.'), h('li', {}, 'Klicke hier auf „Weiter“ und verbinde ihn wie gewohnt mit dem Code oder der Startkarte.'), h('li', {}, 'Bestätige den neuen Bildschirm in der Liste und wähle dabei, welchen alten Bildschirm er ersetzt. Name, Gruppe, Termine und Einstellungen wandern automatisch zum neuen Gerät. Der alte wird gesperrt.'))),
     [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Weiter', fn: () => { pairDialog(route); } }]);
+}
+
+/** Wiedergabe-Art: Browser (Texte, Laufband, Zonen) oder Video-optimiert (mpv: Videos direkt über den Hardware-Decoder, am flüssigsten) */
+function playbackBox(d) {
+  const sel = h('select', { 'aria-label': 'Wiedergabe-Art', disabled: d.profile === 'lite' }, [['auto', 'Automatisch (empfohlen)'], ['mpv', 'Video-optimiert – am flüssigsten, ohne Laufband/Zonen'], ['browser', 'Browser – mit Laufband, Uhr und Zonen']].map(([k, t]) => h('option', { value: k, selected: k === (d.renderer ?? 'auto') }, t)));
+  return h('div', {}, h('p', { class: 'hint' }, d.profile === 'lite' ? 'Dieses Gerät nutzt immer die Video-optimierte Wiedergabe.' : 'Für einen Bildschirm, der hauptsächlich Videos zeigt, ist „Video-optimiert“ am flüssigsten: Videos laufen direkt über den Video-Chip des Raspberry Pi. Texte werden dort als Bild gezeigt; Laufband und Zonen gibt es dann nicht.'),
+    field('Wiedergabe', sel), d.profile === 'lite' ? null : h('button', { class: 'btn', type: 'button', onclick: async () => { try { const r = await put(`/devices/${d.id}/playback`, { renderer: sel.value }); toast(r.text); } catch (e) { toast(e.message, 'err'); } } }, 'Wiedergabe speichern'));
 }

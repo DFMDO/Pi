@@ -6,6 +6,8 @@ chmod 1733 /run/dfm/privd   # Agent/Hub dürfen Anfragen ablegen, aber nicht les
 if [ ! -f /data/config.json ] || [ -f /data/state/force-setup ]; then MODE=setup
 else MODE=$(sed -n 's/.*"role":"\([a-z]*\)".*/\1/p' /data/config.json); fi
 echo "$MODE" > /run/dfm/mode
+# Volle Leistung: Prozessortakt nicht absenken (verhindert Ruckler beim Hochtakten). Bei Hitze drosselt die Firmware weiterhin selbst.
+for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do [ -w "$g" ] && echo performance > "$g" || true; done
 # Hostname je Betrieb: Hub = dfm-signage (→ dfm-signage.local), sonst dfm-<4 Zeichen>. Nur im Speicher (Root ist schreibgeschützt).
 SUFFIX=$(sed -n 's/.*"hostname":"\([a-z0-9-]*\)".*/\1/p' /data/device.json 2>/dev/null || true)
 case "$MODE" in hub|kombi) hostname dfm-signage ;; *) [ -n "$SUFFIX" ] && hostname "$SUFFIX" ;; esac

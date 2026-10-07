@@ -50,11 +50,14 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   const hold = device.maintenance_since ? 'wartung' : device.ready === 0 ? 'nicht_bereit' : null;
   const tickers = db.prepare("SELECT text,valid_from AS validFrom,valid_to AS validTo FROM tickers WHERE state='published' AND (target_type='all' OR (target_type='device' AND target_id=?) OR (target_type='group' AND target_id=?))").all(device.id, device.group_id ?? '');
   const stg = Object.fromEntries(db.prepare("SELECT key,value FROM settings WHERE key LIKE 'maintenance.%'").all().map((r) => [r.key, r.value]));
-  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation, fit: device.fit_json ? JSON.parse(device.fit_json) : null, overrides, specialDays, hold, tickers,
+  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation, renderer: rendererOf(device), fit: device.fit_json ? JSON.parse(device.fit_json) : null, overrides, specialDays, hold, tickers,
     layout: device.profile === 'lite' ? null : device.layout_json ? JSON.parse(device.layout_json) : null,
     maintenance: { nightlyReboot: (stg['maintenance.nightlyReboot'] ?? 'true') === 'true' ? (stg['maintenance.rebootAt'] ?? '03:30') : null },
     display: device.display_json ? JSON.parse(device.display_json) : null, sync: { window: st['sync.window'] ?? '', bandwidthKbps: Number(st['sync.bandwidthKbps'] ?? 0) } };
 }
+
+/** Wiedergabe-Art: Lite immer mpv (kein Browser); sonst wie eingestellt, Standard ist der Browser */
+export const rendererOf = (d) => (d.profile === 'lite' || d.renderer === 'mpv' ? 'mpv' : 'browser');
 
 /** Alle Medien, die dieser Player braucht (nur Variante seines Profils). */
 export function manifestPayload(db, device, now = Date.now()) {
@@ -68,7 +71,7 @@ export function manifestPayload(db, device, now = Date.now()) {
   for (const id of ids) {
     const m = db.prepare('SELECT * FROM media WHERE id=?').get(id);
     if (!m || isExpired(m.valid_until, now)) continue;
-    if (m.kind === 'text' && device.profile !== 'lite') { items.push({ id, kind: 'text', name: m.name, text: JSON.parse(m.text_json || '{}'), validUntil: m.valid_until ?? null }); continue; }
+    if (m.kind === 'text' && rendererOf(device) === 'browser') { /* mpv kann keinen Text setzen → dort vorgerendertes Bild */ items.push({ id, kind: 'text', name: m.name, text: JSON.parse(m.text_json || '{}'), validUntil: m.valid_until ?? null }); continue; }
     const v = db.prepare("SELECT * FROM media_variants WHERE media_id=? AND profile=? AND status='ready'").get(id, device.profile);
     items.push(v ? { id, kind: m.kind, name: m.name, sha256: v.sha256, size: v.size, durationS: m.duration_s, url: `/api/v1/device/media/${id}`, validUntil: m.valid_until ?? null }
       : { id, kind: m.kind, name: m.name, pending: true });

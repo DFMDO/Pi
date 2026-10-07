@@ -109,7 +109,7 @@ export function createVariantQueue({ db, mediaDir, onChange = () => {}, log = ()
     const ins = db.prepare("INSERT OR IGNORE INTO media_variants(id,media_id,profile,status) VALUES(?,?,?, 'pending')");
     for (const m of db.prepare("SELECT id,kind FROM media WHERE kind IN ('image','video','pdfpage','text')").all()) {
       for (const p of activeProfiles()) {
-        if (m.kind === 'text' && p !== 'lite') continue; // nur Lite braucht Bild-Variante von Text
+        // Text auch als Bild für jedes Profil: Bildschirme mit Video-optimierter Wiedergabe (mpv) zeigen Text als Bild
         ins.run(`${m.id}:${p}`, m.id, p);
       }
     }

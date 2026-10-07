@@ -161,7 +161,10 @@ export class Agent {
   activeBase() { return `https://${this.cfg.lastIp ?? new URL(this.cfg.hubUrl).hostname}${new URL(this.cfg.hubUrl).port ? ':' + new URL(this.cfg.hubUrl).port : ''}`; }
 
   /** Einstellungen aus dem Hub: Sync-Zeitfenster, Bandbreite, Bildschirm aus/an (lokal gespeichert, wirkt auch ohne Hub) */
+  /** Wiedergabe-Art (Browser oder Video-optimiert mit mpv) kommt vom Hub. Ändert sie sich, startet der Agent neu und wählt den passenden Renderer. */
+  rendererWanted() { return this.cfg?.profile === 'lite' || this.cfg?.renderer === 'mpv' ? 'mpv' : 'browser'; }
   applyHubSettings(plan) {
+    if (plan.renderer && plan.renderer !== this.rendererWanted()) { this.cfg.renderer = plan.renderer; writeJson(this.cfgFile, this.cfg); this.log('Wiedergabe-Art geändert:', plan.renderer, '– Anzeige startet neu'); setTimeout(() => this.exit(0), 300); }
     if (plan.sync) { this.cfg.syncWindow = plan.sync.window ?? ''; this.cfg.bandwidthKbps = plan.sync.bandwidthKbps ?? 0; }
     this.displayRule = plan.display?.off ?? null; this.checkDisplay();
   }
@@ -252,7 +255,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const cfg = readJson(join(dataDir, 'agent.json'));
   const { chromiumRenderer, liteRenderer } = await import('./lib/renderers.js');
   const a = new Agent({ dataDir, log: (...x) => console.error(...x), port: Number(process.env.DFM_PORT ?? 8080) });
-  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getRotation: () => a.cfg?.orientation ?? 0, onShow: (s) => a.onPlayerStatus(s), haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
+  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' || cfg?.renderer === 'mpv' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getRotation: () => a.cfg?.orientation ?? 0, onShow: (s) => a.onPlayerStatus(s), haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
     : chromiumRenderer({ url: 'http://127.0.0.1:8080/player/', profileDir: join(dataDir, 'chromium-profile') });
   await a.start();
   for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => a.stop().then(() => process.exit(0)));

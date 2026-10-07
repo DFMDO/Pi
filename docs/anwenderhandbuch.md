@@ -259,3 +259,9 @@ Für den Anfang oder kleine Anlagen braucht es **keinen eigenen Hub-Rechner**. W
 
 ## 31. Videos: am besten Full-HD-MP4
 Videos im Format **MP4 (H.264), höchstens Full HD (1920×1080) und 25 oder 30 Bilder pro Sekunde** übernimmt der Hub in wenigen Sekunden – er verpackt sie nur um, ohne sie neu zu berechnen. Das ist besonders wichtig, wenn der Hub ein Raspberry Pi 3 B+ ist. Andere Videos (4K, HEVC/H.265, 50/60 Bilder pro Sekunde, sehr hohe Datenrate) werden neu berechnet; das kann auf einem Pi 3 B+ ein Vielfaches der Videolänge dauern. Die Oberfläche weist darauf hin. Der Ton wird nicht übernommen (die Bildschirme spielen stumm).
+
+## 32. Flüssige Video-Wiedergabe
+- Alle Bildschirme nutzen den **Video-Chip des Raspberry Pi** (Hardware-Beschleunigung), den vollen Prozessortakt und genug reservierten Speicher für den Video-Decoder.
+- Für einen Bildschirm, der **hauptsächlich Videos** zeigt: *Bildschirme → Bearbeiten → Wiedergabe → „Video-optimiert“*. Videos laufen dann direkt über den Video-Chip ohne Browser dazwischen – das ist auf dem Raspberry Pi 3 B+ am flüssigsten. Texte werden dort als Bild gezeigt, Laufband und Zonen gibt es auf diesem Bildschirm nicht. Der Bildschirm startet die Anzeige nach dem Umstellen einmal neu.
+- Videos liegen immer vollständig auf dem Bildschirm, bevor sie gezeigt werden – es wird nie über das WLAN „gestreamt“. Ein schwaches WLAN kann die Wiedergabe deshalb nicht stören.
+- Videos am besten als **Full-HD-MP4 (H.264, 25/30 Bilder pro Sekunde)** liefern (siehe Kapitel 31).

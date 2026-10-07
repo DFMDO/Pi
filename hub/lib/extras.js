@@ -179,6 +179,11 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
     return { id: d.id, name: d.name, location: d.location, floor: d.floor, serial: d.serial ?? hw.serial ?? null, mac: d.mac ?? hw.mac ?? null, installedAt: d.installed_at ?? new Date(d.created_at).toISOString().slice(0, 10), notes: d.notes, docUrl: d.doc_url, model: d.model, version: stOf(d)?.version ?? null,
       maintenance: d.maintenance_since, ready: d.ready !== 0, layout: d.layout_json ? JSON.parse(d.layout_json) : null };
   });
+  app.put('/api/v1/devices/:id/playback', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', required: ['renderer'], additionalProperties: false, properties: { renderer: { enum: ['auto', 'browser', 'mpv'] } } } } }, async (req, reply) => {
+    const d = dv().getDevice(req.params.id); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
+    db.prepare('UPDATE devices SET renderer=? WHERE id=?').run(req.body.renderer, d.id); app.variants.ensureAll(); dv().pushPlan(dv().getDevice(d.id)); A(req, 'bildschirm.wiedergabe_geaendert', d.id, req.body);
+    return { ok: true, text: req.body.renderer === 'mpv' ? 'Video-optimierte Wiedergabe: Der Bildschirm startet die Anzeige einmal neu. Laufband und Zonen werden dort nicht angezeigt.' : 'Gespeichert. Der Bildschirm startet die Anzeige einmal neu.' };
+  });
   app.post('/api/v1/devices/:id/maintenance', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', required: ['on'], additionalProperties: false, properties: { on: { type: 'boolean' } } } } }, async (req, reply) => {
     const d = dv().getDevice(req.params.id); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
     db.prepare('UPDATE devices SET maintenance_since=? WHERE id=?').run(req.body.on ? now() : null, d.id); A(req, req.body.on ? 'wartungsmodus.an' : 'wartungsmodus.aus', d.id); dv().pushPlan(dv().getDevice(d.id));

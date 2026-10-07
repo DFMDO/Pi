@@ -10,7 +10,7 @@
 | Pi 5 / 500 | Pro | **kein H.264-Hardwaredecoder**, nur HEVC | wie Pi 4: 1080p60 H.264 (Software-Decode) | 4 Kerne A76 schaffen 1080p60 H.264 per Software; HEVC-Hardware-Decode im Chromium unter Linux ist unzuverlässig → H.264 als sicherer Standard, HEVC nur als dokumentierte Option |
 
 ## Offene Messpunkte (vor Freigabe pro Modell)
-1. Pi 3: Läuft 1080p30 H.264 in **Chromium** wirklich hardwarebeschleunigt (Bildrate, CPU-Last, Temperatur)? Falls nein → Standard-Variante auf 720p30 senken **oder** den Standard-Renderer auf mpv umstellen (Lite-Renderer ist vorhanden, nur Text/Widgets fehlen).
+1. Pi 3: Läuft 1080p30 H.264 in **Chromium** wirklich hardwarebeschleunigt (Bildrate, CPU-Last, Temperatur)? Falls nein → den Bildschirm auf **„Video-optimiert“ (mpv)** stellen (seit 0.2.2 je Bildschirm wählbar; Texte als Bild, ohne Laufband/Zonen) oder die Standard-Variante auf 720p30 senken.
 2. Pi 5: CPU-Last bei 1080p60 H.264 (Software) und Temperatur ohne Lüfter; HEVC-Variante testweise.
 3. Zero 2 W: Speicherbudget Agent + mpv (Ziel < 150 MB) und Dauerbetrieb 24 h.
 

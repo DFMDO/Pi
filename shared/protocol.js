@@ -13,7 +13,7 @@ const SCHEMAS = {
   heartbeat: { state: obj },
   schedule_update: { generatedAt: num, from: num, to: num, segments: Array.isArray, playlists: obj,
     defaultPlaylistId: (x) => x === null || typeof x === 'string', orientation: opt(num), display: opt((x) => x === null || obj(x)), sync: opt(obj),
-    fit: opt((x) => x === null || obj(x)), overrides: opt(Array.isArray), specialDays: opt(Array.isArray), hold: opt((x) => x === null || str(20)(x)), tickers: opt(Array.isArray), layout: opt((x) => x === null || obj(x)), maintenance: opt(obj) },
+    fit: opt((x) => x === null || obj(x)), renderer: opt((x) => x === 'browser' || x === 'mpv'), overrides: opt(Array.isArray), specialDays: opt(Array.isArray), hold: opt((x) => x === null || str(20)(x)), tickers: opt(Array.isArray), layout: opt((x) => x === null || obj(x)), maintenance: opt(obj) },
   media_manifest: { generatedAt: num, items: Array.isArray },
   command: { id: str(64), command: (x) => COMMANDS.includes(x), args: opt(obj) },
   command_result: { id: str(64), ok: (x) => typeof x === 'boolean', result: opt(obj), error: opt(str(500)) },

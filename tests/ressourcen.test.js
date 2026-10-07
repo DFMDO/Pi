@@ -15,3 +15,11 @@ test('Volle Leistung: keine festen Speichergrenzen, Anzeige vor Hub, zram aktiv,
   assert.match(readFileSync(`${R}hub/lib/variants.js`, 'utf8'), /sharp\.concurrency\(0\)/);
   assert.match(readFileSync(`${R}hub/lib/variants.js`, 'utf8'), /'nice', '-n', '19'/, 'Umwandlungen bleiben niedrig priorisiert');
 });
+
+test('Wiedergabe: GPU/Video-Hardware im Browser, Decoder-Speicher (CMA) für Pi 3/4, voller Prozessortakt, Decoder wird freigegeben', () => {
+  const r = readFileSync(`${R}player/agent/lib/renderers.js`, 'utf8'); for (const f of ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--enable-zero-copy', '--enable-accelerated-video-decode']) assert.ok(r.includes(f), f);
+  assert.match(r, /'--hwdec=auto-safe'/, 'mpv mit Hardware-Decoder');
+  const c = readFileSync(`${R}build/boot/config.txt.add`, 'utf8'); assert.match(c, /\[pi3\]\ndtoverlay=cma,cma-256/); assert.match(c, /\[pi4\]\ndtoverlay=cma,cma-384/); assert.match(c, /\[all\]/);
+  assert.match(readFileSync(`${R}build/rootfs/usr/lib/dfm/select-mode.sh`, 'utf8'), /performance/);
+  assert.match(readFileSync(`${R}player/chromium/player.js`, 'utf8'), /removeAttribute\('src'\)/);
+});

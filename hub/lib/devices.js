@@ -68,7 +68,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   const present = (d) => {
     const st = d.state_json ? JSON.parse(d.state_json) : null;
     const g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id) : null;
-    return { id: d.id, display: d.display_json ? JSON.parse(d.display_json) : null, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, orientation: d.orientation,
+    return { id: d.id, display: d.display_json ? JSON.parse(d.display_json) : null, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, renderer: d.renderer ?? 'auto', orientation: d.orientation,
       status: deviceStatus(d), summary: summary(d, st), lastSeen: d.last_seen, state: st, hw: d.hw_json ? JSON.parse(d.hw_json) : null,
       spki: d.spki_seen ? formatFingerprint(d.spki_seen) : null, online: sockets.has(d.id) };
   };

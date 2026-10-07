@@ -62,3 +62,15 @@ test('Gestaffelte Updates: erst Test-Bildschirm, nach Beobachtungszeit in Gruppe
   assert.ok(h.db.prepare("SELECT 1 FROM audit_log WHERE action='rollout.rueckfall' AND security=1").get());
   await h.cleanup();
 });
+
+test('Wiedergabe-Art: Video-optimiert (mpv) – Plan meldet es, Texte kommen als Bild, Lite immer mpv', async () => {
+  const h = await makeHub(); const a = await h.as('admin'), dv = mkDev(h, 'Video-Wand'), lite = mkDev(h, 'Zero', 'lite');
+  const t = (await a('POST', '/api/v1/media/text', { name: 'Hinweis', title: 'Hallo' })).json().id; await pl(a, [t]); await h.app.variants.idle();
+  const dev = () => h.db.prepare('SELECT * FROM devices WHERE id=?').get(dv);
+  assert.equal(schedulePayload(h.db, dev()).renderer, 'browser'); assert.equal(manifestPayload(h.db, dev()).items.find((x) => x.id === t).text?.title, 'Hallo', 'Browser setzt Text selbst');
+  assert.equal(schedulePayload(h.db, h.db.prepare('SELECT * FROM devices WHERE id=?').get(lite)).renderer, 'mpv');
+  assert.equal((await a('PUT', `/api/v1/devices/${dv}/playback`, { renderer: 'mpv' })).statusCode, 200); await h.app.variants.idle();
+  assert.equal(schedulePayload(h.db, dev()).renderer, 'mpv'); const it = manifestPayload(h.db, dev()).items.find((x) => x.id === t); assert.equal(it.text, undefined); assert.ok(it.sha256 && it.url, 'Text als vorgerendertes Bild in Full HD');
+  assert.equal((await a('PUT', `/api/v1/devices/${dv}/playback`, { renderer: 'vlc' })).statusCode, 400); assert.equal((await (await h.as('edi'))('PUT', `/api/v1/devices/${dv}/playback`, { renderer: 'mpv' })).statusCode, 403);
+  await h.cleanup();
+});
