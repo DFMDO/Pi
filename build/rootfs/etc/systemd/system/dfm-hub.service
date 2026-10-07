@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 User=dfm-hub
 Group=dfm-hub
-Environment=DFM_DATA=/data/hub DFM_BOOT=/boot/firmware DFM_PRIVD_DIR=/run/dfm/privd NODE_ENV=production DFM_BASE=/opt/dfm
+Environment=DFM_DATA=/data/hub DFM_BOOT=/boot/firmware DFM_PRIVD_DIR=/run/dfm/privd NODE_ENV=production DFM_BASE=/opt/dfm HOME=/data/hub XDG_CACHE_HOME=/data/hub/cache
 ExecStart=/usr/lib/dfm/launch hub
 Restart=on-failure
 RestartSec=3

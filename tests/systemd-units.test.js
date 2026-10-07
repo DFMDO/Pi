@@ -23,6 +23,12 @@ test('Einrichtung darf Dateien übereignen; beim Start gehört /data/hub/tls dem
   assert.match(dm, /chown -R 990:990 \/data\/hub\/tls/);
 });
 
+// Regression aus dem Pilot (Diagnose von 0.2.6): "Fontconfig error: No writable cache directories" bei jedem Textbild (HOME=/nonexistent).
+test('Hub hat ein beschreibbares Cache-Verzeichnis für Schriften', () => {
+  assert.match(unit('dfm-hub.service'), /XDG_CACHE_HOME=\/data\/hub\/cache/);
+  assert.match(unit('dfm-hub.service'), /^ReadWritePaths=.*\/data\/hub\b/m);
+});
+
 test('Hub startet auch, wenn die Netzwerkabfrage fehlschlägt', () => {
   const s = readFileSync(new URL('../hub/server.js', import.meta.url), 'utf8');
   assert.match(s, /try \{ ifaces = networkInterfaces\(\); \} catch/);

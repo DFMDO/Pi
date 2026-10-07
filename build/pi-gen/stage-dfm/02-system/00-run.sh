@@ -19,6 +19,8 @@ getent passwd dfm-kiosk >/dev/null || useradd --system --uid 992 --user-group --
 # Kein Standardbenutzer, root ohne Passwort, keine Konsole
 userdel -r dfmtmp 2>/dev/null || true; userdel -r pi 2>/dev/null || true
 passwd -l root
+# Schrift-Zwischenspeicher vorab erzeugen (Root ist schreibgeschützt; sonst meldet fontconfig bei jedem Textbild "No writable cache directories")
+fc-cache -f >/dev/null 2>&1 || true
 rm -f /etc/sudoers.d/010_pi-nopasswd /etc/sudoers.d/010_dfmtmp-nopasswd /etc/systemd/system/getty@tty1.service.d/autologin.conf
 systemctl disable ssh.service sshd.service sshswitch.service regenerate_ssh_host_keys.service ModemManager.service cron.service rpi-eeprom-update.service userconfig.service raspi-config.service rpi-resize.service resize2fs_once.service apt-daily.timer apt-daily-upgrade.timer man-db.timer bluetooth.service hciuart.service triggerhappy.service 2>/dev/null || true
 systemctl mask ssh.service sshd.service ssh.socket sshswitch.service regenerate_ssh_host_keys.service ModemManager.service rpi-eeprom-update.service userconfig.service apt-daily.service apt-daily-upgrade.service systemd-timesyncd.service getty@tty1.service
