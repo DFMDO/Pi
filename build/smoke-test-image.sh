@@ -28,7 +28,11 @@ ok "Skripte in /usr/lib/dfm geprüft (ausführbar, LF, Syntax)"
 R systemd-analyze verify /etc/systemd/system/dfm-hub.service /etc/systemd/system/dfm-agent.service /etc/systemd/system/dfm-diag.service /etc/systemd/system/dfm-kiosk@.service >> "$OUT" 2>&1 || say "HINWEIS  systemd-analyze meldet Warnungen (siehe oben)"
 
 # ---------- 2. Hub startet und antwortet ----------
-HLOG=$(mktemp); R /usr/bin/env DFM_DATA=/tmp/hubdata DFM_HTTPS_PORT=18443 DFM_HTTP_PORT=18080 NODE_ENV=production DFM_BASE=/opt/dfm /opt/node/bin/node /opt/dfm/hub/server.js > "$HLOG" 2>&1 &
+# Wie auf dem Pi: Die Einrichtung legt Schlüssel/Zertifikat als root an; datamount.sh übereignet sie beim Start dem Hub (uid 990), der Hub läuft als uid 990.
+mkdir -p "$M/tmp/hubdata/tls"; chmod 700 "$M/tmp/hubdata/tls"; R openssl ecparam -name prime256v1 -genkey -noout -out /tmp/hubdata/tls/hub.key; chmod 600 "$M/tmp/hubdata/tls/hub.key"
+chown 990:990 "$M/tmp/hubdata"; chown root:root "$M/tmp/hubdata/tls" "$M/tmp/hubdata/tls/hub.key"
+FIX=$(grep '^\[ -d /data/hub/tls \]' "$M/usr/lib/dfm/datamount.sh" | sed 's#/data/hub#/tmp/hubdata#g'); [ -n "$FIX" ] && R sh -c "$FIX" || bad "datamount.sh übereignet /data/hub/tls nicht"
+HLOG=$(mktemp); chroot --userspec=990:990 "$M" /usr/bin/env DFM_DATA=/tmp/hubdata DFM_HTTPS_PORT=18443 DFM_HTTP_PORT=18080 NODE_ENV=production DFM_BASE=/opt/dfm /opt/node/bin/node /opt/dfm/hub/server.js > "$HLOG" 2>&1 &
 CODE=000; for i in $(seq 1 90); do CODE=$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:18443/ 2>/dev/null); [ "$CODE" = 200 ] && break; sleep 1; done
 if [ "$CODE" = 200 ]; then ok "Hub startet im Image (arm64) und liefert die Oberfläche über HTTPS (nach ${i}s)"; else bad "Hub antwortet nicht (HTTP $CODE). Ausgabe:"; tail -20 "$HLOG" | tee -a "$OUT"; fi
 [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/)" = 301 ] && ok "Port 80 leitet auf HTTPS um" || bad "Port 80 leitet nicht um"
