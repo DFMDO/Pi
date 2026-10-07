@@ -37,10 +37,11 @@ const runLow = (cmd, args) => { const p = lowPriority(); return p.length ? run(p
 
 export async function probeVideo(file) {
   const fmt = demuxerFor(file); if (!fmt) throw new Error('Containerformat nicht erlaubt');
-  const out = JSON.parse(await run('ffprobe', ['-v', 'error', '-protocol_whitelist', 'file', '-f', fmt, '-select_streams', 'v:0', '-show_entries', 'stream=width,height,avg_frame_rate,codec_name:format=duration', '-of', 'json', file]));
+  const out = JSON.parse(await run('ffprobe', ['-v', 'error', '-protocol_whitelist', 'file', '-f', fmt, '-select_streams', 'v:0', '-show_entries', 'stream=width,height,avg_frame_rate,codec_name,pix_fmt,profile,bit_rate:format=duration,bit_rate', '-of', 'json', file]));
   const s = out.streams?.[0]; if (!s) throw new Error('Keine Videospur gefunden.');
   const [a, b] = (s.avg_frame_rate || '0/1').split('/').map(Number);
-  return { width: s.width, height: s.height, fps: b ? a / b : 0, duration: parseFloat(out.format?.duration ?? '0'), codec: s.codec_name };
+  return { width: s.width, height: s.height, fps: b ? a / b : 0, duration: parseFloat(out.format?.duration ?? '0'), codec: s.codec_name, pixFmt: s.pix_fmt ?? null, profile: s.profile ?? null,
+    bitrate: Number(s.bit_rate) || Number(out.format?.bit_rate) || null };
 }
 
 async function imageVariant(src, dst, spec) {
@@ -53,7 +54,23 @@ async function imageVariant(src, dst, spec) {
   return dst;
 }
 
-async function videoVariant(src, dst, spec, probe) {
+/** Höchste Datenrate, die ein Bildschirm des Profils per Hardware sicher abspielt (Bit/s). Darüber wird neu berechnet. */
+const PASS_MAX = { lite: 0, standard: 20e6, pro: 40e6 };
+/**
+ * Passt das Video schon (H.264, 8-Bit 4:2:0, höchstens Full HD und erlaubte Bildrate)? Dann wird es nur umverpackt (Sekunden statt Minuten –
+ * wichtig für schwache Hubs wie den Pi 3 B+). Lite (Zero 2 W) bekommt immer eine eigene 720p-Fassung.
+ */
+export function canPassThrough(probe, profile) {
+  const spec = PROFILE_SPEC[profile], max = PASS_MAX[profile] ?? 0;
+  return !!spec && max > 0 && probe.codec === 'h264' && (probe.pixFmt === 'yuv420p' || probe.pixFmt === 'yuvj420p') && !/4:4:4|High 10|High 4:2:2/i.test(probe.profile ?? '')
+    && probe.height <= spec.h && probe.width <= 1920 && probe.fps > 0 && probe.fps <= spec.fpsMax + 0.5 && (!probe.bitrate || probe.bitrate <= max);
+}
+async function videoVariant(src, dst, spec, probe, profile) {
+  if (canPassThrough(probe, profile)) { // nur umverpacken: Bildspur kopieren, Ton/Untertitel weg, „faststart“ für fortsetzbares Laden
+    const out = dst + '.mp4';
+    await runLow('ffmpeg', ['-y', '-v', 'error', '-protocol_whitelist', 'file', '-f', demuxerFor(src), '-i', src, '-map', '0:v:0', '-an', '-sn', '-c:v', 'copy', '-movflags', '+faststart', out]);
+    return out;
+  }
   const vf = [`scale=-2:'min(${spec.h},ih)'`]; if (probe.fps > spec.fpsMax + 0.5) vf.push(`fps=${spec.fpsMax}`);
   const out = dst + '.mp4';
   await runLow('ffmpeg', ['-y', '-v', 'error', '-protocol_whitelist', 'file', '-f', demuxerFor(src), '-i', src, '-map', '0:v:0', '-an', '-sn', '-vf', vf.join(','),
@@ -109,7 +126,7 @@ export function createVariantQueue({ db, mediaDir, onChange = () => {}, log = ()
         const m = db.prepare('SELECT * FROM media WHERE id=?').get(v.media_id);
         const spec = PROFILE_SPEC[v.profile], dst = join(vdir, `${m.id}-${v.profile}`);
         let out;
-        if (m.kind === 'video') out = await videoVariant(join(mediaDir, 'original', m.original_path), dst, spec, await probeVideo(join(mediaDir, 'original', m.original_path)));
+        if (m.kind === 'video') out = await videoVariant(join(mediaDir, 'original', m.original_path), dst, spec, await probeVideo(join(mediaDir, 'original', m.original_path)), v.profile);
         else if (m.kind === 'text') out = await renderTextImage(JSON.parse(m.text_json), spec, dst);
         else out = await imageVariant(join(mediaDir, 'original', m.original_path), dst, spec);
         db.prepare("UPDATE media_variants SET status='ready', path=?, sha256=?, size=?, error=NULL WHERE id=?").run(out.split('/').pop(), await sha256File(out), statSync(out).size, v.id);
@@ -141,7 +158,7 @@ export function mediaHints(kind, w, h) {
   const hints = [];
   if (!w || !h) return hints;
   if (kind === 'image' && Math.max(w, h) < 1000) hints.push('Das Bild ist ziemlich klein und könnte auf großen Bildschirmen unscharf wirken.');
-  if (kind === 'video' && h > 1080) hints.push('Dieses Video ist größer als Full-HD. Für schwächere Bildschirme wird es automatisch verkleinert.');
+  if (kind === 'video' && h > 1080) hints.push('Dieses Video ist größer als Full-HD. Es wird für die Bildschirme neu berechnet – das kann auf einem Raspberry Pi 3 sehr lange dauern. Besser als Full-HD-MP4 hochladen.');
   if (h > w) hints.push('Das ist ein Hochformat-Medium. Es passt am besten zu Bildschirmen, die gedreht aufgehängt sind.');
   return hints;
 }

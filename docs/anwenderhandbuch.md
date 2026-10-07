@@ -255,3 +255,7 @@ Für den Anfang oder kleine Anlagen braucht es **keinen eigenen Hub-Rechner**. W
 - Empfohlen ab **Raspberry Pi 4 (2 GB) oder Pi 5**. Auf schwächeren Geräten warnt die Einrichtung.
 - Bitte dieses Gerät **nicht** sperren oder entfernen – es ist zugleich die Zentrale. Wird es ausgeschaltet, laufen die anderen Bildschirme mit ihren gespeicherten Inhalten weiter.
 - Wächst die Anlage, kann später ein eigener Hub-Rechner dazukommen: Backup auf den neuen Hub zurückspielen, das Kombi-Gerät danach als normalen Bildschirm neu einrichten.
+
+
+## 31. Videos: am besten Full-HD-MP4
+Videos im Format **MP4 (H.264), höchstens Full HD (1920×1080) und 25 oder 30 Bilder pro Sekunde** übernimmt der Hub in wenigen Sekunden – er verpackt sie nur um, ohne sie neu zu berechnen. Das ist besonders wichtig, wenn der Hub ein Raspberry Pi 3 B+ ist. Andere Videos (4K, HEVC/H.265, 50/60 Bilder pro Sekunde, sehr hohe Datenrate) werden neu berechnet; das kann auf einem Pi 3 B+ ein Vielfaches der Videolänge dauern. Die Oberfläche weist darauf hin. Der Ton wird nicht übernommen (die Bildschirme spielen stumm).

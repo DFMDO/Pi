@@ -64,6 +64,25 @@ test('Video wird je Profil umgewandelt (Lite: 720p H.264 Baseline)', { timeout: 
   await h.cleanup();
 });
 
+test('Full-HD-Video in H.264 wird für Standard/Pro nur umverpackt (Sekunden statt Minuten), 4K/HEVC oder 50 fps werden neu berechnet', { timeout: 180000 }, async () => {
+  const { canPassThrough } = await import('../lib/variants.js');
+  const fhd = { codec: 'h264', pixFmt: 'yuv420p', profile: 'High', width: 1920, height: 1080, fps: 25, bitrate: 8e6 };
+  assert.equal(canPassThrough(fhd, 'standard'), true); assert.equal(canPassThrough(fhd, 'pro'), true); assert.equal(canPassThrough(fhd, 'lite'), false, 'Zero 2 W bekommt eigene 720p-Fassung');
+  assert.equal(canPassThrough({ ...fhd, width: 3840, height: 2160 }, 'standard'), false, '4K'); assert.equal(canPassThrough({ ...fhd, codec: 'hevc' }, 'pro'), false, 'HEVC');
+  assert.equal(canPassThrough({ ...fhd, fps: 50 }, 'standard'), false, '50 fps auf Pi 3'); assert.equal(canPassThrough({ ...fhd, fps: 50 }, 'pro'), true);
+  assert.equal(canPassThrough({ ...fhd, pixFmt: 'yuv420p10le', profile: 'High 10' }, 'pro'), false, '10 Bit'); assert.equal(canPassThrough({ ...fhd, bitrate: 30e6 }, 'standard'), false, 'zu hohe Datenrate');
+  const h = await makeHub(); const a = await h.as('admin'); addDevice(h, 'standard');
+  const dir = mkdtempSync(join(tmpdir(), 'vid-')); const f = join(dir, 'in.mp4');
+  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1920x1080:rate=25:duration=6', '-f', 'lavfi', '-i', 'sine=duration=6', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', f]);
+  const m = multipart('file', 'film.mp4', readFileSync(f)); assert.equal((await a('POST', '/api/v1/media', m.payload, m.headers)).statusCode, 201);
+  const t0 = Date.now(); await h.app.variants.idle(); const ms = Date.now() - t0;
+  const v = h.db.prepare("SELECT * FROM media_variants WHERE profile='standard' AND media_id IN (SELECT id FROM media WHERE kind='video')").get(); assert.equal(v.status, 'ready', v.error);
+  const out = join(h.dataDir, 'media', 'variants', v.path), probe = (x) => JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,profile,height,nb_frames', '-of', 'json', x])).streams;
+  const src = probe(f).find((s) => s.codec_type === 'video'), dst = probe(out);
+  assert.equal(dst.length, 1, 'nur die Bildspur, kein Ton'); assert.equal(dst[0].profile, src.profile, 'Bildspur unverändert kopiert (nicht neu berechnet)'); assert.equal(dst[0].nb_frames, src.nb_frames); assert.equal(dst[0].height, 1080);
+  assert.ok(ms < 5000, `umverpackt in ${ms} ms`); await h.cleanup();
+});
+
 test('PDF wird seitenweise zu Bildern', async () => {
   const h = await makeHub(); const a = await h.as('admin');
   const dir = mkdtempSync(join(tmpdir(), 'pdf-'));

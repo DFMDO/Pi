@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DFM Signage Hub API",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "description": "Alle Routen liegen unter /api/v1. Anmeldung per Cookie (__Host-dfm_sid) mit CSRF-Header X-CSRF-Token bei schreibenden Aufrufen; Player nutzen ein Bearer-Token. WebSocket: siehe docs/websocket.md."
   },
   "servers": [
