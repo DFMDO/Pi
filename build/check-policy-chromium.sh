@@ -27,6 +27,14 @@ dom http://127.0.0.1:9090/ | grep -q SEITE-GELADEN-9090 && { echo "NICHT AUSWERT
 sed 's#"http://127.0.0.1:8080"#"http://127.0.0.1:8080/*"#; s#"http://127.0.0.1:8081"#"http://127.0.0.1:8081/*"#' "$POL" > /tmp/old.json; install_policy /tmp/old.json
 dom http://127.0.0.1:8080/player/ | grep -q SEITE-GELADEN-8080 && echo "INFO     alte Schreibweise mit /* sperrt in diesem Chromium NICHT" || echo "INFO     alte Schreibweise mit /* sperrt die Anzeige (wie vermutet)"
 
+# Matrix: welche Schreibweisen der Freigabe lassen 127.0.0.1:8080/player/ durch und sperren 127.0.0.1:9090?
+echo "Chromium: $("$CHR" --version 2>/dev/null)"
+for pat in '127.0.0.1:8080' 'http://127.0.0.1:8080' 'http://127.0.0.1:8080/' 'http://127.0.0.1:8080/*' 'http://127.0.0.1:8080/player' '127.0.0.1' 'http://127.0.0.1' 'http://127.0.0.1/*' 'http://127.0.0.1:*' '[*.]127.0.0.1'; do
+  printf '{"URLBlocklist":["*"],"URLAllowlist":["%s"]}' "$pat" > /tmp/m.json; install_policy /tmp/m.json
+  a=gesperrt; dom http://127.0.0.1:8080/player/ | grep -q SEITE-GELADEN-8080 && a=DURCH
+  b=gesperrt; dom http://127.0.0.1:9090/ | grep -q SEITE-GELADEN-9090 && b=DURCH
+  echo "MATRIX   Freigabe '$pat': 8080/player/ = $a, 9090 = $b"
+done
 # Die Richtlinie aus dem Image
 install_policy "$POL"; echo "Richtlinie: $(grep URLAllowlist "$POL")"
 dom http://127.0.0.1:8080/player/ | grep -q SEITE-GELADEN-8080 && ok "Player-Seite (127.0.0.1:8080/player/) wird durchgelassen" || bad "Player-Seite wird GESPERRT"

@@ -19,6 +19,7 @@ jobs:
           npx --yes playwright-core@1.56 install --with-deps chromium
           echo "DFM_CHROMIUM=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome | head -1)" >> "$GITHUB_ENV"
       - name: Richtlinie prüfen
+        shell: bash
         run: sudo env PATH="$PATH" CHROMIUM="$DFM_CHROMIUM" bash build/check-policy-chromium.sh | tee policy-result.txt
       - name: Ergebnis anzeigen
         if: always()
