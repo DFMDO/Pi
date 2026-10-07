@@ -1,0 +1,9 @@
+[Unit]
+Description=DFM Diagnosedatei auf die Boot-Partition schreiben
+After=dfm-firstboot.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/dfm/diagnose
+TimeoutSec=60
+Nice=10

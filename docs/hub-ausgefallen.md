@@ -21,3 +21,7 @@
 - *Kein Backup vorhanden:* Neuer Hub, Bildschirme einzeln neu verbinden („Neuen Bildschirm verbinden“), Medien neu hochladen. Die Bildschirme zeigen bis dahin ihren gespeicherten Inhalt.
 
 **Vorbeugen:** USV, SSD, tägliche Backups auf einen zweiten Ort kopieren, Passphrase im Passwortsafe, Ersatz-Pi mit fertigem Image im Schrank.
+
+## Diagnosedatei auf der SD-Karte (seit 0.2.3)
+Jedes Gerät schreibt alle 5 Minuten seinen Zustand in die Datei `dfm-diagnose.txt` auf der Boot-Partition der SD-Karte (Laufwerk **bootfs**, am Windows-PC lesbar). Sie zeigt: Rolle, Netzwerkadressen, offene Ports, fehlgeschlagene Dienste, Temperatur/Netzteil-Warnung und die letzten Meldungen von Hub, Bildschirm und Netzwerk. Passwörter, Schlüssel, PINs und Einrichtungs-Logs sind nicht enthalten.
+So geht's: Pi ausschalten → SD-Karte in den PC → `dfm-diagnose.txt` öffnen → Inhalt (oder Foto) an die Betreuung schicken.

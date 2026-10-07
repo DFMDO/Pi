@@ -1,0 +1,10 @@
+[Unit]
+Description=DFM Diagnosedatei regelmäßig aktualisieren
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=5min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
