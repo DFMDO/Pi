@@ -9,8 +9,9 @@ ExecStart=/usr/lib/dfm/launch setup
 Restart=on-failure
 RestartSec=3
 # Nur dieser Dienst darf das Netzwerk umkonfigurieren – und nur im Einrichtungsmodus
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE
-AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE
+# CAP_CHOWN: Zugangsdateien gehören nach der Einrichtung dem Hub (990) bzw. dem Bildschirm (991); sonst scheitert chown still
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE CAP_CHOWN
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_OVERRIDE CAP_CHOWN
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

@@ -15,6 +15,14 @@ test('Dienste, die Netzwerkadressen lesen oder die Anzeige starten, dürfen Netl
   }
 });
 
+// Regression aus dem Pilot (Diagnose von 0.2.5): Die Einrichtung (root, ohne CAP_CHOWN) legte /data/hub/tls als root an → Hub: "Can't open hub.key for writing".
+test('Einrichtung darf Dateien übereignen; beim Start gehört /data/hub/tls dem Hub', () => {
+  assert.match(unit('dfm-setup.service'), /^CapabilityBoundingSet=.*\bCAP_CHOWN\b/m);
+  assert.match(unit('dfm-setup.service'), /^AmbientCapabilities=.*\bCAP_CHOWN\b/m);
+  const dm = readFileSync(new URL('../build/rootfs/usr/lib/dfm/datamount.sh', import.meta.url), 'utf8');
+  assert.match(dm, /chown -R 990:990 \/data\/hub\/tls/);
+});
+
 test('Hub startet auch, wenn die Netzwerkabfrage fehlschlägt', () => {
   const s = readFileSync(new URL('../hub/server.js', import.meta.url), 'utf8');
   assert.match(s, /try \{ ifaces = networkInterfaces\(\); \} catch/);

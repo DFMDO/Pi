@@ -16,5 +16,7 @@ mkdir -p /data/state/nm /data/state/nm-lib /data/state/chrony /data/log /data/hu
 mkdir -p /data/agent/home/config /data/agent/home/cache
 chown 990:990 /data/hub; chown 991:991 /data/agent /data/agent/home /data/agent/home/config /data/agent/home/cache   # nicht rekursiv: Medien-Cache kann groß sein
 chown 991:991 /data/agent/agent.json 2>/dev/null || true; chown 990:990 /data/hub/hub-bootstrap.json /data/hub/local-player.json 2>/dev/null || true   # von der Einrichtung (root) geschrieben
+# Hub-Schlüssel/Zertifikat legt die Einrichtung als root an (der Dienst hat kein CAP_CHOWN) – der Hub (uid 990) muss sie lesen und erneuern dürfen
+[ -d /data/hub/tls ] && { chown -R 990:990 /data/hub/tls; chmod 700 /data/hub/tls; chmod 600 /data/hub/tls/hub.key 2>/dev/null || true; } || true
 chmod 700 /data/state/nm; [ -e /data/state/fake-hwclock ] || : > /data/state/fake-hwclock
 chmod 755 /data
