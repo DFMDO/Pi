@@ -1,5 +1,5 @@
 {
-  "URLBlocklist": ["*"],
+  "URLBlocklist": ["http://*", "https://*", "ws://*", "wss://*", "ftp://*", "file://*"],
   "URLAllowlist": ["http://127.0.0.1:8080", "http://127.0.0.1:8081"],
   "PasswordManagerEnabled": false,
   "SyncDisabled": true,
