@@ -68,3 +68,5 @@ dialog.wide{max-width:min(900px,96vw);width:96vw}.wallwrap{padding:12px;backgrou
 .sigbars{display:inline-flex;gap:3px;align-items:flex-end;height:20px}.sigbars i{width:6px;background:#ccc;border-radius:1px}.sigbars i:nth-child(1){height:6px}.sigbars i:nth-child(2){height:11px}.sigbars i:nth-child(3){height:16px}.sigbars i:nth-child(4){height:20px}.sigbars i.on{background:var(--dfm-ok,#2e7d32)}
 .spark{display:inline-flex;gap:1px;align-items:flex-end;height:32px}.spark i{width:4px;background:var(--dfm-primary);display:block}.sigbig{font-size:2rem;margin:12px 0}
 @media print{.side,.toast,dialog:not([open]){display:none!important}.shell{display:block}}
+@media (max-width:700px){.livegrid{grid-template-columns:1fr!important}}
+.wall .chip,.wall select{color:#1a1a1a;background:#fff}.wall .hint{color:#ccc}

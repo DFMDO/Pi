@@ -11,6 +11,8 @@ export function h(tag, attrs = {}, ...kids) {
   return e;
 }
 export const $ = (sel, el = document) => el.querySelector(sel);
+// replaceChildren/append schreiben null/false sonst als Text „null“ in die Seite: leere Teile einfach weglassen (wie in h())
+for (const k of ['replaceChildren', 'append']) { const orig = Element.prototype[k]; Element.prototype[k] = function (...n) { return orig.apply(this, n.flat(Infinity).filter((x) => x != null && x !== false)); }; }
 export function toast(msg, kind = 'ok', undo) {
   const t = h('div', { class: 'toast' + (kind === 'err' ? ' err' : ''), role: kind === 'err' ? 'alert' : 'status' }, msg, undo ? h('button', { class: 'btn link', style: 'color:#fff', onclick: () => { undo(); t.remove(); } }, 'Rückgängig') : null);
   document.getElementById('toasts').append(t); setTimeout(() => t.remove(), undo ? 9000 : 5000);
