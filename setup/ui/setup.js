@@ -62,7 +62,7 @@
     view(2, 'Was ist dieses Gerät?', info.hubFound ? h('div', { class: 'card' }, '✅ Im WLAN wurde schon ein Hub gefunden. Dieses Gerät ist wahrscheinlich ein Bildschirm.') : null,
       opt('hub', 'Hauptbildschirm-Rechner (Hub)', 'Speichert alle Bilder und Termine. Du bedienst ihn später im Browser. Es gibt nur einen pro Museum.'),
       opt('player', 'Bildschirm (Player)', 'Zeigt die Inhalte an, die im Hub geplant sind.'),
-      opt('kombi', 'Hub und Bildschirm in einem', 'Ideal für den Anfang oder kleine Anlagen: speichert alles UND zeigt selbst Inhalte an. Weitere Bildschirme kannst du später dazunehmen.'),
+      opt('kombi', 'Hub und Bildschirm in einem', 'Ideal für den Anfang oder kleine Anlagen: speichert alles UND zeigt selbst Inhalte an. Zusätzliche Bildschirme kannst du später dazunehmen.'),
       (d.role === 'hub' || d.role === 'kombi') && info.hubWarning ? h('div', { class: 'card' }, '⚠️ ' + info.hubWarning) : null,
       btn('Weiter', async () => { if (!d.role) return; await api('/role', { role: d.role }); detailsView(); }), btn('Zurück', wifiView, 'sec'));
   }
