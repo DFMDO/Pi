@@ -150,3 +150,6 @@ Tabellen: `users, sessions, roles, permissions, devices, device_groups, media, m
 - **Import:** `DFM_IMPORT_ROOTS` (Standard `/media:/mnt:/data/import`). USB-Sticks/Freigaben muss die IT einbinden (z. B. `/etc/fstab` mit `nofail,ro,nosuid,nodev,noexec`).
 - **Datenpflege:** täglich (`extras2.js: retentionTick`), manuell über *Erweitert → Alte Daten jetzt aufräumen*.
 - **Feiertage** werden aus der Osterformel berechnet (4 Jahre voraus, ohne Datendatei); eigene Regeln/Tage in `special_days`.
+
+- **Betriebsart „kombi“ (Hub + Bildschirm):** `config.json` `role: "kombi"` → `select-mode.sh` startet `dfm-hub.target`, das wegen vorhandener `/data/agent/agent.json` auch `dfm-agent` startet. Die Einrichtung schreibt `agent.json` (Token, `hubUrl https://127.0.0.1`, `hubSpki` = eigener Hub-Schlüssel) und `/data/hub/local-player.json` (nur SHA-256 des Tokens); der Hub legt den Bildschirm beim Start an (`importLocalPlayer`) und löscht die Datei. Kein Einmalcode, kein Sonderzugang – der Agent nutzt denselben gepinnten WSS-Weg.
+- **Dateirechte der Einrichtung (behoben in 0.2.1):** `writeFinalConfig` legt `hub-bootstrap.json`/`local-player.json` unter `/data/hub` (Besitzer 990) und `agent.json` unter `/data/agent` (Besitzer 991) ab; `datamount.sh` setzt die Besitzer beim Start zusätzlich. Vorher lagen die Dateien root-eigen bzw. am falschen Ort.

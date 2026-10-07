@@ -2,7 +2,10 @@
 
 **Die häufigste Fehlerquelle bei Raspberry-Pi-Anlagen ist eine zu schwache Stromversorgung.** Unterspannung führt zu Rucklern, Abstürzen und defekten SD-Karten. Der Hub zeigt sie als „Netzteil zu schwach“ unter *Betrieb → Gesundheit*.
 
-## Hub
+## Für den Anfang: ein Gerät für alles
+Ein **Raspberry Pi 4 (2 GB+) oder Pi 5** kann Hub **und** Bildschirm zugleich sein (Einrichtung: „Hub und Bildschirm in einem“). Ideal für den Pilot und kleine Anlagen. Weitere Bildschirme kommen einfach dazu.
+
+## Hub (ab mehreren Bildschirmen empfohlen als eigenes Gerät)
 - **Raspberry Pi 4 (2 GB oder mehr) oder Pi 5**, mit **USB-SSD** statt SD-Karte (viel robuster, schneller bei Medien und Backups).
 - **Original-Netzteil** (Pi 4: 5 V/3 A, Pi 5: 5 V/5 A).
 - **Kühlung** (Gehäuse mit Kühlkörper oder Lüfter), nicht in geschlossenen Schränken ohne Luftaustausch.

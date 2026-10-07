@@ -34,8 +34,9 @@ export function validateDraft(d, { adminPolicy = () => null } = {}) {
     if (w.enterprise) { if (!userOk(w.enterprise.user)) e.push('Bitte gib den Benutzernamen für das Firmen-WLAN ein.'); if (typeof w.enterprise.password !== 'string' || !w.enterprise.password || w.enterprise.password.length > 200) e.push('Bitte gib das Passwort für das Firmen-WLAN ein.'); }
     else if (w.password !== '' && w.password !== undefined && !wpaOk(w.password)) e.push('Das WLAN-Passwort muss 8 bis 63 Zeichen lang sein.');
   }
-  if (!['hub', 'player'].includes(d.role)) e.push('Bitte wähle, ob dies der Hub oder ein Bildschirm ist.');
-  if (d.role === 'hub') {
+  if (!['hub', 'player', 'kombi'].includes(d.role)) e.push('Bitte wähle, ob dies der Hub, ein Bildschirm oder beides ist.');
+  if (d.role === 'kombi' && !nameOk(d.name ?? '')) e.push('Bitte gib dem Bildschirm einen Namen, z. B. „Foyer“.');
+  if (d.role === 'hub' || d.role === 'kombi') {
     if (!nameOk(d.admin?.name ?? '')) e.push('Bitte gib einen Namen für das Admin-Konto ein.');
     const bad = adminPolicy(d.admin?.password, d.admin?.name); if (bad) e.push(bad);
     if (!d.site || d.site.length > 100) e.push('Bitte gib den Namen deines Museums oder Standorts ein.');

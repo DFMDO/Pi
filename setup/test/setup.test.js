@@ -148,9 +148,10 @@ test('HTTP: Captive-Portal-Sonden, PIN-Pflicht, Anzeige nur lokal getrennt, Inje
 
 test('Konfiguration wird atomar geschrieben; config.json zuletzt', async () => {
   const d = mkdtempSync(join(tmpdir(), 'cfg-'));
-  await writeFinalConfig({ v: 1, role: 'hub' }, { hubBootstrap: { admin: { name: 'a', pwHash: 'x' } } }, d);
-  assert.ok(existsSync(join(d, 'hub-bootstrap.json')) && existsSync(join(d, 'config.json')));
-  assert.equal((await import('node:fs')).statSync(join(d, 'hub-bootstrap.json')).mode & 0o777, 0o600);
+  const owned = []; await writeFinalConfig({ v: 1, role: 'hub' }, { hubBootstrap: { admin: { name: 'a', pwHash: 'x' } }, agent: { token: 't' } }, d, { chown: (f, u) => owned.push([f.slice(d.length), u]) });
+  assert.ok(existsSync(join(d, 'hub', 'hub-bootstrap.json')) && existsSync(join(d, 'config.json')), 'dort, wo der Hub-Dienst (DFM_DATA=/data/hub) liest');
+  assert.equal((await import('node:fs')).statSync(join(d, 'hub', 'hub-bootstrap.json')).mode & 0o777, 0o600);
+  assert.deepEqual(owned.filter(([f]) => f.endsWith('.json')), [['/hub/hub-bootstrap.json', 990], ['/agent/agent.json', 991]], 'gehört dem Dienst, der die Datei lesen muss (Einrichtung läuft als root)');
 });
 
 test('„Nur WLAN ändern“ (Reset ohne Tastatur): keine Rolle/Konten nötig, Marker wird entfernt', async () => {
@@ -200,4 +201,18 @@ test('Netzwerkkabel: Einrichtung ohne WLAN möglich, Bildschirm springt direkt z
   assert.equal(ctl.result(s).state, 'done'); assert.equal(written.length, 1); assert.ok(!nm.log.some((l) => l[0] === 'connect'), 'kein WLAN verbunden');
   const w = createController({ nm: { ...fakeNm(), hasLan: async () => false }, suffix: 'x', writeConfig: async () => {}, hashPassword, policy: () => null }); await w.startMode(); const s2 = w.enterPin(w.state.pin).session;
   assert.equal((await w.testWifi(s2, { skip: true })).ok, false, 'ohne Kabel kann man das WLAN nicht überspringen');
+});
+
+test('Hub und Bildschirm in einem Gerät („kombi“): Admin-Konto, eigener Bildschirm ohne Code, gepinnt auf den eigenen Hub', async () => {
+  let t = 1e6; const nm = fakeNm(); const written = []; const spki = 'ab'.repeat(32);
+  const ctl = createController({ nm, suffix: 'ab12', now: () => t, rnd: fakeRnd, hashPassword, policy: checkPasswordPolicy, hw: { model: 'Raspberry Pi 5', profile: 'pro' }, prepareHub: async () => ({ fingerprint: 'AB:AB', spki }), writeConfig: async (cfg, extra) => written.push({ cfg, extra }) });
+  await ctl.startMode(); const T = ctl.enterPin(ctl.state.pin).session;
+  await ctl.testWifi(T, { ssid: 'Museum', password: 'passwort1' }); await new Promise((x) => setTimeout(x, 1500));
+  assert.equal(ctl.setRole(T, 'kombi'), true);
+  const r = await ctl.finish(T, { role: 'kombi', name: 'Foyer', admin: { name: 'admin', password: 'Ein-sehr-gutes-Passwort-42' }, site: 'DFM' }); assert.equal(r.ok, true, JSON.stringify(r));
+  for (let i = 0; i < 100 && !written.length; i++) await new Promise((x) => setTimeout(x, 30));
+  const { cfg, extra } = written[0]; assert.equal(cfg.role, 'kombi'); assert.equal(cfg.name, 'Foyer'); assert.ok(extra.hubBootstrap.admin.pwHash);
+  assert.equal(extra.agent.hubUrl, 'https://127.0.0.1'); assert.equal(extra.agent.hubSpki, spki, 'gepinnt auf den eigenen Hub-Schlüssel'); assert.ok(extra.agent.token.length >= 40); assert.equal(extra.agent.pairing, undefined, 'kein Einmalcode nötig');
+  assert.equal(extra.localPlayer.deviceId, extra.agent.deviceId); assert.equal(extra.localPlayer.tokenHash, (await import('node:crypto')).createHash('sha256').update(extra.agent.token).digest('hex')); assert.equal(extra.localPlayer.token, undefined, 'der Hub bekommt nur den Hash');
+  assert.equal(validateDraft({ wifi: { ssid: 'x', password: 'passwort1' }, role: 'kombi', name: '', admin: { name: 'admin' }, site: 'DFM' }).some((e) => /Namen/.test(e)), true, 'Kombi braucht einen Bildschirmnamen');
 });

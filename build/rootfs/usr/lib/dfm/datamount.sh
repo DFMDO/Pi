@@ -15,5 +15,6 @@ resize2fs "$DEV" >/dev/null 2>&1 || true
 mkdir -p /data/state/nm /data/state/nm-lib /data/state/chrony /data/log /data/hub /data/agent /data/tmp
 mkdir -p /data/agent/home/config /data/agent/home/cache
 chown 990:990 /data/hub; chown 991:991 /data/agent /data/agent/home /data/agent/home/config /data/agent/home/cache   # nicht rekursiv: Medien-Cache kann groß sein
+chown 991:991 /data/agent/agent.json 2>/dev/null || true; chown 990:990 /data/hub/hub-bootstrap.json /data/hub/local-player.json 2>/dev/null || true   # von der Einrichtung (root) geschrieben
 chmod 700 /data/state/nm; [ -e /data/state/fake-hwclock ] || : > /data/state/fake-hwclock
 chmod 755 /data

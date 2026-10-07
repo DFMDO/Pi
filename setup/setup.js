@@ -61,7 +61,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const dev = JSON.parse(readFileSync(join(process.env.DFM_DATA ?? '/data', 'device.json'), 'utf8'));
   const led = createLed({ write: sysfsWriter((await import('node:fs'))) });
   const { ensureCertificate, formatFingerprint } = await import('../hub/lib/tls.js'); const { networkInterfaces } = await import('node:os');
-  const prepareHub = async () => { const { chownSync } = await import('node:fs'); const c = ensureCertificate('/data/hub/tls', ['DNS:dfm-signage.local', 'DNS:localhost', 'IP:127.0.0.1']); for (const f of ['/data/hub', '/data/hub/tls', '/data/hub/tls/hub.key', '/data/hub/tls/hub.crt']) { try { chownSync(f, 990, 990); } catch {} } return formatFingerprint(c.spki); };
+  const prepareHub = async () => { const { chownSync } = await import('node:fs'); const c = ensureCertificate('/data/hub/tls', ['DNS:dfm-signage.local', 'DNS:localhost', 'IP:127.0.0.1']); for (const f of ['/data/hub', '/data/hub/tls', '/data/hub/tls/hub.key', '/data/hub/tls/hub.crt']) { try { chownSync(f, 990, 990); } catch {} } return { fingerprint: formatFingerprint(c.spki), spki: c.spki }; };
   const ctl = createController({ led, prepareHub, nm: createNm(), suffix: dev.suffix, hw: dev.hw, hashPassword, policy: checkPasswordPolicy, writeConfig: writeFinalConfig, serialPin: dev.headless ? dev.serial.slice(-6).toUpperCase() : null, wifiOnly: existsSync('/data/state/force-setup'), onWifiOnlyDone: async () => (await import('node:fs/promises')).rm('/data/state/force-setup', { force: true }),
     onDone: () => setTimeout(() => import('node:child_process').then((c) => c.execFile('systemctl', ['reboot'])), 6000), log: (...a) => console.error(...a) });
   await ctl.startMode();

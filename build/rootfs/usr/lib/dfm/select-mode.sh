@@ -1,5 +1,5 @@
 #!/bin/sh
-# Entscheidet nach dem Start, was das Gerät ist: noch nicht eingerichtet / Hub / Player.
+# Entscheidet nach dem Start, was das Gerät ist: noch nicht eingerichtet / Hub / Player / Hub+Bildschirm („kombi“: Hub-Dienste plus Agent).
 set -eu
 mkdir -p /run/dfm/privd /run/dfm/chrony.d /run/dfm/avahi-services
 chmod 1733 /run/dfm/privd   # Agent/Hub dürfen Anfragen ablegen, aber nicht lesen
@@ -8,9 +8,9 @@ else MODE=$(sed -n 's/.*"role":"\([a-z]*\)".*/\1/p' /data/config.json); fi
 echo "$MODE" > /run/dfm/mode
 # Hostname je Betrieb: Hub = dfm-signage (→ dfm-signage.local), sonst dfm-<4 Zeichen>. Nur im Speicher (Root ist schreibgeschützt).
 SUFFIX=$(sed -n 's/.*"hostname":"\([a-z0-9-]*\)".*/\1/p' /data/device.json 2>/dev/null || true)
-case "$MODE" in hub) hostname dfm-signage ;; *) [ -n "$SUFFIX" ] && hostname "$SUFFIX" ;; esac
+case "$MODE" in hub|kombi) hostname dfm-signage ;; *) [ -n "$SUFFIX" ] && hostname "$SUFFIX" ;; esac
 case "$MODE" in
-  hub) printf 'allow 10.0.0.0/8\nallow 172.16.0.0/12\nallow 192.168.0.0/16\nlocal stratum 10\nmakestep 1 3\n' > /run/dfm/chrony.d/dfm.conf
+  hub|kombi) printf 'allow 10.0.0.0/8\nallow 172.16.0.0/12\nallow 192.168.0.0/16\nlocal stratum 10\nmakestep 1 3\n' > /run/dfm/chrony.d/dfm.conf
        cp /usr/share/dfm/avahi-hub.service /run/dfm/avahi-services/dfm-signage.service
        nft -f /usr/share/dfm/nft-hub.conf 2>/dev/null || true
        systemctl start --no-block dfm-hub.target ;;

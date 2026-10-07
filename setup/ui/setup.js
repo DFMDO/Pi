@@ -62,13 +62,15 @@
     view(2, 'Was ist dieses Gerät?', info.hubFound ? h('div', { class: 'card' }, '✅ Im WLAN wurde schon ein Hub gefunden. Dieses Gerät ist wahrscheinlich ein Bildschirm.') : null,
       opt('hub', 'Hauptbildschirm-Rechner (Hub)', 'Speichert alle Bilder und Termine. Du bedienst ihn später im Browser. Es gibt nur einen pro Museum.'),
       opt('player', 'Bildschirm (Player)', 'Zeigt die Inhalte an, die im Hub geplant sind.'),
-      d.role === 'hub' && info.hubWarning ? h('div', { class: 'card' }, '⚠️ ' + info.hubWarning) : null,
+      opt('kombi', 'Hub und Bildschirm in einem', 'Ideal für den Anfang oder kleine Anlagen: speichert alles UND zeigt selbst Inhalte an. Weitere Bildschirme kannst du später dazunehmen.'),
+      (d.role === 'hub' || d.role === 'kombi') && info.hubWarning ? h('div', { class: 'card' }, '⚠️ ' + info.hubWarning) : null,
       btn('Weiter', async () => { if (!d.role) return; await api('/role', { role: d.role }); detailsView(); }), btn('Zurück', wifiView, 'sec'));
   }
 
   function detailsView(errs) {
     const e = errs?.length ? h('div', { role: 'alert' }, errs.map((x) => err(x))) : null;
-    if (d.role === 'hub') view(3, 'Admin-Konto anlegen', h('p', {}, 'Mit diesem Konto meldest du dich am Hub an.'),
+    if (d.role === 'hub' || d.role === 'kombi') view(3, 'Admin-Konto anlegen', h('p', {}, 'Mit diesem Konto meldest du dich am Hub an.'),
+      ...(d.role === 'kombi' ? field('Name dieses Bildschirms, z. B. „Foyer“', 'bn', { value: d.name, set: (v) => { d.name = v; } }) : []),
       ...field('Dein Name', 'an', { value: d.admin.name, set: (v) => { d.admin.name = v; } }), h('label', { for: 'ap' }, 'Passwort (mindestens 12 Zeichen)'), h('input', { id: 'ap', type: 'password', autocomplete: 'new-password', maxlength: 200, oninput: (x) => { d.admin.password = x.target.value; } }),
       ...field('Name des Museums oder Standorts', 'site', { value: d.site, set: (v) => { d.site = v; } }), e, btn('Weiter', finish), btn('Zurück', roleView, 'sec'));
     else view(3, 'Bildschirm einrichten', ...field('Name des Bildschirms, z. B. „Shop-Screen“', 'nm', { value: d.name || info.defaultName, set: (v) => { d.name = v; } }),
@@ -89,7 +91,7 @@
   }
   function done() {
     view(4, 'Fertig!', h('div', { class: 'card' }, h('p', { class: 'ok' }, '✔ Die Einrichtung ist abgeschlossen.'), h('p', {}, 'Der Bildschirm startet jetzt neu und verbindet sich mit dem WLAN. Du kannst das Setup-WLAN jetzt verlassen.')),
-      d.role === 'hub' ? h('div', { class: 'card' }, h('p', {}, 'Später erreichst du den Hub im Browser unter ', h('b', {}, 'https://dfm-signage.local')), h('p', { class: 'hint' }, 'Dein Browser zeigt eine Warnung. Das ist normal – vergleiche den Fingerabdruck:'), h('p', { class: 'fp' }, d.fingerprintHub ?? 'wird auf dem Bildschirm des Hubs angezeigt'), h('button', { class: 'btn sec', type: 'button', onclick: () => window.print() }, 'Druckkarte drucken')) : h('p', {}, 'Bestätige den Bildschirm jetzt im Hub: „Ist das dein Bildschirm?“ → Ja.'));
+      d.role === 'hub' || d.role === 'kombi' ? h('div', { class: 'card' }, d.role === 'kombi' ? h('p', {}, 'Dieser Bildschirm zeigt gleich die Standard-Inhalte. ') : null, h('p', {}, 'Später erreichst du den Hub im Browser unter ', h('b', {}, 'https://dfm-signage.local')), h('p', { class: 'hint' }, 'Dein Browser zeigt eine Warnung. Das ist normal – vergleiche den Fingerabdruck:'), h('p', { class: 'fp' }, d.fingerprintHub ?? 'wird auf dem Bildschirm des Hubs angezeigt'), h('button', { class: 'btn sec', type: 'button', onclick: () => window.print() }, 'Druckkarte drucken')) : h('p', {}, 'Bestätige den Bildschirm jetzt im Hub: „Ist das dein Bildschirm?“ → Ja.'));
   }
   pinView();
 })();

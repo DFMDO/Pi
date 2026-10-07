@@ -246,3 +246,12 @@ Siehe [`datenschutz.md`](datenschutz.md). Unter *Erweitert → Betrieb, Veröffe
 
 ## 29. Simulator-Player (für Techniker)
 `node tools/simulator.js --hub https://dfm-signage.local --code ABCD-1234 --count 5 --profile standard` startet virtuelle Bildschirme, die sich wie echte anmelden (Code, Fingerabdruck, WSS), den Plan abspielen und in **Live** erscheinen. Jeder Simulator muss im Hub bestätigt werden. Er dient dem Testen von Pairing, Zeitplan, Live-Ansicht und Konflikten ohne echte Pis (siehe `tests/simulator.test.js`). *Er läuft nicht im Browser:* Ein Browser kann beim WebSocket keinen Anmelde-Header senden, und ein zusätzlicher Anmeldeweg würde die Sicherheit des Hubs schwächen.
+
+
+## 30. Ein Gerät für alles: Hub und Bildschirm in einem
+Für den Anfang oder kleine Anlagen braucht es **keinen eigenen Hub-Rechner**. Wähle bei der Einrichtung am Handy unter „Was ist dieses Gerät?“ die Option **„Hub und Bildschirm in einem“**. Du legst wie beim Hub ein Admin-Konto an und gibst dem Bildschirm einen Namen (z. B. „Foyer“).
+- Das Gerät speichert alle Inhalte und Termine **und** zeigt selbst Inhalte an. Es erscheint in der Oberfläche als normaler Bildschirm (Hinweis „gleichzeitig der Hub“).
+- Weitere Bildschirme verbindest du später ganz normal („Neuen Bildschirm verbinden“).
+- Empfohlen ab **Raspberry Pi 4 (2 GB) oder Pi 5**. Auf schwächeren Geräten warnt die Einrichtung.
+- Bitte dieses Gerät **nicht** sperren oder entfernen – es ist zugleich die Zentrale. Wird es ausgeschaltet, laufen die anderen Bildschirme mit ihren gespeicherten Inhalten weiter.
+- Wächst die Anlage, kann später ein eigener Hub-Rechner dazukommen: Backup auf den neuen Hub zurückspielen, das Kombi-Gerät danach als normalen Bildschirm neu einrichten.

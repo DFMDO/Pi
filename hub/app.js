@@ -78,6 +78,17 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
     writeFileSync(f, Buffer.alloc(statSync(f).size)); unlinkSync(f); audit.log({ action: 'hub.admin_angelegt', detail: { quelle: 'Einrichtung am Handy' } });
   };
   await importBootstrap();
+  // Hub + Bildschirm in einem Gerät: den eigenen Bildschirm anlegen (Token kommt aus der Einrichtung, hier liegt nur der Hash)
+  const importLocalPlayer = () => {
+    const f = join(dataDir, 'local-player.json'); if (!existsSync(f)) return;
+    const p = JSON.parse(readFileSync(f, 'utf8'));
+    if (!db.prepare('SELECT 1 FROM devices WHERE id=?').get(p.deviceId)) {
+      db.prepare("INSERT INTO devices(id,name,profile,status,token_hash,model,created_at,ready,notes) VALUES(?,?,?,'active',?,?,?,1,?)").run(p.deviceId, p.name, ['lite', 'standard', 'pro'].includes(p.profile) ? p.profile : 'standard', p.tokenHash, p.model ?? null, now(), 'Dieser Bildschirm ist gleichzeitig der Hub.');
+      audit.log({ action: 'bildschirm.hub_bildschirm_angelegt', target: p.deviceId, detail: { name: p.name } });
+    }
+    unlinkSync(f);
+  };
+  importLocalPlayer();
   if (!hasUsers() && !existsSync(codeFile)) { mkdirSync(dirname(codeFile), { recursive: true }); writeFileSync(codeFile, randomToken(6).replace(/[-_]/g, 'x').slice(0, 8).toUpperCase(), { mode: 0o600 }); }
   app.get('/api/v1/setup/state', { config: { public: true } }, async () => ({ needsAdmin: !hasUsers() }));
   app.post('/api/v1/setup/admin', { config: { public: true }, schema: { body: { type: 'object', required: ['code', 'name', 'password'], additionalProperties: false,

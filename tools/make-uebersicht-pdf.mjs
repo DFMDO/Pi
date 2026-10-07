@@ -36,14 +36,14 @@ table{border-collapse:collapse;width:100%;font-size:9.5pt} td,th{border-bottom:1
 </style></head><body>
 
 <section class="p cover"><img src="${logo}"><h1>DFM Signage</h1><p style="font-size:16pt;color:#fff">Digitale Bildschirme im Deutschen Fußballmuseum – zentral geplant, lokal betrieben</p>
-<p>Übersicht für die Entscheidung: Was das System kann, wie es aussieht, wie sicher und robust es ist, was es braucht und was als Nächstes zu tun ist.</p><p>Version 0.2.0 · Stand ${datum}</p></section>
+<p>Übersicht für die Entscheidung: Was das System kann, wie es aussieht, wie sicher und robust es ist, was es braucht und was als Nächstes zu tun ist.</p><p>Version 0.2.1 · Stand ${datum}</p></section>
 
 <section class="p"><h2>Zusammenfassung</h2>
 <div class="kpi"><div><b>0 €</b><span>Lizenzkosten, keine Cloud, kein Abo</span></div><div><b>14 Tage</b><span>Inhalte laufen auch ohne Netz und ohne Hub weiter</span></div><div><b>~10 Min.</b><span>Einrichtung eines Bildschirms per QR-Code und Handy</span></div><div><b>129 / 129</b><span>automatische Tests bestanden</span></div></div>
-<div class="cols"><div><h3>Was ist DFM Signage?</h3><p>Ein eigenes, lokales System für alle Bildschirme im Haus (Foyer, Kasse, Shop, Ausstellung, Café). Ein kleiner Rechner (Raspberry Pi) als zentraler „Hub“ verwaltet die Inhalte; an jedem Bildschirm steckt ein weiterer Raspberry Pi als „Player“. Bedient wird alles über den Browser – vom PC, Tablet oder Handy.</p>
+<div class="cols"><div><h3>Was ist DFM Signage?</h3><p>Ein eigenes, lokales System für alle Bildschirme im Haus (Foyer, Kasse, Shop, Ausstellung, Café). Ein kleiner Rechner (Raspberry Pi) als zentraler „Hub“ verwaltet die Inhalte; an jedem Bildschirm steckt ein Raspberry Pi als „Player“. <b>Für den Anfang reicht ein einziger Pi, der Hub und Bildschirm zugleich ist.</b> Bedient wird alles über den Browser – vom PC, Tablet oder Handy.</p>
 <h3>Warum?</h3><ul><li>Keine laufenden Kosten für Cloud-Dienste (wie Yodeck) und keine Abhängigkeit vom Internet.</li><li>Alle Daten bleiben im Haus (Datenschutz).</li><li>Bedienung für Menschen ohne Technikwissen, komplett auf Deutsch und im DFM-Design.</li></ul></div>
-<div><h3>Stand heute</h3><ul><li><span class="ok">✔</span> Software vollständig entwickelt, inklusive aller Erweiterungswünsche.</li><li><span class="ok">✔</span> Fertiges SD-Karten-Image (Version 0.2.0) gebaut, signiert und automatisch geprüft (27 von 27 Prüfungen bestanden).</li><li><span class="ok">✔</span> 129 automatische Tests bestanden, darunter Tests im echten Browser.</li><li><span class="warn">▲</span> Noch <b>nicht auf echten Bildschirmen im Haus getestet</b>.</li></ul>
-<h3>Empfehlung</h3><p class="box">Pilotbetrieb mit <b>1 Hub und 2–3 Bildschirmen</b> (z. B. Foyer, Kasse, Shop) für 2–4 Wochen. Dabei die Hardware-Abnahme (Seite „Nächste Schritte“) abarbeiten. Danach Entscheidung über den Ausbau.</p></div></div></section>
+<div><h3>Stand heute</h3><ul><li><span class="ok">✔</span> Software vollständig entwickelt, inklusive aller Erweiterungswünsche.</li><li><span class="ok">✔</span> Fertiges SD-Karten-Image (Version 0.2.1) gebaut, signiert und automatisch geprüft (27 von 27 Prüfungen bestanden).</li><li><span class="ok">✔</span> 129 automatische Tests bestanden, darunter Tests im echten Browser.</li><li><span class="warn">▲</span> Noch <b>nicht auf echten Bildschirmen im Haus getestet</b>.</li></ul>
+<h3>Empfehlung</h3><p class="box">Pilotbetrieb mit <b>einem Pi als Hub und Bildschirm zugleich</b> (z. B. im Foyer) plus 1–2 weiteren Bildschirmen (z. B. Kasse, Shop) für 2–4 Wochen. Dabei die Hardware-Abnahme (Seite „Nächste Schritte“) abarbeiten. Danach Entscheidung über den Ausbau.</p></div></div></section>
 
 <section class="p"><h2>Das Wichtigste auf einen Blick</h2><div class="cols"><div><ul>
 <li><b>Einfach:</b> SD-Karte beschreiben, einstecken, QR-Code mit dem Handy scannen – fertig. Keine Tastatur, keine Technikkenntnisse.</li>
@@ -57,7 +57,8 @@ table{border-collapse:collapse;width:100%;font-size:9.5pt} td,th{border-bottom:1
 <li><b>Sicher:</b> Verschlüsselt, Rollen und Rechte, unveränderbares Protokoll, keine Standardpasswörter, kein Fernzugang von außen.</li>
 <li><b>Robust:</b> WLAN weg oder Hub aus? Die Bildschirme zeigen weiter ihre Inhalte. Nach Stromausfall startet alles von selbst.</li></ul></div></div>
 <h3>So funktioniert es</h3><div class="arch"><div class="node">PC / Tablet / Handy<br><span class="small">Bedienung im Browser</span></div><span class="arrow">⇄</span><div class="node hub">Hub (Raspberry Pi 4/5)<br><span class="small" style="color:#fff">Inhalte, Kalender, Benutzer</span></div><span class="arrow">⇄</span><div class="node">Player je Bildschirm<br><span class="small">spielt Plan auch offline ab</span></div><span class="arrow">→</span><div class="node">Bildschirm (HDMI)</div></div>
-<p class="small">Alles im Museumsnetz. Verbindungen zwischen Hub und Bildschirmen sind verschlüsselt und gegen fremde Geräte abgesichert (Zertifikats-Pinning).</p></section>
+<p class="small">Alles im Museumsnetz. Verbindungen zwischen Hub und Bildschirmen sind verschlüsselt und gegen fremde Geräte abgesichert (Zertifikats-Pinning).</p>
+<div class="box"><b>Braucht es einen eigenen Hub-Rechner?</b> Nein, nicht zwingend. Ein Raspberry Pi 4/5 kann <b>Hub und Bildschirm zugleich</b> sein – das wird bei der Einrichtung am Handy einfach ausgewählt. Weitere Bildschirme kommen später dazu. Erst bei vielen Bildschirmen empfiehlt sich ein eigener Hub-Rechner im Technikraum (robuster, da die Zentrale dann nicht an einem Bildschirm hängt).</div></section>
 
 ${divider('Die Oberfläche', 'Echte Bildschirmfotos der Software. Hinweis: alle Bilder sind mit Beispieldaten erstellt.')}
 ${await shot('Anmeldung', 'Anmeldung im DFM-Design. Passwort vergessen? Zurücksetzen durch einen Admin oder mit einem Wiederherstellungscode – ohne E-Mail.', '01-anmelden.png')}
@@ -99,16 +100,16 @@ ${divider('Sicherheit, Betrieb, Kosten', 'Was das System absichert, was es brauc
 <li>Datenschutzblatt liegt bei (<i>docs/datenschutz.md</i>).</li></ul>
 <h3>Was passiert, wenn …</h3><table><tr><th>Situation</th><th>Besucher sehen</th></tr><tr><td>WLAN fällt aus</td><td>Inhalte laufen weiter, keine Fehlermeldung</td></tr><tr><td>Hub ist aus</td><td>Termine der nächsten 14 Tage laufen weiter</td></tr><tr><td>Stromausfall</td><td>Alles startet von selbst wieder</td></tr><tr><td>Hub defekt</td><td>Ersatz-Hub aus Backup in unter 15 Min.</td></tr></table></div></div></section>
 
-<section class="p"><h2>Was gebraucht wird (Hardware und Netz)</h2><div class="cols"><div><h3>Zentraler Hub (1×)</h3><ul><li>Raspberry Pi 4 (mind. 2 GB) oder Pi 5</li><li><b>USB-SSD</b> statt SD-Karte (robuster)</li><li>Original-Netzteil, Gehäuse mit Kühlung</li><li>Empfohlen: kleine <b>USV</b> (Stromausfall-Puffer)</li><li>Netzwerkkabel, feste IP-Adresse</li></ul>
+<section class="p"><h2>Was gebraucht wird (Hardware und Netz)</h2><div class="box" style="margin-bottom:3mm"><b>Für den Anfang:</b> 1× Raspberry Pi 4 (2 GB+) oder Pi 5 als <b>Hub und Bildschirm in einem</b> – kein zusätzlicher Rechner nötig.</div><div class="cols"><div><h3>Eigener Hub (später, ab mehreren Bildschirmen)</h3><ul><li>Raspberry Pi 4 (mind. 2 GB) oder Pi 5</li><li><b>USB-SSD</b> statt SD-Karte (robuster)</li><li>Original-Netzteil, Gehäuse mit Kühlung</li><li>Empfohlen: kleine <b>USV</b> (Stromausfall-Puffer)</li><li>Netzwerkkabel, feste IP-Adresse</li></ul>
 <h3>Je Bildschirm</h3><ul><li>Raspberry Pi 4/5 (Video, Zonen) oder Pi 3 / Zero 2 W (einfache Inhalte)</li><li><b>„High Endurance“-SD-Karte</b> (mind. 32 GB)</li><li><b>Original-Netzteil</b> – häufigste Fehlerquelle sind schwache Netzteile</li><li>Vorhandener Bildschirm mit HDMI</li></ul></div>
 <div><h3>Netz (Aufgabe der IT)</h3><ul><li>Eigenes Signage-WLAN ohne Internet empfohlen</li><li>Pi 3 und Zero 2 W brauchen 2,4 GHz</li><li>Geräte dürfen sich im WLAN gegenseitig erreichen (keine Client-Isolation), mDNS nicht blockieren</li><li>Feste IP-Adresse für den Hub</li></ul>
 <h3>Kosten</h3><p>Keine Lizenz- oder Abokosten. Es fallen nur Hardwarekosten an (Raspberry Pi, Netzteil, SD-Karte/SSD, ggf. USV). Die genauen Preise hängen vom Händler ab und sollten vor dem Pilot angefragt werden.</p>
 <p class="small">Details: docs/hardware-empfehlung.md</p></div></div></section>
 
 <section class="p"><h2>Technischer Stand – ehrlich</h2><div class="cols"><div><h3>Erledigt und nachgewiesen</h3><table>
-<tr><td><span class="ok">✔</span></td><td>Alle Funktionen der Aufgabenstellung inklusive Erweiterung und Zusatzwünschen umgesetzt</td></tr>
+<tr><td><span class="ok">✔</span></td><td>Alle Funktionen der Aufgabenstellung inklusive Erweiterung und Zusatzwünschen umgesetzt – auch der Betrieb mit nur einem Gerät (Hub + Bildschirm)</td></tr>
 <tr><td><span class="ok">✔</span></td><td>129 automatische Tests bestanden (Hub, Player, Einrichtung, Browser-Tests, simulierte Bildschirme)</td></tr>
-<tr><td><span class="ok">✔</span></td><td>SD-Karten-Image 0.2.0 gebaut, signiert, 27/27 Sicherheits- und Qualitätsprüfungen bestanden</td></tr>
+<tr><td><span class="ok">✔</span></td><td>SD-Karten-Image 0.2.1 gebaut, signiert, 27/27 Sicherheits- und Qualitätsprüfungen bestanden</td></tr>
 <tr><td><span class="ok">✔</span></td><td>Live-Kachelansicht mit 10 Bildschirmen öffnet in 0,1 s (Ziel: unter 3 s)</td></tr>
 <tr><td><span class="ok">✔</span></td><td>Bildschirm gilt nach höchstens 65 s ohne Meldung als „keine Verbindung“</td></tr>
 <tr><td><span class="ok">✔</span></td><td>Anwender-, Technik- und Sicherheitshandbuch, Datenschutzblatt, Notfallanleitung „Hub ausgefallen“</td></tr></table></div>
@@ -121,16 +122,16 @@ ${divider('Sicherheit, Betrieb, Kosten', 'Was das System absichert, was es brauc
 
 <section class="p"><h2>Nächste Schritte</h2><table>
 <tr><th style="width:8mm">#</th><th>Schritt</th><th>Wer</th><th>Aufwand (geschätzt)</th></tr>
-<tr><td>1</td><td><b>Freigabe Pilotbetrieb</b> und Hardware bestellen (1 Hub + 2–3 Player, Netzteile, SD-Karten/SSD, ggf. USV)</td><td>Leitung</td><td>–</td></tr>
+<tr><td>1</td><td><b>Freigabe Pilotbetrieb</b> und Hardware bestellen (1 Pi 4/5 als Hub+Bildschirm, 1–2 weitere Player, Original-Netzteile, SD-Karten, ggf. USV)</td><td>Leitung</td><td>–</td></tr>
 <tr><td>2</td><td>Netz vorbereiten: Signage-WLAN, feste IP für den Hub, mDNS erlauben</td><td>IT</td><td>ca. 1/2 Tag</td></tr>
 <tr><td>3</td><td>Image auf SD-Karten schreiben, Hub und Bildschirme per QR-Code einrichten</td><td>IT / Technik</td><td>ca. 1–2 Std.</td></tr>
 <tr><td>4</td><td>Hardware-Abnahme nach Checkliste (u. a. Video, WLAN, Strom, Ausfall-Szenarien)</td><td>Technik</td><td>ca. 1 Tag</td></tr>
 <tr><td>5</td><td>Inhalte übernehmen (Ordner-Import), Redakteure einweisen, Test mit einer Person ohne Technikkenntnisse</td><td>Marketing / Redaktion</td><td>ca. 1 Tag</td></tr>
 <tr><td>6</td><td>Pilotbetrieb 2–4 Wochen, Wochenbericht auswerten</td><td>alle</td><td>laufend</td></tr>
 <tr><td>7</td><td>Entscheidung über Ausbau auf alle Bildschirme</td><td>Leitung</td><td>–</td></tr></table>
-<h3>So kommt man an die Software</h3><p>Das fertige Image steht zum Download bereit: <b>github.com/DFMDO/Pi</b> → „Releases“ → <b>dfm-signage-arm64-0.2.0.img.xz</b>. Mit dem kostenlosen „Raspberry Pi Imager“ auf die SD-Karte schreiben („Eigenes Image verwenden“), einstecken, einschalten, QR-Code scannen.</p></section>
+<h3>So kommt man an die Software</h3><p>Das fertige Image steht zum Download bereit: <b>github.com/DFMDO/Pi</b> → „Releases“ → <b>dfm-signage-arm64-0.2.1.img.xz</b>. Mit dem kostenlosen „Raspberry Pi Imager“ auf die SD-Karte schreiben („Eigenes Image verwenden“), einstecken, einschalten, QR-Code scannen.</p></section>
 </body></html>`;
 const b = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox'] });
 const p = await b.newPage(); await p.setContent(html, { waitUntil: 'load' });
-await p.pdf({ path: R + 'DFM-Signage-Uebersicht.pdf', format: 'A4', landscape: true, printBackground: true, displayHeaderFooter: true, headerTemplate: '<span></span>', footerTemplate: '<div style="font-size:7pt;color:#888;width:100%;padding:0 12mm;display:flex;justify-content:space-between;font-family:sans-serif"><span>DFM Signage · Übersicht · Version 0.2.0</span><span>Seite <span class="pageNumber"></span> von <span class="totalPages"></span></span></div>' });
+await p.pdf({ path: R + 'DFM-Signage-Uebersicht.pdf', format: 'A4', landscape: true, printBackground: true, displayHeaderFooter: true, headerTemplate: '<span></span>', footerTemplate: '<div style="font-size:7pt;color:#888;width:100%;padding:0 12mm;display:flex;justify-content:space-between;font-family:sans-serif"><span>DFM Signage · Übersicht · Version 0.2.1</span><span>Seite <span class="pageNumber"></span> von <span class="totalPages"></span></span></div>' });
 await b.close(); console.log('PDF erstellt');
