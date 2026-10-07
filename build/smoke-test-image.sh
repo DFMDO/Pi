@@ -41,10 +41,10 @@ for (const p of [8080, 8081, 9090]) http.createServer((q, r) => { r.setHeader('c
 EOF
 R /opt/node/bin/node /tmp/pages.js & sleep 3
 CHR=(/usr/bin/chromium --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --disable-crash-reporter --user-data-dir=/tmp/cp "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1" --proxy-server=direct:// --virtual-time-budget=8000 --dump-dom)
-dom() { timeout 300 chroot "$M" "${CHR[@]}" "$1" 2>/dev/null; }
+dom() { timeout 300 chroot "$M" "${CHR[@]}" "$1" 2>>"$OUT.chromium-log"; }
 POL="$M/etc/chromium/policies/managed/dfm.json"; say "Richtlinie im Image: $(tr -d '\n' < "$POL" | cut -c1-200)"
 mv "$POL" "$POL.aus"
-dom http://127.0.0.1:9090/ | grep -q SEITE-GELADEN-9090 && ok "Kontrolle: Chromium läuft im Test (ohne Richtlinie lädt eine Seite)" || { say "HINWEIS  Chromium lässt sich im Emulator nicht starten – Richtlinien-Test nicht auswertbar"; CHROMIUM_OFF=1; }
+dom http://127.0.0.1:9090/ | grep -q SEITE-GELADEN-9090 && ok "Kontrolle: Chromium läuft im Test (ohne Richtlinie lädt eine Seite)" || { say "HINWEIS  Chromium lässt sich im Emulator nicht starten – Richtlinien-Test nicht auswertbar. Letzte Chromium-Meldungen:"; tail -15 "$OUT.chromium-log" 2>/dev/null | cut -c1-200 | tee -a "$OUT"; CHROMIUM_OFF=1; }
 mv "$POL.aus" "$POL"
 if [ -z "${CHROMIUM_OFF:-}" ]; then
   dom http://127.0.0.1:8080/player/ | grep -q SEITE-GELADEN-8080 && ok "Richtlinie lässt die Player-Seite (127.0.0.1:8080) durch" || bad "Richtlinie SPERRT die Player-Seite (127.0.0.1:8080) – so entsteht 'Diese Seite ist blockiert'"

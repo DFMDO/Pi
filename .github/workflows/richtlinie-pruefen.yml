@@ -1,0 +1,25 @@
+# Prüft mit einem echten Chromium (ca. 3 Minuten), ob die Browser-Richtlinie des Images die Anzeige durchlässt und alles andere sperrt.
+name: Richtlinie prüfen
+on:
+  workflow_dispatch:
+  push:
+    paths: ['build/rootfs/etc/chromium/**', 'build/check-policy-chromium.sh']
+permissions:
+  contents: read
+jobs:
+  policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Chromium holen
+        run: |
+          npx --yes playwright-core@1.56 install --with-deps chromium
+          echo "DFM_CHROMIUM=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome | head -1)" >> "$GITHUB_ENV"
+      - name: Richtlinie prüfen
+        run: sudo env PATH="$PATH" CHROMIUM="$DFM_CHROMIUM" bash build/check-policy-chromium.sh | tee policy-result.txt
+      - name: Ergebnis anzeigen
+        if: always()
+        run: '{ echo "## Browser-Richtlinie"; echo "```"; cat policy-result.txt; echo "```"; } >> "$GITHUB_STEP_SUMMARY"'
