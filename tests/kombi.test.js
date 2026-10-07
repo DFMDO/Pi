@@ -35,3 +35,15 @@ test('Hub + Bildschirm: eigener Bildschirm wird beim Hub-Start angelegt und verb
   const ag2 = new Agent({ dataDir: bad, port: 0, heartbeatMs: 200, pollMs: 300, exit: () => {} }); await ag2.start(); await new Promise((r) => setTimeout(r, 800)); assert.equal(ag2.connected, false, 'Pin-Fehler: keine Verbindung');
   await ag2.stop(); await agent.stop(); h.app.server.closeAllConnections?.(); await h.cleanup();
 });
+
+test('Hub + Bildschirm: das Hub-Gerät lässt sich nicht sperren, entfernen oder zurücksetzen', { timeout: 60000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'kombi-')), deviceId = randomUUID(), token = randomBytes(32).toString('base64url');
+  await writeFinalConfig({ v: 1, role: 'kombi', name: 'Foyer' }, { localPlayer: { deviceId, tokenHash: createHash('sha256').update(token).digest('hex'), name: 'Foyer', profile: 'pro', model: 'Raspberry Pi 3 B+' }, agent: { deviceId, token, name: 'Foyer', profile: 'pro' } }, root, { chown: () => {} });
+  const h = await makeHub({ useTls: true, dataDir: join(root, 'hub') }); const a = await h.as('admin');
+  assert.equal((await a('GET', `/api/v1/devices/${deviceId}`)).json().isHub, true);
+  for (const [m, u, b] of [['POST', `/api/v1/devices/${deviceId}/block`], ['DELETE', `/api/v1/devices/${deviceId}`], ['POST', `/api/v1/devices/${deviceId}/commands`, { command: 'factory_reset' }]]) {
+    const r = await a(m, u, b); assert.equal(r.statusCode, 409, `${m} ${u}`); assert.match(r.json().error, /Hub/);
+  }
+  assert.equal(h.db.prepare('SELECT status FROM devices WHERE id=?').get(deviceId).status, 'active');
+  await h.cleanup();
+});

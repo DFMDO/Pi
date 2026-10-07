@@ -70,7 +70,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id) : null;
     return { id: d.id, display: d.display_json ? JSON.parse(d.display_json) : null, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, renderer: d.renderer ?? 'auto', orientation: d.orientation,
       status: deviceStatus(d), summary: summary(d, st), lastSeen: d.last_seen, state: st, hw: d.hw_json ? JSON.parse(d.hw_json) : null,
-      spki: d.spki_seen ? formatFingerprint(d.spki_seen) : null, online: sockets.has(d.id) };
+      spki: d.spki_seen ? formatFingerprint(d.spki_seen) : null, online: sockets.has(d.id), isHub: isHubDevice(d.id) };
   };
 
   // ---------- Verwaltung ----------
@@ -95,13 +95,17 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
   });
   // Sperren / Entfernen: Token sofort ungültig, WebSocket beendet.
   const revoke = (id) => { sockets.get(id)?.close(4001, 'revoked'); sockets.delete(id); };
+  const isHubDevice = (id) => db.prepare("SELECT 1 FROM settings WHERE key='hub.deviceId' AND value=?").get(id) !== undefined;
+  const HUB_MSG = 'Dieser Bildschirm ist gleichzeitig der Hub. Wenn Sie ihn sperren oder entfernen, fällt das ganze System aus.';
   app.post('/api/v1/devices/:id/block', { config: { perm: 'devices.manage' } }, async (req, reply) => {
+    if (isHubDevice(req.params.id)) return reply.code(409).send({ error: HUB_MSG });
     const r = db.prepare("UPDATE devices SET status='blocked', token_hash=NULL WHERE id=?").run(req.params.id);
     if (!r.changes) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
     revoke(req.params.id); audit.log({ user: req.user, action: 'bildschirm.gesperrt', target: req.params.id, ip: req.ip, security: true });
     return { ok: true };
   });
   app.delete('/api/v1/devices/:id', { config: { perm: 'devices.manage' } }, async (req, reply) => {
+    if (isHubDevice(req.params.id)) return reply.code(409).send({ error: HUB_MSG });
     revoke(req.params.id);
     const r = db.prepare('DELETE FROM devices WHERE id=?').run(req.params.id);
     if (!r.changes) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
@@ -230,6 +234,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     properties: { command: { enum: COMMANDS }, args: { type: 'object' } } } } }, async (req, reply) => {
     const d = getDevice(req.params.id); if (!d || d.status !== 'active') return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
     const { command, args = {} } = req.body;
+    if (command === 'factory_reset' && isHubDevice(d.id)) return reply.code(409).send({ error: 'Dieser Bildschirm ist gleichzeitig der Hub. Beim Zurücksetzen gehen alle Inhalte und Einstellungen verloren.' });
     if (command === 'rotate' && ![0, 90, 180, 270].includes(args.degrees)) return reply.code(400).send({ error: 'Bitte wähle 0, 90, 180 oder 270 Grad.' });
     if (command === 'wifi_change' && !(typeof args.ssid === 'string' && args.ssid.length >= 1 && Buffer.byteLength(args.ssid) <= 32 && typeof args.password === 'string')) return reply.code(400).send({ error: 'Bitte gib Netzwerkname und Passwort an.' });
     if (command === 'rotate' && !args.rollback) db.prepare('UPDATE devices SET orientation=? WHERE id=?').run(args.degrees, d.id); // mit Rückfall erst nach Bestätigung (confirm_display)

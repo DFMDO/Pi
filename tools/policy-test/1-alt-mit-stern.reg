@@ -1,0 +1,9 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge\URLBlocklist]
+"1"="*"
+
+[HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge\URLAllowlist]
+"1"="http://127.0.0.1:8080/*"
+"2"="http://127.0.0.1:8081/*"
+"3"="edge://policy"

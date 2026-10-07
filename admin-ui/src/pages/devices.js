@@ -59,7 +59,7 @@ function cmdMenu(d, route) {
     if (v === 'reset' && await confirmDlg('Auf Werkseinstellungen zurücksetzen?', 'Alle Daten und die WLAN-Verbindung dieses Bildschirms werden gelöscht. Danach muss er neu eingerichtet werden.', 'Zurücksetzen')) run('factory_reset', {}, 'Der Bildschirm wird zurückgesetzt.');
   } }, h('option', { value: '' }, 'Weitere Aktionen …'), h('option', { value: 'reload' }, 'Neu laden'), h('option', { value: 'screenshot' }, 'Vorschau aktualisieren'), h('option', { value: 'identify' }, 'Diesen Bildschirm erkennen'), h('option', { value: 'test' }, 'Testbild anzeigen'), h('option', { value: 'copy' }, 'Einstellungen auf andere kopieren …'), h('option', { value: 'reconnect' }, 'Mit dem Hub neu verbinden'),
     h('option', { value: 'rot0' }, 'Ausrichtung: normal'), h('option', { value: 'rot90' }, 'Ausrichtung: 90° gedreht'), h('option', { value: 'rot180' }, 'Ausrichtung: 180°'), h('option', { value: 'rot270' }, 'Ausrichtung: 270°'),
-    h('option', { value: 'wifi' }, 'WLAN ändern …'), h('option', { value: 'diag' }, 'Diagnose …'), h('option', { value: 'update' }, 'Update einspielen'), h('option', { value: 'reboot' }, 'Neu starten'), h('option', { value: 'block' }, 'Sperren'), h('option', { value: 'remove' }, 'Entfernen'), h('option', { value: 'reset' }, 'Auf Werkseinstellungen zurücksetzen'));
+    h('option', { value: 'wifi' }, 'WLAN ändern …'), h('option', { value: 'diag' }, 'Diagnose …'), h('option', { value: 'update' }, 'Update einspielen'), h('option', { value: 'reboot' }, 'Neu starten'), ...(d.isHub ? [] : [h('option', { value: 'block' }, 'Sperren'), h('option', { value: 'remove' }, 'Entfernen'), h('option', { value: 'reset' }, 'Auf Werkseinstellungen zurücksetzen')]));
   return sel;
 }
 function wifiDlg(d, run) {
