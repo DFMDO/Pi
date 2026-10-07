@@ -35,6 +35,17 @@ for pat in '127.0.0.1:8080' 'http://127.0.0.1:8080' 'http://127.0.0.1:8080/' 'ht
   b=gesperrt; dom http://127.0.0.1:9090/ | grep -q SEITE-GELADEN-9090 && b=DURCH
   echo "MATRIX   Freigabe '$pat': 8080/player/ = $a, 9090 = $b"
 done
+# Experimente: warum greift die Freigabe nicht?
+dom2() { timeout 120 "$CHR" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --user-data-dir="$(mktemp -d)" --virtual-time-budget=5000 --dump-dom "$1" 2>/dev/null; }
+res() { local a=gesperrt b=gesperrt; "$1" http://127.0.0.1:8080/player/ | grep -q SEITE-GELADEN-8080 && a=DURCH; "$1" http://127.0.0.1:9090/ | grep -q SEITE-GELADEN-9090 && b=DURCH; echo "EXPERIMENT $2: 8080 = $a, 9090 = $b"; }
+printf '{"URLBlocklist":["*"],"URLAllowlist":["http://127.0.0.1:8080"]}' > /tmp/e.json; install_policy /tmp/e.json; res dom2 'ohne Resolver-/Proxy-Flags, Block * + Allow http://127.0.0.1:8080'
+printf '{"URLBlocklist":["http://127.0.0.1:9090"]}' > /tmp/e.json; install_policy /tmp/e.json; res dom 'nur Block 9090 (ohne Allow)'
+printf '{"URLBlocklist":["127.0.0.1"],"URLAllowlist":["127.0.0.1:8080"]}' > /tmp/e.json; install_policy /tmp/e.json; res dom 'Block 127.0.0.1, Allow 127.0.0.1:8080'
+printf '{"URLBlocklist":["http://*"],"URLAllowlist":["http://127.0.0.1:8080"]}' > /tmp/e.json; install_policy /tmp/e.json; res dom 'Block http://*, Allow http://127.0.0.1:8080'
+printf '{"URLBlocklist":["*"],"URLAllowlist":["http://localhost:8080"]}' > /tmp/e.json; install_policy /tmp/e.json
+echo "EXPERIMENT localhost: $(timeout 120 "$CHR" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --user-data-dir="$(mktemp -d)" --virtual-time-budget=5000 --dump-dom http://localhost:8080/ 2>/dev/null | grep -o 'SEITE-GELADEN-[0-9]*' | head -1)"
+printf '{"URLAllowlist":["http://127.0.0.1:8080"]}' > /tmp/e.json; install_policy /tmp/e.json
+echo "EXPERIMENT chrome://policy: $(timeout 120 "$CHR" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run --user-data-dir="$(mktemp -d)" --virtual-time-budget=8000 --dump-dom chrome://policy 2>/dev/null | tr '\n' ' ' | grep -o 'URLAllowlist[^<]*<[^<]*<[^<]*' | head -2)"
 # Die Richtlinie aus dem Image
 install_policy "$POL"; echo "Richtlinie: $(grep URLAllowlist "$POL")"
 dom http://127.0.0.1:8080/player/ | grep -q SEITE-GELADEN-8080 && ok "Player-Seite (127.0.0.1:8080/player/) wird durchgelassen" || bad "Player-Seite wird GESPERRT"
