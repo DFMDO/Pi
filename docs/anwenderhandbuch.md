@@ -36,7 +36,7 @@ Sobald das Handy verbunden ist, wechselt der Bildschirm. Meist öffnet sich die 
 ![Handy: PIN](bilder/22-handy-pin.png)
 
 ### Die vier Schritte am Handy
-1. **WLAN wählen** – Netzwerk antippen, Passwort eingeben (mit dem Auge-Symbol kannst du es anzeigen). *Hinweis:* Raspberry Pi 3 und Zero 2 W können nur 2,4-GHz-WLAN. Das Gerät prüft das WLAN; dabei verliert dein Handy **kurz** die Verbindung – das ist normal und es verbindet sich von selbst wieder. Bei falschem Passwort steht dort „Das Passwort scheint falsch zu sein“, und du kannst es noch einmal versuchen.
+1. **WLAN wählen** – Netzwerk antippen, Passwort eingeben (mit dem Auge-Symbol kannst du es anzeigen). *Hinweis:* Raspberry Pi 3 B (ohne Plus) und Zero 2 W können nur 2,4-GHz-WLAN. Das Gerät prüft das WLAN; dabei verliert dein Handy **kurz** die Verbindung – das ist normal und es verbindet sich von selbst wieder. Bei falschem Passwort steht dort „Das Passwort scheint falsch zu sein“, und du kannst es noch einmal versuchen.
    ![WLAN wählen](bilder/23-handy-wlan.png)
 2. **Was ist dieses Gerät?** – „Hauptbildschirm-Rechner (Hub)“ gibt es **nur einmal** im Museum, er speichert alles. Alle anderen sind „Bildschirm (Player)“.
    ![Rolle](bilder/24-handy-rolle.png)
@@ -159,7 +159,7 @@ Im **Kalender** (Tag / Woche / Monat) klickst du ein Feld an oder ziehst über e
 | Kein QR-Code am Bildschirm | HDMI-Kabel/Stecker prüfen, 2 Minuten warten. Beim Pi Zero 2 W dauert der Start länger. |
 | Handy verbindet sich nicht mit `DFM-Setup-…` | Passwort vom Bildschirm genau abtippen (kleine/große Buchstaben). Notfalls Gerät aus- und einschalten (neues Passwort). |
 | Seite öffnet sich nicht von selbst | `http://10.42.0.1/` im Browser eingeben. |
-| „Das Passwort scheint falsch zu sein“ | WLAN-Passwort prüfen; Pi 3/Zero 2 W brauchen 2,4 GHz. |
+| „Das Passwort scheint falsch zu sein“ | WLAN-Passwort prüfen; Pi 3 B/Zero 2 W brauchen 2,4 GHz. |
 | `dfm-signage.local` wird nicht gefunden | Manche Android-Browser kennen `.local` nicht → die IP-Adresse nutzen (Bildschirme → Hub-Adresse). |
 | Bildschirm zeigt „Einen Moment bitte“ | Die Uhr ist noch nicht gestellt. Im Hub „Uhr abgleichen“ klicken. |
 | Bildschirm läuft nicht mehr | Strom und WLAN prüfen; im Hub „Mit dem Hub neu verbinden“ oder „Neu starten“. |

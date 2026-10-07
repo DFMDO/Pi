@@ -15,6 +15,6 @@ Ein **Raspberry Pi 4 (2 GB+) oder Pi 5** kann Hub **und** Bildschirm zugleich se
 ## Player
 - **High-Endurance-SD-Karten** (für Dauerbetrieb, mindestens 32 GB, A1/A2).
 - **Original-Netzteile** des jeweiligen Modells; keine billigen Handy-Ladegeräte, keine langen dünnen Kabel.
-- Modelle: Pi 3 (Standard), Zero 2 W (Lite), Pi 4/5 (Pro). Pi 3 und Zero 2 W haben nur 2,4-GHz-WLAN.
+- Modelle: Pi 3 (Standard), Zero 2 W (Lite), Pi 4/5 (Pro). Pi 3 B (ohne Plus) und Zero 2 W haben nur 2,4-GHz-WLAN, der Pi 3 B+ kann auch 5 GHz. Als Hub oder „Hub und Bildschirm in einem“ ist der Pi 3 B+ mit 1 GB Arbeitsspeicher zu knapp – dafür Pi 4/5.
 - Ausreichend Luft; Pi 4/5 bei Dauerbetrieb mit Kühlkörper.
 - Dauerhaft schwacher Empfang? Näher an den Access Point oder per Kabel. Der Aufstellmodus (*Betrieb → WLAN-Empfang*) hilft beim Platzieren.

@@ -23,7 +23,7 @@ Oberfläche komplett auf Deutsch, für Menschen ohne Technikwissen. **Alles läu
 
 ## Empfehlungen fürs Museumsnetz (kurz)
 - Ein **eigenes Signage-WLAN ohne Internet**; *Client-/AP-Isolation aus*; **mDNS (UDP 5353) nicht filtern**.
-- **Pi 3 und Zero 2 W: nur 2,4 GHz** anbieten.
+- **Pi 3 B (ohne Plus) und Zero 2 W: nur 2,4 GHz** – dafür 2,4 GHz anbieten (Pi 3 B+ kann auch 5 GHz).
 - Dem Hub eine **feste IP** (DHCP-Reservierung) geben – die MAC-Adresse zeigt die Oberfläche unter *Bildschirme → Hub-Adresse & Fingerabdruck*.
 - Hub: **Pi 4 (2 GB) oder besser, mit USB-SSD, Original-Netzteil, Kühlung und möglichst einer USV** (bei Stromausfall starten alle Geräte von selbst, Player zeigen bis dahin ihren Cache). Ein Pi 3/Zero 2 W als Hub bekommt eine Warnung (nur kleine Anlagen).
 

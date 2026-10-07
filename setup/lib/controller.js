@@ -47,7 +47,7 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
 
   const api = {
     state: s, startMode, tick, enterPin, authed,
-    info(t) { if (!authed(t)) return null; touch(); return { wifiOnly, model: hw.model ?? '', profile: hw.profile ?? 'standard', band24only: !/Pi (4|5|400|500)/.test(hw.model ?? ''), hubWarning: hw.profile && hw.profile !== 'pro' ? 'Dieses Gerät ist eher schwach. Als Hub – und erst recht als Hub mit Bildschirm – empfehlen wir einen Raspberry Pi 4 (2 GB) oder Pi 5.' : null,
+    info(t) { if (!authed(t)) return null; touch(); return { wifiOnly, model: hw.model ?? '', profile: hw.profile ?? 'standard', band24only: !/Pi (4|5|400|500)|Pi 3 Model [AB] Plus/.test(hw.model ?? '') /* 3B+ und 3A+ können auch 5 GHz */, hubWarning: hw.profile && hw.profile !== 'pro' ? 'Dieses Gerät ist eher schwach. Als Hub – und erst recht als Hub mit Bildschirm – empfehlen wir einen Raspberry Pi 4 (2 GB) oder Pi 5.' : null,
       hubFound: s.hubFound, lan: !!s.lan, cameraWifi: s.cameraWifi ? { ssid: s.cameraWifi.ssid } : null, networks: s.networks, suffix, defaultName: `Bildschirm ${suffix}` }; },
 
     /** Schritt 1: WLAN prüfen. Wegen AP-only wird der Hotspot kurz abgeschaltet (Zwei-Phasen-Test). */
