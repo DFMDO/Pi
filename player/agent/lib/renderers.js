@@ -2,6 +2,7 @@
 // des Agents, werden bei Absturz mit Wartezeit neu gestartet.
 import { spawn, execFile } from 'node:child_process';
 import net from 'node:net';
+import { dirname } from 'node:path';
 import { resolvePlaylist, playableItems } from '../../../shared/sequencer.js';
 
 function supervise(start, log) {
@@ -31,8 +32,8 @@ export function chromiumRenderer({ url, profileDir, log = () => {} }) {
 }
 
 /** Lite: mpv ohne Browser. Der Agent steuert mpv über den IPC-Socket und wertet den Plan selbst aus. */
-export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth = () => ({}), getRotation = () => 0, onShow = () => {}, profile = 'lite', socket = '/run/dfm/mpv.sock', log = () => {}, now = () => Date.now() }) {
-  const sup = supervise(() => spawn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--no-terminal', '--keep-open=no',
+export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth = () => ({}), getRotation = () => 0, onShow = () => {}, profile = 'lite', socket = '/run/dfm-agent/mpv.sock', log = () => {}, now = () => Date.now() }) {
+  const sup = supervise(() => spawn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--msg-level=all=warn', '--keep-open=no',
     '--image-display-duration=10', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', '--osd-font-size=42', `--video-rotate=${getRotation()}`], { stdio: ['ignore', 'ignore', 'inherit'] }), log); // Fehlermeldungen von mpv ins Journal des Agents
   let sock = null, idx = 0, timer = null, current = null, stopped = false;
   const send = (cmd) => { try { sock?.write(JSON.stringify({ command: cmd }) + '\n'); } catch {} };
@@ -65,7 +66,7 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
   const osd = (text, ms) => send(['show-text', text, ms]);
   return { ...sup, osd, stop: () => { stopped = true; clearTimeout(timer); sock?.destroy(); sup.stop(); }, notify: () => { idx = 0; tick(); },
     screenshot: () => new Promise((res, rej) => { // mpv schreibt das Bild in eine Datei
-      const f = '/run/dfm/shot.png'; send(['screenshot-to-file', f, 'window']); setTimeout(() => { try { res(require_fs().readFileSync(f)); } catch (e) { rej(e); } }, 800); }) };
+      const f = dirname(socket) + '/shot.png'; send(['screenshot-to-file', f, 'window']); setTimeout(() => { try { res(require_fs().readFileSync(f)); } catch (e) { rej(e); } }, 800); }) };
 }
 import { readFileSync } from 'node:fs';
 const require_fs = () => ({ readFileSync });

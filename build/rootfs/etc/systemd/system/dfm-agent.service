@@ -28,6 +28,9 @@ ProtectControlGroups=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 LockPersonality=yes
 ReadWritePaths=/data/agent /run/dfm/privd /run/user
+# Steuerkanal und Screenshot des Players (mpv) liegen hier: Unter ProtectSystem=strict ist /run sonst schreibgeschützt – mpv blieb dadurch schwarz (Pilot 0.2.12).
+RuntimeDirectory=dfm-agent
+RuntimeDirectoryMode=0700
 # Keine feste Speichergrenze: Anzeige und Browser dürfen den ganzen Pi nutzen; bei Speichermangel wird sie als Letztes beendet.
 OOMScoreAdjust=-500
 UMask=0077

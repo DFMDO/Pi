@@ -61,3 +61,14 @@ test('Image-Skript: Uhr-Datei, stündliche Sicherung, avahi-Verzeichnis, fc-cach
   for (const f of ['dfm-hwclock-save.service', 'dfm-hwclock-save.timer']) assert.ok(existsSync(new URL(`../build/rootfs/etc/systemd/system/${f}`, import.meta.url)), f);
   assert.match(readFileSync(new URL('../build/rootfs/usr/lib/dfm/select-mode.sh', import.meta.url), 'utf8'), /mount --bind \/run\/dfm\/avahi-services \/etc\/avahi\/services/);
 });
+
+// Pilot (0.2.12): mpv lief, blieb aber schwarz – der Steuerkanal /run/dfm/mpv.sock war unter ProtectSystem=strict nicht beschreibbar (und --no-terminal verschluckte die Meldung).
+test('mpv-Steuerkanal liegt in einem für den Agent beschreibbaren Verzeichnis; mpv-Meldungen sind nicht abgeschaltet', () => {
+  const r = readFileSync(new URL('../player/agent/lib/renderers.js', import.meta.url), 'utf8');
+  const sock = /socket = '([^']+)'/.exec(r)?.[1]; assert.ok(sock, 'Standard-Socket gefunden');
+  const u = unit('dfm-agent.service'), dir = sock.slice(0, sock.lastIndexOf('/'));
+  const rw = (/^ReadWritePaths=(.*)$/m.exec(u)?.[1] ?? '').split(/\s+/), rt = /^RuntimeDirectory=(\S+)/m.exec(u)?.[1];
+  assert.ok(rw.some((p) => dir === p || dir.startsWith(p + '/')) || (rt && dir === '/run/' + rt), `${dir} ist für den Agent beschreibbar (ReadWritePaths oder RuntimeDirectory)`);
+  assert.ok(!r.includes('--no-terminal'), 'mpv-Warnungen/Fehler dürfen nicht verschluckt werden');
+  assert.match(r, /--msg-level=all=warn/);
+});
