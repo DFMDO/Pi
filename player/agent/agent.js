@@ -29,7 +29,7 @@ export function ownAddresses() {
 }
 
 export class Agent {
-  constructor({ dataDir, version = '0.2.14', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.15', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });
@@ -46,7 +46,8 @@ export class Agent {
   async start() {
     this.boundPort = await this.server.listen();            // 1) sofort anzeigen, was im Cache liegt (kein Hub nötig)
     if (this.plan) this.applyHubSettings(this.plan);        // Bildschirm-Zeiten/Sync-Einstellungen gelten auch nach Neustart ohne Hub
-    this.timeOk = await timeSynced(); this.timeTimer = setInterval(async () => { this.timeOk = await timeSynced(); this.checkDisplay(); }, 30000).unref();
+    const authority = () => !!this.cfg?.local; // Hub + Bildschirm in einem: dieses Gerät ist selbst die Zeitquelle
+    this.timeOk = await timeSynced({ authority: authority() }); this.timeTimer = setInterval(async () => { this.timeOk = await timeSynced({ authority: authority() }); this.checkDisplay(); }, 30000).unref();
     this.renderer?.start?.();
     if (!this.cfg?.token && this.cfg?.pairing) await this.pairNow();   // Erstverbindung mit dem Hub (Einmalcode)
     if (!this.cfg?.token) throw new Error('Dieses Gerät ist noch nicht mit einem Hub verbunden.');
@@ -122,7 +123,7 @@ export class Agent {
   }
   async sendHeartbeat() {
     this.nightlyReboot(); const np = this.nowPlayingInfo();
-    this.send('heartbeat', { state: await collect({ version: this.version, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, wifiSwitch: readJson(join(this.dataDir, 'state', 'wifi-switch-result.json')), reconnects: this.reconnects ?? 0, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
+    this.send('heartbeat', { state: await collect({ version: this.version, authority: !!this.cfg?.local, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, wifiSwitch: readJson(join(this.dataDir, 'state', 'wifi-switch-result.json')), reconnects: this.reconnects ?? 0, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
   }
   /** Aufstellmodus (Z.15): alle 2 s Signal melden, höchstens 15 Minuten */
   startSignalWatch(seconds) {
@@ -233,7 +234,7 @@ export class Agent {
   /** Diagnose: Zustand, WLAN, Durchsatz und (optional) Testvideo im eigenen Profil. */
   async runDiagnose(args = {}) {
     const get = (p, extra = {}) => request({ url: this.activeBase() + p, pin: this.cfg.hubSpki, token: this.cfg.token, timeout: 60000, ...extra });
-    const res = { ...(await collect({ version: this.version })), powerSave: await powerSave(), profile: this.cfg.profile };
+    const res = { ...(await collect({ version: this.version, authority: !!this.cfg?.local })), powerSave: await powerSave(), profile: this.cfg.profile };
     const t0 = Date.now(); const sp = await get(args.quick ? '/api/v1/device/speedtest?kb=2048' : '/api/v1/device/speedtest'); res.throughputMBs = sp.status === 200 ? Math.round((sp.body.length / 1048576) / ((Date.now() - t0) / 1000) * 10) / 10 : null;
     if (args.testvideo) {
       const f = join(this.dataDir, 'testvideo.mp4'); const tv = await get('/api/v1/device/testvideo'); if (tv.status !== 200) { res.testvideo = { error: 'Testvideo nicht verfügbar' }; return res; }

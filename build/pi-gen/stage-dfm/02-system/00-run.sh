@@ -36,6 +36,8 @@ apt-get -y clean; rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* 
 fc-cache -f >/dev/null 2>&1 || true
 # Uhr: Datei für den Bind-Mount der gespeicherten Zeit muss existieren (sonst "Failed to create mount point /etc/fake-hwclock.data")
 [ -e /etc/fake-hwclock.data ] || date -u "+%Y-%m-%d %H:%M:%S" > /etc/fake-hwclock.data
+# Zeit-Einstellungen je Betriebsart schreibt dfm-mode nach /run/dfm/chrony.d – chrony muss diesen Ordner einlesen (sonst ist der Hub ohne Internet keine Zeitquelle und die Bildschirme warten ewig auf "Die Uhrzeit wird eingestellt")
+grep -q '/run/dfm/chrony.d' /etc/chrony/chrony.conf || echo 'confdir /run/dfm/chrony.d' >> /etc/chrony/chrony.conf
 CHEOF
 # Avahi-Dienstdateien kommen zur Laufzeit (nur im Hub-Betrieb) aus /run/dfm/avahi-services
 # Echtes (leeres) Verzeichnis: dfm-mode bindet /run/dfm/avahi-services beim Start darauf ein (ein Symlink nach /run ist im chroot von avahi nicht erreichbar)
