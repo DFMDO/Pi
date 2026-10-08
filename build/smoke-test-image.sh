@@ -25,6 +25,10 @@ R() { chroot "$M" "$@"; }   # Befehl im Image ausführen
 for f in "$M"/usr/lib/dfm/*; do [ -x "$f" ] || bad "nicht ausführbar: $f"; head -1 "$f" | grep -q $'\r' && bad "Windows-Zeilenenden (CRLF) in $f"; done
 for f in "$M"/usr/lib/dfm/*; do head -1 "$f" | grep -q '^#!/bin/sh' && { sh -n "$f" 2>/dev/null || bad "Syntaxfehler in $f"; }; done
 ok "Skripte in /usr/lib/dfm geprüft (ausführbar, LF, Syntax)"
+say "FAKTEN   /etc/fake-hwclock.data: $(ls -ld "$M/etc/fake-hwclock.data" 2>&1 | cut -c1-120)"
+say "FAKTEN   chrony confdir: $(grep -n 'confdir' "$M/etc/chrony/chrony.conf" 2>&1 | tr '\n' ' ' | cut -c1-200)"
+say "FAKTEN   /etc/avahi/services: $(ls -ld "$M/etc/avahi/services" 2>&1 | cut -c1-120)"
+say "FAKTEN   Zeitgeber/Dienste aktiviert: $(ls "$M/etc/systemd/system/timers.target.wants" 2>/dev/null | tr '\n' ' ')"
 R systemd-analyze verify /etc/systemd/system/dfm-hub.service /etc/systemd/system/dfm-agent.service /etc/systemd/system/dfm-diag.service /etc/systemd/system/dfm-kiosk@.service >> "$OUT" 2>&1 || say "HINWEIS  systemd-analyze meldet Warnungen (siehe oben)"
 
 # ---------- 2. Hub startet und antwortet ----------

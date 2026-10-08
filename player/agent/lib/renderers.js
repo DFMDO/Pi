@@ -3,6 +3,7 @@
 import { spawn, execFile } from 'node:child_process';
 import net from 'node:net';
 import { dirname } from 'node:path';
+import { totalmem } from 'node:os';
 import { resolvePlaylist, playableItems } from '../../../shared/sequencer.js';
 
 function supervise(start, log) {
@@ -14,7 +15,7 @@ function supervise(start, log) {
     child.on('exit', again); child.on('error', again); // z. B. Programm fehlt → später erneut versuchen, nie abstürzen
   };
   run();
-  return { stop: () => { stopped = true; child?.kill('SIGTERM'); }, restart: () => child?.kill('SIGTERM') };
+  return { stop: () => { stopped = true; child?.kill('SIGTERM'); }, restart: () => child?.kill('SIGTERM'), pid: () => child?.pid };
 }
 
 export function chromiumRenderer({ url, profileDir, log = () => {} }) {
@@ -34,11 +35,16 @@ export function chromiumRenderer({ url, profileDir, log = () => {} }) {
 /** Lite: mpv ohne Browser. Der Agent steuert mpv über den IPC-Socket und wertet den Plan selbst aus. */
 export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth = () => ({}), getRotation = () => 0, onShow = () => {}, profile = 'lite', socket = '/run/dfm-agent/mpv.sock', log = () => {}, now = () => Date.now() }) {
   const sup = supervise(() => spawn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--msg-level=all=warn', '--keep-open=no',
-    '--image-display-duration=10', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', '--osd-font-size=42', `--video-rotate=${getRotation()}`], { stdio: ['ignore', 'ignore', 'inherit'] }), log); // Fehlermeldungen von mpv ins Journal des Agents
-  let sock = null, idx = 0, timer = null, current = null, stopped = false;
+    '--image-display-duration=inf', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', '--osd-font-size=42', `--video-rotate=${getRotation()}`], { stdio: ['ignore', 'ignore', 'inherit'] }), log); // Fehlermeldungen von mpv ins Journal des Agents
+  let sock = null, idx = 0, timer = null, current = null, stopped = false, shown = null;
   const send = (cmd) => { try { sock?.write(JSON.stringify({ command: cmd }) + '\n'); } catch {} };
-  const connect = () => { if (stopped) return; sock = net.connect(socket); sock.on('error', () => setTimeout(connect, 1000)); sock.on('connect', tick); sock.on('data', (d) => { if (d.toString().includes('"end-file"') && current?.kind === 'video') next(); }); sock.on('close', () => setTimeout(connect, 1000)); };
+  // Eine Datei nur dann neu laden, wenn sie sich ändert: Das ständige Neuladen desselben Bilds (Standby alle 5 s) ließ mpv im Pilot auf 522 MB wachsen.
+  const show = (file, force = false) => { if (!force && file === shown) return; shown = file; send(['loadfile', file, 'replace']); };
+  const connect = () => { if (stopped) return; sock = net.connect(socket); sock.on('error', () => setTimeout(connect, 1000)); sock.on('connect', () => { shown = null; tick(); }); sock.on('data', (d) => { if (d.toString().includes('"reason":"eof"') && d.toString().includes('"end-file"') && current?.kind === 'video') next(); }); sock.on('close', () => setTimeout(connect, 1000)); };
   setTimeout(connect, 1500);
+  // Sicherheitsnetz: Belegt mpv zu viel Speicher (Leck), wird er neu gestartet – die Anzeige ist nach ~2 s wieder da.
+  const RSS_LIMIT_KB = Math.min(400 * 1024, Math.floor(totalmem() / 1024 * 0.45));
+  const watchdog = setInterval(() => { const pid = sup.pid(); if (!pid) return; try { const kb = Number(/VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/status`, 'utf8'))?.[1]); if (kb > RSS_LIMIT_KB) { log('mpv belegt zu viel Speicher (MB):', Math.round(kb / 1024), '– wird neu gestartet'); sup.restart(); } } catch {} }, 60000); watchdog.unref();
   function pick() {
     const plan = getPlan(), t = now(), r = resolvePlaylist(plan, t);
     const { items } = playableItems(plan, r.playlistId, getManifest(), { profile, now: t, have: (m) => haveFile(m) });
@@ -49,22 +55,22 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
     const { r, items } = pick(); const hs = getHealth();
     // Vorgerenderte Bilder statt Browser-Seiten (Lite hat keinen Browser): Uhrzeit, Warten auf Bestätigung, Hilfe, Standby
     const special = hs.pairing ? 'wartet' : hs.timeSynced === false ? 'uhrzeit' : (hs.offlineSince && Date.now() - hs.offlineSince > 24 * 3600e3 && hs.cacheEmpty) ? 'hilfe' : null;
-    if (hs.displayOff) { send(['loadfile', '/usr/share/dfm/schwarz.png', 'replace']); timer = setTimeout(tick, 5000); return; }
+    if (hs.displayOff) { show('/usr/share/dfm/schwarz.png'); timer = setTimeout(tick, 5000); return; }
     if (special || !items.length) {
-      send(['loadfile', `/usr/share/dfm/${special ?? 'standby'}.png`, 'replace']);
+      show(`/usr/share/dfm/${special ?? 'standby'}.png`);
       // Hub und Bildschirm in einem Gerät ohne Inhalte: Adresse der Verwaltung einblenden (der Einrichter muss sie nirgends suchen)
       if (!special && hs.isHub && hs.addresses?.length) send(['show-text', `Verwaltung im Browser öffnen:\n${hs.addresses.map((a) => 'https://' + a).join('\n')}`, 5500]);
       timer = setTimeout(tick, 5000); return;
     }
     idx %= items.length; current = items[idx];
-    send(['loadfile', fileOf(current), 'replace']); const nx = items[(idx + 1) % items.length]; onShow({ current: { mediaId: current.mediaId, name: current.name, kind: current.kind, duration: current.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null });
+    show(fileOf(current), current.kind === 'video'); const nx = items[(idx + 1) % items.length]; onShow({ current: { mediaId: current.mediaId, name: current.name, kind: current.kind, duration: current.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null });
     let wait = current.kind === 'video' ? (current.durationS ?? 30) * 1000 + 3000 : current.duration * 1000; // Video: end-file löst weiter, Timer nur als Sicherung
     if (r.until) wait = current.kind === 'video' ? wait : Math.min(wait, Math.max(0, r.until - now())); // Bild endet spätestens an der Terminkante; Video wird zu Ende gespielt
     timer = setTimeout(() => { next(); }, Math.max(500, wait));
   }
   function next() { idx++; tick(); }
   const osd = (text, ms) => send(['show-text', text, ms]);
-  return { ...sup, osd, stop: () => { stopped = true; clearTimeout(timer); sock?.destroy(); sup.stop(); }, notify: () => { idx = 0; tick(); },
+  return { ...sup, osd, stop: () => { stopped = true; clearTimeout(timer); clearInterval(watchdog); sock?.destroy(); sup.stop(); }, notify: () => { idx = 0; tick(); },
     screenshot: () => new Promise((res, rej) => { // mpv schreibt das Bild in eine Datei
       const f = dirname(socket) + '/shot.png'; send(['screenshot-to-file', f, 'window']); setTimeout(() => { try { res(require_fs().readFileSync(f)); } catch (e) { rej(e); } }, 800); }) };
 }
