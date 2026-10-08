@@ -72,3 +72,14 @@ test('mpv-Steuerkanal liegt in einem für den Agent beschreibbaren Verzeichnis; 
   assert.ok(!r.includes('--no-terminal'), 'mpv-Warnungen/Fehler dürfen nicht verschluckt werden');
   assert.match(r, /--msg-level=all=warn/);
 });
+
+// Bau 0.2.14 scheiterte: "Failed to enable unit, unit dfm-hwclock-save.timerdfm-zram.service does not exist" (zusammengeklebte Namen).
+test('Jede im Image-Skript aktivierte oder maskierte dfm-Einheit existiert als Datei (kein Tippfehler, keine zusammengeklebten Namen)', () => {
+  const run = readFileSync(new URL('../build/pi-gen/stage-dfm/02-system/00-run.sh', import.meta.url), 'utf8');
+  const lines = run.split('\n').filter((l) => /^systemctl (enable|disable)\b/.test(l));
+  assert.ok(lines.length >= 1);
+  for (const l of lines) for (const t of l.replace(/2>.*$/, '').trim().split(/\s+/).slice(2).filter((x) => x.startsWith('dfm-'))) {
+    assert.match(t, /^dfm-[a-z-]+\.(service|timer|path)$/, `Einheitenname gültig: ${t}`);
+    assert.ok(existsSync(new URL(`../build/rootfs/etc/systemd/system/${t}`, import.meta.url)), `${t} existiert in build/rootfs/etc/systemd/system`);
+  }
+});
