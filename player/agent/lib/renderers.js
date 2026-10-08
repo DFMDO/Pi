@@ -24,7 +24,8 @@ export function chromiumRenderer({ url, profileDir, log = () => {} }) {
     '--autoplay-policy=no-user-gesture-required', '--overscroll-history-navigation=0', '--disable-pinch', '--ozone-platform=wayland', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--enable-zero-copy', '--enable-accelerated-video-decode', // GPU und Video-Hardware des Pi nutzen (V4L2)
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
     '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1', '--proxy-server=direct://', '--disk-cache-size=1', '--password-store=basic'];
-  const sup = supervise(() => spawn('cage', args, { stdio: 'ignore', env: { ...process.env, WLR_LIBINPUT_NO_DEVICES: '1' } }), log);
+  // Fehlermeldungen von cage/Chromium sollen im Protokoll (journal) des Agents landen – sonst bleibt ein grauer Bildschirm unerklärlich.
+  const sup = supervise(() => spawn('cage', args, { stdio: ['ignore', 'ignore', 'inherit'], env: { ...process.env, WLR_LIBINPUT_NO_DEVICES: '1' } }), log);
   return { ...sup, screenshot: () => new Promise((res, rej) => execFile('grim', ['-s', '0.25', '-t', 'png', '-'], { encoding: 'buffer', timeout: 8000, maxBuffer: 8 << 20 }, (e, so) => (e ? rej(e) : res(so)))),
     notify: () => {} /* Seite lädt sich selbst über /events neu */ };
 }

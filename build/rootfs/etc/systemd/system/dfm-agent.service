@@ -15,7 +15,8 @@ UtmpIdentifier=tty1
 UtmpMode=user
 Environment=HOME=/data/agent/home XDG_CONFIG_HOME=/data/agent/home/config XDG_CACHE_HOME=/data/agent/home/cache DFM_AGENT_DATA=/data/agent DFM_PRIVD_DIR=/run/dfm/privd DFM_DEVICE_FILE=/data/device.json DFM_BASE=/opt/dfm
 ExecStart=/usr/lib/dfm/launch agent
-ExecStartPost=-/usr/bin/plymouth quit
+# "+": als root ausführen – als dfm-agent kann plymouth nicht beendet werden und hielte sonst den Bildschirm (DRM) besetzt
+ExecStartPost=-+/usr/bin/plymouth quit
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes

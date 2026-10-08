@@ -5,8 +5,8 @@
 set -u
 OUT=/boot/firmware/dfm-diagnose.txt
 T=$(mktemp /tmp/diag.XXXXXX) || exit 0
-clean() { grep -viE 'pass|psk|token|secret|key|pin[^a-z]|pwhash|hash' || true; }
-unit() { printf '\n--- %s: %s ---\n' "$1" "$(systemctl is-active "$1" 2>&1)"; journalctl -b -u "$1" -n 25 --no-pager -o short 2>&1 | clean | cut -c1-220; }
+clean() { grep -viE 'pass|psk|token|secret|(api|private|ssh|signing).?key|pin[^a-z]|pwhash|hash' || true; }
+unit() { printf '\n--- %s: %s ---\n' "$1" "$(systemctl is-active "$1" 2>&1)"; journalctl -b -u "$1" -n "${2:-25}" --no-pager -o short 2>&1 | clean | cut -c1-220; }
 {
   echo "DFM Signage - Diagnose"
   echo "Version:   $(cat /etc/dfm/version 2>/dev/null)"
@@ -25,7 +25,8 @@ unit() { printf '\n--- %s: %s ---\n' "$1" "$(systemctl is-active "$1" 2>&1)"; jo
   echo; echo "--- Laufende Programme (Hub, Agent, Anzeige) ---"; ps -eo user:12,pid,pcpu,rss,args 2>/dev/null | grep -E 'node|cage|chromium|mpv' | grep -v grep | cut -c1-180 | head -15
   echo; echo "--- Anmeldesitzungen / Laufzeitordner ---"; loginctl list-sessions --no-legend 2>&1 | head -5; ls -ld /run/user/* 2>&1 | head -5
   echo; echo "--- Warnungen und Fehler seit dem Start (alle Dienste) ---"; journalctl -b -p warning -n 40 --no-pager -o short 2>&1 | clean | cut -c1-220
-  for u in dfm-mode dfm-firstboot dfm-data dfm-hub dfm-agent dfm-privd NetworkManager avahi-daemon nftables; do unit "$u.service"; done
+  unit dfm-agent.service 70   # enthält die Meldungen von cage/Chromium (Bildschirm)
+  for u in dfm-mode dfm-firstboot dfm-data dfm-hub dfm-privd NetworkManager avahi-daemon nftables; do unit "$u.service"; done
   echo; echo "--- Kernel (letzte Hinweise zu Anzeige/Strom/SD) ---"; dmesg 2>/dev/null | grep -iE 'under-voltage|drm|vc4|mmc.*error|oom|killed process' | tail -15 | cut -c1-200
 } > "$T" 2>&1
 # Nur schreiben, wenn sich etwas geaendert hat (schont die SD-Karte); die Zeile "Stand" zaehlt nicht mit.
