@@ -23,7 +23,7 @@ passwd -l root
 fc-cache -f >/dev/null 2>&1 || true
 rm -f /etc/sudoers.d/010_pi-nopasswd /etc/sudoers.d/010_dfmtmp-nopasswd /etc/systemd/system/getty@tty1.service.d/autologin.conf
 systemctl disable ssh.service sshd.service sshswitch.service regenerate_ssh_host_keys.service ModemManager.service cron.service rpi-eeprom-update.service userconfig.service raspi-config.service rpi-resize.service resize2fs_once.service apt-daily.timer apt-daily-upgrade.timer man-db.timer bluetooth.service hciuart.service triggerhappy.service 2>/dev/null || true
-systemctl mask ssh.service sshd.service ssh.socket sshswitch.service regenerate_ssh_host_keys.service ModemManager.service rpi-eeprom-update.service userconfig.service apt-daily.service apt-daily-upgrade.service systemd-timesyncd.service getty@tty1.service
+systemctl mask dpkg-db-backup.service dpkg-db-backup.timer logrotate.service logrotate.timer console-setup.service keyboard-setup.service ssh.service sshd.service ssh.socket sshswitch.service regenerate_ssh_host_keys.service ModemManager.service rpi-eeprom-update.service userconfig.service apt-daily.service apt-daily-upgrade.service systemd-timesyncd.service getty@tty1.service
 systemctl enable dfm-diag.timer dfm-zram.service dfm-data.service dfm-firstboot.service dfm-mode.service dfm-powercounter-reset.service NetworkManager.service avahi-daemon.service chrony.service nftables.service fake-hwclock.service
 plymouth-set-default-theme dfm || true
 # Geheimnisse dürfen NICHT im Image stecken: werden beim ersten Start pro Gerät erzeugt

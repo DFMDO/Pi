@@ -16,7 +16,9 @@ export const PROFILE_SPEC = {
 
 /** Schutz vor „Bild-Bomben“ (riesige Bilder) und zu hohem Speicherverbrauch auf dem Pi */
 // Alle Prozessorkerne nutzen – außer auf Geräten mit wenig Arbeitsspeicher (Pi 3 mit 1 GB, Hub + Anzeige in einem): dort 2 Threads, sonst geht der Speicher aus.
-sharp.cache(false); sharp.concurrency(totalmem() < 1.5 * 1024 ** 3 ? 2 : 0);
+const SMALL_RAM = totalmem() < 1.5 * 1024 ** 3;
+sharp.cache(false); sharp.concurrency(SMALL_RAM ? 2 : 0);
+const FF_THREADS = SMALL_RAM ? '2' : '0'; // ffmpeg: 0 = automatisch
 export const SHARP_OPTS = { failOn: 'error', limitInputPixels: 80_000_000 };
 
 /** Container anhand der ersten Bytes → ffmpeg bekommt den Demuxer fest vorgegeben (kein „Raten“ durch Inhalt der Datei) */
@@ -76,7 +78,7 @@ async function videoVariant(src, dst, spec, probe, profile) {
   const vf = [`scale=-2:'min(${spec.h},ih)'`]; if (probe.fps > spec.fpsMax + 0.5) vf.push(`fps=${spec.fpsMax}`);
   const out = dst + '.mp4';
   await runLow('ffmpeg', ['-y', '-v', 'error', '-protocol_whitelist', 'file', '-f', demuxerFor(src), '-i', src, '-map', '0:v:0', '-an', '-sn', '-vf', vf.join(','),
-    '-c:v', 'libx264', ...spec.x264, '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-b:v', spec.vb, '-maxrate', spec.maxrate, '-bufsize', spec.buf,
+    '-c:v', 'libx264', ...spec.x264, '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-threads', FF_THREADS, '-b:v', spec.vb, '-maxrate', spec.maxrate, '-bufsize', spec.buf,
     '-movflags', '+faststart', out]);
   return out;
 }
@@ -171,6 +173,7 @@ export async function ensureTestVideo(mediaDir, profile) {
   mkdirSync(mediaDir, { recursive: true }); const out = join(mediaDir, `testvideo-${profile}.mp4`);
   if (existsSync(out)) return out;
   const w = Math.round(spec.h * 16 / 9 / 2) * 2, fps = spec.fpsMax;
-  await runLow('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `testsrc2=size=${w}x${spec.h}:rate=${fps}:duration=20`, '-c:v', 'libx264', ...spec.x264, '-pix_fmt', 'yuv420p', '-b:v', spec.vb, '-maxrate', spec.maxrate, '-bufsize', spec.buf, '-movflags', '+faststart', out + '.tmp.mp4']);
+  // veryfast + wenige Threads: Mit dem Standard (medium) brauchte ffmpeg am Pi 3 (1 GB) ~285 MB und wurde vom Speicherwächter beendet (Pilot, 0.2.6).
+  await runLow('ffmpeg', ['-y', '-v', 'error', '-f', 'lavfi', '-i', `testsrc2=size=${w}x${spec.h}:rate=${fps}:duration=20`, '-c:v', 'libx264', '-preset', 'veryfast', '-threads', FF_THREADS, ...spec.x264, '-pix_fmt', 'yuv420p', '-b:v', spec.vb, '-maxrate', spec.maxrate, '-bufsize', spec.buf, '-movflags', '+faststart', out + '.tmp.mp4']);
   (await import('node:fs')).renameSync(out + '.tmp.mp4', out); return out;
 }

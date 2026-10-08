@@ -37,5 +37,14 @@ test('Hub startet auch, wenn die Netzwerkabfrage fehlschlägt', () => {
 // Pilot (0.2.6): Pi 3 mit 1 GB lief beim Start mit 12 MB frei und Last > 5 (Text-Bilder, Chromium, Hub gleichzeitig).
 test('Bildverarbeitung begrenzt ihre Threads auf Geräten mit wenig Arbeitsspeicher', () => {
   const s = readFileSync(new URL('../hub/lib/variants.js', import.meta.url), 'utf8');
-  assert.match(s, /sharp\.concurrency\(totalmem\(\) < 1\.5 \* 1024 \*\* 3 \? 2 : 0\)/);
+  assert.match(s, /SMALL_RAM = totalmem\(\) < 1\.5 \* 1024 \*\* 3/);
+  assert.match(s, /sharp\.concurrency\(SMALL_RAM \? 2 : 0\)/);
+});
+
+// Pilot (0.2.6, Kernel-Log): "Out of memory: Killed process (ffmpeg) … anon-rss:284676kB" beim Testvideo der Diagnose (x264 "medium", alle Threads).
+test('Alle ffmpeg-Aufrufe zum Umrechnen nutzen Preset veryfast und begrenzte Threads', () => {
+  const s = readFileSync(new URL('../hub/lib/variants.js', import.meta.url), 'utf8');
+  const enc = s.split('\n').filter((l) => l.includes("'libx264'") || (l.includes("'-preset'") && l.includes('veryfast')));
+  assert.ok(enc.length >= 2);
+  assert.equal((s.match(/'libx264'/g) ?? []).length, (s.match(/'-preset', 'veryfast', '-threads', FF_THREADS|'-c:v', 'libx264', '-preset', 'veryfast', '-threads', FF_THREADS/g) ?? []).length, 'jeder libx264-Aufruf hat veryfast + FF_THREADS');
 });
