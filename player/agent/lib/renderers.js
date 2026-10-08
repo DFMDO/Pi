@@ -33,7 +33,7 @@ export function chromiumRenderer({ url, profileDir, log = () => {} }) {
 /** Lite: mpv ohne Browser. Der Agent steuert mpv über den IPC-Socket und wertet den Plan selbst aus. */
 export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth = () => ({}), getRotation = () => 0, onShow = () => {}, profile = 'lite', socket = '/run/dfm/mpv.sock', log = () => {}, now = () => Date.now() }) {
   const sup = supervise(() => spawn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--no-terminal', '--keep-open=no',
-    '--image-display-duration=10', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', `--video-rotate=${getRotation()}`], { stdio: 'ignore' }), log);
+    '--image-display-duration=10', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', '--osd-font-size=42', `--video-rotate=${getRotation()}`], { stdio: ['ignore', 'ignore', 'inherit'] }), log); // Fehlermeldungen von mpv ins Journal des Agents
   let sock = null, idx = 0, timer = null, current = null, stopped = false;
   const send = (cmd) => { try { sock?.write(JSON.stringify({ command: cmd }) + '\n'); } catch {} };
   const connect = () => { if (stopped) return; sock = net.connect(socket); sock.on('error', () => setTimeout(connect, 1000)); sock.on('connect', tick); sock.on('data', (d) => { if (d.toString().includes('"end-file"') && current?.kind === 'video') next(); }); sock.on('close', () => setTimeout(connect, 1000)); };
@@ -49,7 +49,12 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
     // Vorgerenderte Bilder statt Browser-Seiten (Lite hat keinen Browser): Uhrzeit, Warten auf Bestätigung, Hilfe, Standby
     const special = hs.pairing ? 'wartet' : hs.timeSynced === false ? 'uhrzeit' : (hs.offlineSince && Date.now() - hs.offlineSince > 24 * 3600e3 && hs.cacheEmpty) ? 'hilfe' : null;
     if (hs.displayOff) { send(['loadfile', '/usr/share/dfm/schwarz.png', 'replace']); timer = setTimeout(tick, 5000); return; }
-    if (special || !items.length) { send(['loadfile', `/usr/share/dfm/${special ?? 'standby'}.png`, 'replace']); timer = setTimeout(tick, 5000); return; }
+    if (special || !items.length) {
+      send(['loadfile', `/usr/share/dfm/${special ?? 'standby'}.png`, 'replace']);
+      // Hub und Bildschirm in einem Gerät ohne Inhalte: Adresse der Verwaltung einblenden (der Einrichter muss sie nirgends suchen)
+      if (!special && hs.isHub && hs.addresses?.length) send(['show-text', `Verwaltung im Browser öffnen:\n${hs.addresses.map((a) => 'https://' + a).join('\n')}`, 5500]);
+      timer = setTimeout(tick, 5000); return;
+    }
     idx %= items.length; current = items[idx];
     send(['loadfile', fileOf(current), 'replace']); const nx = items[(idx + 1) % items.length]; onShow({ current: { mediaId: current.mediaId, name: current.name, kind: current.kind, duration: current.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null });
     let wait = current.kind === 'video' ? (current.durationS ?? 30) * 1000 + 3000 : current.duration * 1000; // Video: end-file löst weiter, Timer nur als Sicherung

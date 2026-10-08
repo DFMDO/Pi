@@ -21,6 +21,7 @@ test('Hub + Bildschirm: eigener Bildschirm wird beim Hub-Start angelegt und verb
   const h = await makeHub({ useTls: true, dataDir: join(root, 'hub') }); await h.app.listen({ port: 0, host: '127.0.0.1' }); const a = await h.as('admin');
   assert.equal(existsSync(join(root, 'hub', 'local-player.json')), false, 'Datei nach dem Übernehmen gelöscht');
   const dev = h.db.prepare('SELECT * FROM devices WHERE id=?').get(deviceId); assert.equal(dev.status, 'active'); assert.equal(dev.ready, 1); assert.equal(dev.name, 'Foyer');
+  assert.equal(dev.renderer, 'mpv', 'Hub-Gerät nutzt den schlanken Player (kein Browser)');
   assert.ok(h.db.prepare("SELECT 1 FROM audit_log WHERE action='bildschirm.hub_bildschirm_angelegt'").get());
   const m = (await a('POST', '/api/v1/media/text', { name: 'Willkommen', title: 'Willkommen' })).json().id, pl = h.db.prepare('SELECT id FROM playlists WHERE is_default=1').get().id;
   await a('PUT', `/api/v1/playlists/${pl}`, { items: [{ mediaId: m, duration: 5 }], publish: true });

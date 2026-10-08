@@ -84,6 +84,7 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
     const p = JSON.parse(readFileSync(f, 'utf8'));
     if (!db.prepare('SELECT 1 FROM devices WHERE id=?').get(p.deviceId)) {
       db.prepare("INSERT INTO devices(id,name,profile,status,token_hash,model,created_at,ready,notes) VALUES(?,?,?,'active',?,?,?,1,?)").run(p.deviceId, p.name, ['lite', 'standard', 'pro'].includes(p.profile) ? p.profile : 'standard', p.tokenHash, p.model ?? null, now(), 'Dieser Bildschirm ist gleichzeitig der Hub.');
+      db.prepare("UPDATE devices SET renderer='mpv' WHERE id=?").run(p.deviceId); // Hub-Gerät: schlanker Player (mpv) statt Browser; im Hub unter Bildschirm → Wiedergabe änderbar
       audit.log({ action: 'bildschirm.hub_bildschirm_angelegt', target: p.deviceId, detail: { name: p.name } });
     }
     db.prepare('INSERT OR REPLACE INTO settings VALUES(?,?)').run('hub.deviceId', p.deviceId); // Markierung: dieser Bildschirm ist der Hub (gegen Sperren/Entfernen geschützt)

@@ -108,7 +108,7 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
     }
     if (draft.role === 'kombi') { // Hub UND Bildschirm in einem Gerät: der Player ist ohne Code mit dem eigenen Hub verbunden (gepinnt auf dessen Schlüssel)
       const deviceId = randomUUID(), token = randomBytes(32).toString('base64url');
-      extra.agent = { deviceId, hubUrl: 'https://127.0.0.1', hubSpki: spki, token, name: draft.name.trim(), profile: hw.profile ?? 'standard', model: hw.model ?? null, local: true };
+      extra.agent = { deviceId, hubUrl: 'https://127.0.0.1', hubSpki: spki, token, name: draft.name.trim(), profile: hw.profile ?? 'standard', model: hw.model ?? null, local: true, renderer: 'mpv' }; // Hub-Gerät: nur Bilder über den schlanken Player (mpv), kein Browser – spart Speicher für die Hub-Aufgaben
       extra.localPlayer = { deviceId, tokenHash: createHash('sha256').update(token).digest('hex'), name: draft.name.trim(), profile: hw.profile ?? 'standard', model: hw.model ?? null };
     } else if (draft.role === 'player') extra.agent = { hubUrl: normalizeHubAddress(draft.hubAddress), hubSpki: draft.fingerprint ? draft.fingerprint.replace(/[\s:-]/g, '').toLowerCase() : null, pairing: { code: draft.pairCode.replace('-', '').toUpperCase() }, name: draft.name.trim(), profile: hw.profile ?? 'standard', model: hw.model, hw };
     await writeConfig(cfg, extra); // atomar, erst danach gilt die Einrichtung als fertig

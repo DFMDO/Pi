@@ -213,6 +213,7 @@ test('Hub und Bildschirm in einem Gerät („kombi“): Admin-Konto, eigener Bil
   for (let i = 0; i < 100 && !written.length; i++) await new Promise((x) => setTimeout(x, 30));
   const { cfg, extra } = written[0]; assert.equal(cfg.role, 'kombi'); assert.equal(cfg.name, 'Foyer'); assert.ok(extra.hubBootstrap.admin.pwHash);
   assert.equal(extra.agent.hubUrl, 'https://127.0.0.1'); assert.equal(extra.agent.hubSpki, spki, 'gepinnt auf den eigenen Hub-Schlüssel'); assert.ok(extra.agent.token.length >= 40); assert.equal(extra.agent.pairing, undefined, 'kein Einmalcode nötig');
+  assert.equal(extra.agent.renderer, 'mpv', 'Hub-Gerät: nur Bilder über mpv'); assert.equal(extra.agent.local, true);
   assert.equal(extra.localPlayer.deviceId, extra.agent.deviceId); assert.equal(extra.localPlayer.tokenHash, (await import('node:crypto')).createHash('sha256').update(extra.agent.token).digest('hex')); assert.equal(extra.localPlayer.token, undefined, 'der Hub bekommt nur den Hash');
   assert.equal(validateDraft({ wifi: { ssid: 'x', password: 'passwort1' }, role: 'kombi', name: '', admin: { name: 'admin' }, site: 'DFM' }).some((e) => /Namen/.test(e)), true, 'Kombi braucht einen Bildschirmnamen');
 });
