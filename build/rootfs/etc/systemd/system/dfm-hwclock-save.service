@@ -1,0 +1,6 @@
+[Unit]
+Description=DFM gespeicherte Uhrzeit sichern (der Pi hat keine Batterie-Uhr; ohne Netz/NTP startet er sonst mit alter Zeit)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/fake-hwclock save

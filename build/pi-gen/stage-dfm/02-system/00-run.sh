@@ -19,12 +19,10 @@ getent passwd dfm-kiosk >/dev/null || useradd --system --uid 992 --user-group --
 # Kein Standardbenutzer, root ohne Passwort, keine Konsole
 userdel -r dfmtmp 2>/dev/null || true; userdel -r pi 2>/dev/null || true
 passwd -l root
-# Schrift-Zwischenspeicher vorab erzeugen (Root ist schreibgeschützt; sonst meldet fontconfig bei jedem Textbild "No writable cache directories")
-fc-cache -f >/dev/null 2>&1 || true
 rm -f /etc/sudoers.d/010_pi-nopasswd /etc/sudoers.d/010_dfmtmp-nopasswd /etc/systemd/system/getty@tty1.service.d/autologin.conf
 systemctl disable ssh.service sshd.service sshswitch.service regenerate_ssh_host_keys.service ModemManager.service cron.service rpi-eeprom-update.service userconfig.service raspi-config.service rpi-resize.service resize2fs_once.service apt-daily.timer apt-daily-upgrade.timer man-db.timer bluetooth.service hciuart.service triggerhappy.service 2>/dev/null || true
-systemctl mask dpkg-db-backup.service dpkg-db-backup.timer logrotate.service logrotate.timer console-setup.service keyboard-setup.service ssh.service sshd.service ssh.socket sshswitch.service regenerate_ssh_host_keys.service ModemManager.service rpi-eeprom-update.service userconfig.service apt-daily.service apt-daily-upgrade.service systemd-timesyncd.service getty@tty1.service
-systemctl enable dfm-diag.timer dfm-zram.service dfm-data.service dfm-firstboot.service dfm-mode.service dfm-powercounter-reset.service NetworkManager.service avahi-daemon.service chrony.service nftables.service fake-hwclock.service
+systemctl mask udisks2.service dpkg-db-backup.service dpkg-db-backup.timer logrotate.service logrotate.timer console-setup.service keyboard-setup.service ssh.service sshd.service ssh.socket sshswitch.service regenerate_ssh_host_keys.service ModemManager.service rpi-eeprom-update.service userconfig.service apt-daily.service apt-daily-upgrade.service systemd-timesyncd.service getty@tty1.service
+systemctl enable dfm-diag.timer dfm-hwclock-save.timerdfm-zram.service dfm-data.service dfm-firstboot.service dfm-mode.service dfm-powercounter-reset.service NetworkManager.service avahi-daemon.service chrony.service nftables.service fake-hwclock.service
 plymouth-set-default-theme dfm || true
 # Geheimnisse dürfen NICHT im Image stecken: werden beim ersten Start pro Gerät erzeugt
 rm -f /etc/ssh/ssh_host_* /var/lib/dbus/machine-id; : > /etc/machine-id
@@ -34,6 +32,11 @@ hostname dfm-signage || true; echo dfm-signage > /etc/hostname
 find /usr/lib/chromium/locales -name '*.pak' ! -name 'de.pak' ! -name 'en-US.pak' -delete 2>/dev/null || true
 rm -f /usr/lib/chromium/libVkLayer_khronos_validation.so /usr/lib/chromium/libVkICD_mock_icd.so /usr/lib/aarch64-linux-gnu/libvulkan_{radeon,freedreno,lvp,intel,intel_hasvk,virtio,nouveau,panfrost,asahi,gfxstream}.so /usr/share/vulkan/icd.d/{radeon,freedreno,lvp,intel,intel_hasvk,virtio,nouveau,panfrost,asahi,gfxstream}_icd*.json 2>/dev/null || true
 apt-get -y clean; rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/[a-ce-z]* /var/cache/* /usr/share/info/*
+# Schrift-Zwischenspeicher NACH dem Aufräumen erzeugen (Root ist schreibgeschützt; sonst liest fontconfig bei jedem Textbild alle Schriften neu ein)
+fc-cache -f >/dev/null 2>&1 || true
+# Uhr: Datei für den Bind-Mount der gespeicherten Zeit muss existieren (sonst "Failed to create mount point /etc/fake-hwclock.data")
+[ -e /etc/fake-hwclock.data ] || date -u "+%Y-%m-%d %H:%M:%S" > /etc/fake-hwclock.data
 CHEOF
 # Avahi-Dienstdateien kommen zur Laufzeit (nur im Hub-Betrieb) aus /run/dfm/avahi-services
-rm -rf "${ROOTFS_DIR}/etc/avahi/services"; ln -s /run/dfm/avahi-services "${ROOTFS_DIR}/etc/avahi/services"
+# Echtes (leeres) Verzeichnis: dfm-mode bindet /run/dfm/avahi-services beim Start darauf ein (ein Symlink nach /run ist im chroot von avahi nicht erreichbar)
+rm -rf "${ROOTFS_DIR}/etc/avahi/services"; install -d "${ROOTFS_DIR}/etc/avahi/services"

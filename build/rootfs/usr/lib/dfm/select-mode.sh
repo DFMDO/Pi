@@ -2,6 +2,8 @@
 # Entscheidet nach dem Start, was das Gerät ist: noch nicht eingerichtet / Hub / Player / Hub+Bildschirm („kombi“: Hub-Dienste plus Agent).
 set -eu
 mkdir -p /run/dfm/privd /run/dfm/chrony.d /run/dfm/avahi-services
+# avahi läuft im chroot /etc/avahi: Dienstdateien per Bind-Mount einblenden (Symlinks nach /run sind dort nicht erreichbar)
+mountpoint -q /etc/avahi/services || mount --bind /run/dfm/avahi-services /etc/avahi/services 2>/dev/null || true
 chmod 1733 /run/dfm/privd   # Agent/Hub dürfen Anfragen ablegen, aber nicht lesen
 if [ ! -f /data/config.json ] || [ -f /data/state/force-setup ]; then MODE=setup
 else MODE=$(sed -n 's/.*"role":"\([a-z]*\)".*/\1/p' /data/config.json); fi
