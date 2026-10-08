@@ -53,9 +53,16 @@ test('nmcli: Eingaben bleiben EIN Argument (keine Shell-Injection über SSID/Pas
   const nets = await nm2.scan(); assert.equal(nets.length, 3); assert.equal(nets[0].signal, 80); assert.equal(nets.find((n) => n.ssid === 'Offen').secure, false); assert.equal(nets.find((n) => n.ssid === 'Firma').enterprise, true);
 });
 
+test('nmcli: Hotspot und WLAN-Verbindung schalten den Funk zuerst ein; radio(false) schaltet ihn aus', async () => {
+  const calls = []; const nm = createNm({ run: async (c, a) => { calls.push(a.join(' ')); return { code: 0, stdout: '', stderr: '' }; } });
+  await nm.startHotspot({ ssid: 'S', password: 'passwort1234' }); assert.equal(calls[0], 'radio wifi on', 'Hotspot: Funk zuerst an');
+  calls.length = 0; await nm.connect({ ssid: 'X', password: 'passwort1' }); assert.equal(calls[0], 'radio wifi on', 'WLAN verbinden: Funk zuerst an');
+  calls.length = 0; await nm.radio(false); assert.deepEqual(calls, ['radio wifi off']);
+});
+
 function fakeNm(opts = {}) {
   const log = []; let stations = 0;
-  return { log, setStations: (n) => { stations = n; }, scan: async () => [{ ssid: 'Signage', signal: 70, secure: true }], startHotspot: async (h) => { log.push(['hotspot', h]); return true; }, stopHotspot: async () => { log.push(['stop']); },
+  return { log, setStations: (n) => { stations = n; }, scan: async () => [{ ssid: 'Signage', signal: 70, secure: true }], startHotspot: async (h) => { log.push(['hotspot', h]); return true; }, stopHotspot: async () => { log.push(['stop']); }, radio: async (on) => { log.push(['radio', on]); },
     connect: async (w) => { log.push(['connect', w.ssid]); return opts.fail ? { ok: false, reason: opts.fail } : { ok: true }; }, disconnect: async () => log.push(['disconnect']), wifiConnected: async () => false, stations: async () => stations, hasLan: async () => false };
 }
 const fakeRnd = (() => { let i = 0; return (n) => (i++ * 7 + 3) % n; })();
@@ -198,7 +205,7 @@ test('Netzwerkkabel: Einrichtung ohne WLAN möglich, Bildschirm springt direkt z
   const s = ctl.enterPin(ctl.state.pin).session; assert.equal(ctl.info(s).lan, true);
   assert.deepEqual(await ctl.testWifi(s, { skip: true }), { ok: true, skipped: true });
   assert.equal((await ctl.finish(s, { role: 'player', name: 'Shop-Screen', hubAddress: 'dfm-signage.local', pairCode: 'K7M4-X9RD' })).ok, true); await new Promise((r) => setTimeout(r, 1500));
-  assert.equal(ctl.result(s).state, 'done'); assert.equal(written.length, 1); assert.ok(!nm.log.some((l) => l[0] === 'connect'), 'kein WLAN verbunden');
+  assert.equal(ctl.result(s).state, 'done'); assert.equal(written.length, 1); assert.ok(!nm.log.some((l) => l[0] === 'connect'), 'kein WLAN verbunden'); assert.ok(nm.log.some((l) => l[0] === 'radio' && l[1] === false), 'Kabel gewählt: WLAN-Funk wird ausgeschaltet');
   const w = createController({ nm: { ...fakeNm(), hasLan: async () => false }, suffix: 'x', writeConfig: async () => {}, hashPassword, policy: () => null }); await w.startMode(); const s2 = w.enterPin(w.state.pin).session;
   assert.equal((await w.testWifi(s2, { skip: true })).ok, false, 'ohne Kabel kann man das WLAN nicht überspringen');
 });

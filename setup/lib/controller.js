@@ -95,7 +95,7 @@ export function createController({ nm, suffix, now = () => Date.now(), rnd = ran
     await nm.startHotspot({ ssid: s.ssid, password: s.password }); s.phase = 'step1'; touch();
   }
   async function finalize(draft) {
-    if (draft.wifi?.skip) await nm.stopHotspot();
+    if (draft.wifi?.skip) { await nm.stopHotspot(); await nm.radio?.(false); } // Kabel gewählt: WLAN-Funk aus (spart Strom und Funk-Last; die Einrichtung/„WLAN ändern“ schaltet ihn bei Bedarf wieder ein)
     else if (!(await nm.wifiConnected())) { await nm.stopHotspot(); const r = await nm.connect(draft.wifi); if (!r.ok) { s.result = { state: 'failed', error: friendlyWifiError(r.reason) }; return restartHotspot(); } }
     else await nm.stopHotspot();
     const isHub = draft.role === 'hub' || draft.role === 'kombi';

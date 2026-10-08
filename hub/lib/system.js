@@ -20,6 +20,21 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
     const pct = total ? Math.round(((total - free) / total) * 100) : 0;
     return { total, free, mediaBytes: media, usedPercent: pct, warn: pct >= 80, text: pct >= 80 ? `Der Speicher ist zu ${pct} % voll. Lösche nicht mehr benötigte Medien, bevor er voll läuft.` : null };
   });
+  // Arbeitsspeicher-Wächter: Warnung nur, wenn der freie Speicher DAUERHAFT knapp ist (5 Messungen im Abstand von 1 Minute), nicht beim kurzen Start-Peak.
+  const memInfo = () => {
+    try { const t = readFileSync('/proc/meminfo', 'utf8'), g = (k) => Number((new RegExp(`^${k}:\\s+(\\d+)`, 'm').exec(t) ?? [])[1] ?? NaN) / 1024;
+      const avail = g('MemAvailable'); if (Number.isFinite(avail)) return { totalMB: g('MemTotal'), availMB: avail, swapTotalMB: g('SwapTotal') || 0, swapUsedMB: (g('SwapTotal') || 0) - (g('SwapFree') || 0) }; } catch {}
+    return { totalMB: totalmem() / 1048576, availMB: freemem() / 1048576, swapTotalMB: 0, swapUsedMB: 0 };
+  };
+  const MEM_WARN_MB = 100, memSamples = [];
+  const sampleMem = () => { memSamples.push(memInfo().availMB); if (memSamples.length > 5) memSamples.shift(); };
+  sampleMem(); const memTimer = setInterval(sampleMem, 60000); memTimer.unref(); app.addHook('onClose', async () => clearInterval(memTimer));
+  app.get('/api/v1/system/memory', { config: { perm: 'system.read' } }, async () => {
+    const m = memInfo(), low = memSamples.length >= 5 && memSamples.every((x) => x < MEM_WARN_MB), swapFull = m.swapTotalMB > 0 && m.swapUsedMB / m.swapTotalMB > 0.8;
+    const warn = low || swapFull;
+    return { totalMB: Math.round(m.totalMB), availMB: Math.round(m.availMB), swapUsedMB: Math.round(m.swapUsedMB), warn,
+      text: warn ? `Der Hub hat dauerhaft wenig Arbeitsspeicher (${Math.round(m.availMB)} MB frei). Lade gerade keine großen Videos hoch und starte den Hub bei Gelegenheit neu. Hilft das nicht, sollte das Gerät nur als Hub ohne eigenen Bildschirm laufen.` : null };
+  });
   app.get('/api/v1/system/diagnose', { config: { perm: 'system.read' } }, async () => {
     const temp = (() => { try { return parseInt(readFileSync('/sys/class/thermal/thermal_zone0/temp', 'utf8'), 10) / 1000; } catch { return null; } })();
     return { load: loadavg(), ramTotalMB: Math.round(totalmem() / 1048576), ramFreeMB: Math.round(freemem() / 1048576), uptimeS: Math.round(uptime()),

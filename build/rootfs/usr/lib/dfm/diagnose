@@ -22,6 +22,8 @@ unit() { printf '\n--- %s: %s ---\n' "$1" "$(systemctl is-active "$1" 2>&1)"; jo
   echo "Spannung/Drosselung: $(vcgencmd get_throttled 2>/dev/null)  (0x0 = alles gut)"
   df -h / /data /boot/firmware 2>&1 | cut -c1-120
   free -m 2>&1
+  echo "Speicher-Details (CMA = reservierter Grafikspeicher, vom System mitbenutzbar):"; grep -E '^(MemAvailable|CmaTotal|CmaFree|Slab|Shmem|SwapCached):' /proc/meminfo 2>&1
+  echo "Größte Speicherverbraucher:"; ps -eo rss,comm --sort=-rss 2>/dev/null | head -6
   echo; echo "--- Laufende Programme (Hub, Agent, Anzeige) ---"; ps -eo user:12,pid,pcpu,rss,args 2>/dev/null | grep -E 'node|cage|chromium|mpv' | grep -v grep | cut -c1-180 | head -15
   echo; echo "--- Anmeldesitzungen / Laufzeitordner ---"; loginctl list-sessions --no-legend 2>&1 | head -5; ls -ld /run/user/* 2>&1 | head -5
   echo; echo "--- Warnungen und Fehler seit dem Start (alle Dienste) ---"; journalctl -b -p warning -n 40 --no-pager -o short 2>&1 | clean | cut -c1-220

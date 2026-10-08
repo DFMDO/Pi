@@ -158,8 +158,15 @@ export function detectKind(head) {
 }
 export const LIMITS = { image: 40 * 1024 * 1024, video: 2 * 1024 ** 3, pdf: 100 * 1024 * 1024 };
 
-export function mediaHints(kind, w, h) {
+export function mediaHints(kind, w, h, extra = {}) {
   const hints = [];
+  const { bytes = 0, codec = null, fps = null, durationS = null } = extra ?? {};
+  if (kind === 'image' && (bytes > 15 * 1048576 || Math.max(w ?? 0, h ?? 0) > 5000)) hints.push('Dieses Foto ist sehr groß. Der Hub verkleinert es, braucht dafür aber viel Arbeitsspeicher und Zeit. Besser vorher auf höchstens 4000 Pixel Kantenlänge verkleinern.');
+  if (kind === 'video') { // Ziel: Full-HD, H.264, höchstens 30 Bilder/s → wird in Sekunden übernommen statt in Minuten neu berechnet
+    if (codec && codec !== 'h264') hints.push(`Dieses Video ist nicht im Format H.264 (hier: ${codec}). Der Hub muss es neu berechnen – auf einem Raspberry Pi 3 dauert das sehr lange. Besser als Full-HD-MP4 (H.264) speichern.`);
+    if (fps && fps > 30.5) hints.push(`Dieses Video hat ${Math.round(fps)} Bilder pro Sekunde. Der Hub muss es neu berechnen. Besser mit 25 oder 30 Bildern pro Sekunde speichern.`);
+    if (bytes > 1024 ** 3 || (durationS && durationS > 900)) hints.push('Dieses Video ist sehr groß oder lang. Das Laden auf die Bildschirme dauert entsprechend. Kürzere Videos (wenige Minuten) laufen am zuverlässigsten.');
+  }
   if (!w || !h) return hints;
   if (kind === 'image' && Math.max(w, h) < 1000) hints.push('Das Bild ist ziemlich klein und könnte auf großen Bildschirmen unscharf wirken.');
   if (kind === 'video' && h > 1080) hints.push('Dieses Video ist größer als Full-HD. Es wird für die Bildschirme neu berechnet – das kann auf einem Raspberry Pi 3 sehr lange dauern. Besser als Full-HD-MP4 hochladen.');

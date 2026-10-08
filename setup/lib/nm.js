@@ -19,7 +19,10 @@ export function createNm({ run = defaultRun, iface = 'wlan0' } = {}) {
       }
       return [...best.values()].sort((a, b) => b.signal - a.signal);
     },
+    /** WLAN-Funk ein-/ausschalten. Bei „Ohne WLAN (Kabel)“ bleibt der Funk aus; Hotspot und WLAN-Verbindung schalten ihn selbst wieder ein. */
+    async radio(on) { await run('nmcli', ['radio', 'wifi', on ? 'on' : 'off']); },
     async startHotspot({ ssid, password }) {
+      await run('nmcli', ['radio', 'wifi', 'on']);
       await run('nmcli', ['connection', 'delete', 'dfm-setup']);
       const r = await run('nmcli', ['device', 'wifi', 'hotspot', 'ifname', iface, 'con-name', 'dfm-setup', 'ssid', ssid, 'password', password, 'band', 'bg', 'channel', '6']);
       await run('nmcli', ['connection', 'modify', 'dfm-setup', 'ipv4.addresses', '10.42.0.1/24', 'wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.proto', 'rsn', 'wifi-sec.pairwise', 'ccmp', 'wifi-sec.group', 'ccmp', 'wifi-sec.pmf', '1']);
@@ -28,6 +31,7 @@ export function createNm({ run = defaultRun, iface = 'wlan0' } = {}) {
     async stopHotspot() { await run('nmcli', ['connection', 'down', 'dfm-setup']); await run('nmcli', ['connection', 'delete', 'dfm-setup']); },
     /** Verbindung herstellen. Rückgabe { ok, reason } – reason hilft bei verständlichen Fehlermeldungen. */
     async connect({ ssid, password, hidden, enterprise }) {
+      await run('nmcli', ['radio', 'wifi', 'on']);
       await run('nmcli', ['connection', 'delete', 'dfm-wifi']);
       const base = ['connection', 'add', 'type', 'wifi', 'ifname', iface, 'con-name', 'dfm-wifi', 'ssid', ssid, 'connection.autoconnect', 'yes', 'connection.autoconnect-retries', '0', 'wifi.hidden', hidden ? 'yes' : 'no', 'wifi.powersave', '2'];
       const sec = enterprise ? ['wifi-sec.key-mgmt', 'wpa-eap', '802-1x.eap', 'peap', '802-1x.phase2-auth', 'mschapv2', '802-1x.identity', enterprise.user, '802-1x.password', enterprise.password]

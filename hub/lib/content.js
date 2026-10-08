@@ -29,7 +29,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   const present = (m) => ({ id: m.id, name: m.name, kind: m.kind, size: m.size, durationS: m.duration_s, width: m.width, height: m.height,
     tags: m.tags ? m.tags.split(',') : [], folder: m.folder, createdAt: m.created_at, text: m.text_json ? JSON.parse(m.text_json) : undefined,
     variants: db.prepare('SELECT profile,status,error FROM media_variants WHERE media_id=?').all(m.id),
-    hints: mediaHints(m.kind, m.width, m.height), author: m.author, license: m.license, validUntil: m.valid_until,
+    hints: mediaHints(m.kind, m.width, m.height, { bytes: m.size, codec: m.codec, fps: m.fps, durationS: m.duration_s }), author: m.author, license: m.license, validUntil: m.valid_until,
     expired: !!m.valid_until && m.valid_until < new Date(now()).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }) });
 
   app.get('/api/v1/media', { config: { perm: 'media.read' } }, async () => db.prepare('SELECT * FROM media ORDER BY created_at DESC').all().map(present));
@@ -48,17 +48,17 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
       if (size > LIMITS[kind]) throw Object.assign(new Error('size'), { friendly: `Die Datei ist zu groß (maximal ${Math.round(LIMITS[kind] / 1048576)} MB für diesen Typ).` });
       const folder = String(part.fields?.folder?.value ?? '').slice(0, 60), name = String(part.filename ?? 'Datei').replace(/[\x00-\x1f/\\]/g, '').slice(0, 100) || 'Datei';
       const ids = [];
-      const addMedia = (k, path, nm, w, h, dur) => {
+      const addMedia = (k, path, nm, w, h, dur, codec, fps) => {
         const id = randomUUID();
-        db.prepare('INSERT INTO media(id,name,kind,original_path,size,duration_s,width,height,folder,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
-          .run(id, nm, k, path, statSync(join(mediaDir, 'original', path)).size, dur ?? null, w ?? null, h ?? null, folder, req.user.id, now()); ids.push(id); return id;
+        db.prepare('INSERT INTO media(id,name,kind,original_path,size,duration_s,width,height,folder,created_by,created_at,codec,fps) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          .run(id, nm, k, path, statSync(join(mediaDir, 'original', path)).size, dur ?? null, w ?? null, h ?? null, folder, req.user.id, now(), codec ?? null, fps ?? null); ids.push(id); return id;
       };
       if (kind === 'image') {
         let meta; try { meta = await sharp(tmp, SHARP_OPTS).metadata(); if (meta.width * meta.height > 80_000_000) throw new Error('zu groß'); } catch (e) { throw Object.assign(new Error('img'), { friendly: /zu groß|pixel/i.test(e.message) ? 'Das Bild ist zu groß (mehr als 80 Megapixel). Bitte verkleinere es.' : 'Das Bild ist beschädigt oder kann nicht gelesen werden.' }); }
         const p = randomUUID(); renameSync(tmp, join(mediaDir, 'original', p)); addMedia('image', p, name, meta.width, meta.height);
       } else if (kind === 'video') {
         let pr; try { pr = await probeVideo(tmp); } catch { throw Object.assign(new Error('vid'), { friendly: 'Das Video kann nicht gelesen werden. Bitte versuche ein anderes Format (MP4).' }); }
-        const p = randomUUID(); renameSync(tmp, join(mediaDir, 'original', p)); addMedia('video', p, name, pr.width, pr.height, pr.duration);
+        const p = randomUUID(); renameSync(tmp, join(mediaDir, 'original', p)); addMedia('video', p, name, pr.width, pr.height, pr.duration, pr.codec, pr.fps);
       } else { // PDF nur als gerenderte Bilder
         const outdir = join(mediaDir, 'incoming', randomUUID()); mkdirSync(outdir);
         try { await pexec('pdftoppm', ['-scale-to', '1920', '-png', '-l', '60', tmp, join(outdir, 'p')], { timeout: 120000 }); }
