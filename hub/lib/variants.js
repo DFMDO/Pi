@@ -4,6 +4,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, statSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { totalmem } from 'node:os';
 import sharp from 'sharp';
 import { PROFILES } from './plan.js';
 
@@ -14,7 +15,8 @@ export const PROFILE_SPEC = {
 };
 
 /** Schutz vor „Bild-Bomben“ (riesige Bilder) und zu hohem Speicherverbrauch auf dem Pi */
-sharp.cache(false); sharp.concurrency(0); // alle Prozessorkerne nutzen (Priorität bleibt niedrig: die Anzeige geht vor)
+// Alle Prozessorkerne nutzen – außer auf Geräten mit wenig Arbeitsspeicher (Pi 3 mit 1 GB, Hub + Anzeige in einem): dort 2 Threads, sonst geht der Speicher aus.
+sharp.cache(false); sharp.concurrency(totalmem() < 1.5 * 1024 ** 3 ? 2 : 0);
 export const SHARP_OPTS = { failOn: 'error', limitInputPixels: 80_000_000 };
 
 /** Container anhand der ersten Bytes → ffmpeg bekommt den Demuxer fest vorgegeben (kein „Raten“ durch Inhalt der Datei) */
