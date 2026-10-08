@@ -22,7 +22,10 @@ function standby() {
   if (health.pairing) return el('div', 'notice', logo, el('p', '', `Bitte bestätige diesen Bildschirm im Hub: „${health.deviceName ?? ''}“ – Ist das dein Bildschirm? → Ja.`));
   if (health.timeSynced === false) return el('div', 'notice', logo, el('p', '', 'Einen Moment bitte – der Bildschirm startet gleich.'));
   const longOffline = health.offlineSince && Date.now() - health.offlineSince > 24 * 3600e3 && health.cacheEmpty;
-  return longOffline ? el('div', 'notice', logo, el('p', '', 'Dieser Bildschirm wartet auf Verbindung. Bitte die Museums-IT informieren.')) : el('div', 'standby', logo);
+  if (longOffline) return el('div', 'notice', logo, el('p', '', 'Dieser Bildschirm wartet auf Verbindung. Bitte die Museums-IT informieren.'));
+  // Hub und Bildschirm in einem Gerät, noch ohne Inhalte: Adresse der Verwaltung anzeigen (der Einrichter muss sie nirgends suchen)
+  if (health.isHub && health.addresses?.length) return el('div', 'standby', logo, el('p', 'addr', 'Verwaltung im Browser öffnen:'), ...health.addresses.map((a) => el('p', 'addr big', 'https://' + a)), el('p', 'addr', 'oder https://dfm-signage.local'));
+  return el('div', 'standby', logo);
 }
 function build(item) {
   if (item.kind === 'text') { const t = item.text ?? {}; return el('div', 'text ' + (t.template ?? 'standard'), el('h1', '', t.title ?? ''), el('p', '', t.body ?? '')); }

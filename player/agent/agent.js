@@ -3,6 +3,7 @@
 // fällt WLAN oder Hub aus, läuft der Player unbegrenzt weiter.
 import WebSocket from 'ws';
 import { join } from 'node:path';
+import { networkInterfaces } from 'node:os';
 import { readFileSync, existsSync, mkdirSync, createWriteStream, writeFileSync, readdirSync } from 'node:fs';
 import { randomInt } from 'node:crypto';
 import { pinnedAgent, request, PinError } from './lib/pinned.js';
@@ -22,8 +23,13 @@ import { shred } from '../../setup/lib/firstboot.js';
 const readText = (f) => { try { return readFileSync(f, 'utf8').trim(); } catch { return null; } };
 export const backoff = (n, rnd = Math.random) => Math.min(60000, 1000 * 2 ** Math.min(n, 6)) * (0.75 + rnd() * 0.5); // 1 s … 60 s mit Jitter
 
+/** Eigene IPv4-Adressen (ohne Loopback). Darf nie fehlschlagen: bei Fehler einfach keine Adressen. */
+export function ownAddresses() {
+  try { return Object.values(networkInterfaces()).flat().filter((i) => i && !i.internal && i.family === 'IPv4').map((i) => i.address); } catch { return []; }
+}
+
 export class Agent {
-  constructor({ dataDir, version = '0.2.7', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.8', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });
@@ -34,7 +40,8 @@ export class Agent {
   }
   health() { let cached = []; try { cached = readdirSync(this.mediaDir).filter((f) => !f.endsWith('.part')); } catch {}
     return { cached, displayOff: !!this.displayOff, pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
-    cacheEmpty: !(this.manifest?.items?.length), offlineSince: this.offlineSince ?? null }; }
+    cacheEmpty: !(this.manifest?.items?.length), offlineSince: this.offlineSince ?? null,
+    isHub: !!this.cfg?.local, addresses: ownAddresses() }; } // Adressen: der Standby-Bildschirm zeigt dem Einrichter, wo die Verwaltung erreichbar ist
 
   async start() {
     this.boundPort = await this.server.listen();            // 1) sofort anzeigen, was im Cache liegt (kein Hub nötig)
