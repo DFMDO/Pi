@@ -17,7 +17,7 @@ export DFM_REPO='$(& $wsl $repo)'
 cd "`$DFM_REPO" || exit 1
 sed 's/\r$//' tools/local-image-export.sh > /tmp/lie.sh
 bash /tmp/lie.sh '$(& $wsl $Basis)' '$(& $wsl $Ausgabe)' 2>&1 | tee /tmp/local-export.log
-"@ -replace "`r`n", "`n" | Set-Content -NoNewline -Encoding ascii $run
+"@ -replace "`r`n", "`n" | ForEach-Object { $skript = $_; for ($v = 0; $v -lt 8; $v++) { try { Set-Content -NoNewline -Encoding ascii -Path $run -Value $skript -ErrorAction Stop; break } catch { Start-Sleep -Seconds 2 } } } # WSL gibt die Datei nach einem früheren Lauf manchmal verzögert frei: mehrmals versuchen
 Write-Host "Basis: $Basis`nAusgabe: $Ausgabe`nVersion im Code: $ver"
 wsl -d Ubuntu-24.04 -u root -- bash (& $wsl $run)
 if (-not (Test-Path $Ausgabe)) { throw 'Das Image wurde nicht erzeugt (siehe Meldungen oben).' }
