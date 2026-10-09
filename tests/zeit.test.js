@@ -19,3 +19,12 @@ test('Image-Skript: chrony liest /run/dfm/chrony.d ein', () => {
   const mode = readFileSync(new URL('../build/rootfs/usr/lib/dfm/select-mode.sh', import.meta.url), 'utf8');
   assert.match(mode, /local stratum 10/); assert.match(mode, /allow 192\.168\.0\.0\/16/);
 });
+
+// Diagnose/Image-Prüfung (0.2.18): /etc/resolv.conf war die Datei des GitHub-Baurechners (nameserver 168.63.129.16) und nicht änderbar → kein DNS im Museum
+// (damit weder Uhrzeit aus dem Internet über pool.ntp.org noch ein Kalender-Abruf per Webadresse).
+test('DNS: /etc/resolv.conf ist ein Verweis nach /run/NetworkManager, NetworkManager nutzt rc-manager=symlink', () => {
+  const asm = readFileSync(new URL('../build/assemble-image.sh', import.meta.url), 'utf8');
+  assert.match(asm, /ln -s \/run\/NetworkManager\/resolv\.conf "\$ROOT\/etc\/resolv\.conf"/);
+  assert.match(readFileSync(new URL('../build/rootfs/etc/NetworkManager/conf.d/dfm.conf', import.meta.url), 'utf8'), /^rc-manager=symlink/m);
+  assert.match(readFileSync(new URL('../tools/local-image-export.sh', import.meta.url), 'utf8'), /ln -s \/run\/NetworkManager\/resolv\.conf "\$M\/etc\/resolv\.conf"/);
+});

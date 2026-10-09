@@ -19,6 +19,9 @@ sed -i '/^# --- DFM Signage ---$/,$d' "$BOOT/config.txt"; cat "$B/boot/config.tx
 cp "$B/boot/dfm-setup.vorlage.txt" "$B/boot/LIES-MICH.txt" "$BOOT/"
 rm -f "$BOOT"/{ssh,ssh.txt,userconf,userconf.txt,custom.toml,dfm-setup.txt,dfm-setup.json}
 mkdir -p "$ROOT/data"   # Einhängepunkt
+# DNS: Im Rootfs liegt sonst die resolv.conf des Baurechners (Docker/Cloud-DNS) – nutzlos, und NetworkManager kann sie auf dem schreibgeschützten System nicht ändern.
+# Als Verweis auf /run/NetworkManager/resolv.conf bekommt der Pi die DNS-Server aus dem Netz (Uhrzeit aus dem Internet, Kalender-Abruf).
+rm -f "$ROOT/etc/resolv.conf"; ln -s /run/NetworkManager/resolv.conf "$ROOT/etc/resolv.conf"
 
 echo "== Prüfung (vor dem Packen) =="
 mkdir -p "$TMP/data/state/nm" "$TMP/data/state/nm-lib" "$TMP/data/state/chrony" "$TMP/data/log" "$TMP/data/hub" "$TMP/data/agent" "$TMP/data/tmp"

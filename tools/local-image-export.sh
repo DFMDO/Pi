@@ -25,6 +25,7 @@ cp "$REPO/package.json" "$M/opt/dfm/package.json"; echo "$VERSION" > "$M/etc/dfm
 find "$M/usr/lib/dfm" "$M/etc/systemd/system" "$M/etc/chromium" "$M/etc/NetworkManager" -type f -exec sed -i 's/\r$//' {} + 2>/dev/null
 chmod +x "$M"/usr/lib/dfm/*
 [ -f "$M/boot/firmware/config.txt" ] && { sed -i '/^# --- DFM Signage ---$/,$d' "$M/boot/firmware/config.txt"; sed 's/\r$//' "$REPO/build/boot/config.txt.add" >> "$M/boot/firmware/config.txt"; }
+rm -f "$M/etc/resolv.conf"; ln -s /run/NetworkManager/resolv.conf "$M/etc/resolv.conf"   # DNS aus dem Netz (sonst steht dort die resolv.conf des Baurechners)
 echo "== Dienste aktivieren (wie im Image-Skript) =="
 grep -E '^systemctl (enable|disable|mask) ' "$REPO/build/pi-gen/stage-dfm/02-system/00-run.sh" | sed 's/\r$//' > "$M/tmp/dfm-units.sh"
 chroot "$M" /bin/bash /tmp/dfm-units.sh > "$W/units.log" 2>&1 || echo "HINWEIS: Einige systemctl-Aufrufe meldeten Warnungen (siehe $W/units.log)"; rm -f "$M/tmp/dfm-units.sh"
