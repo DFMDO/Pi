@@ -12,7 +12,7 @@ test('Volle Leistung: keine festen Speichergrenzen, Anzeige vor Hub, zram aktiv,
   assert.match(unit('dfm-zram.service'), /ExecStart=\/usr\/lib\/dfm\/zram\.sh start/);
   assert.match(readFileSync(`${R}build/pi-gen/stage-dfm/02-system/00-run.sh`, 'utf8'), /systemctl enable[^\n]*\bdfm-zram\.service\b/);
   const z = readFileSync(`${R}build/rootfs/usr/lib/dfm/zram.sh`, 'utf8'); assert.match(z, /MEM_KB \/ 2/); assert.match(z, /swapon/);
-  assert.match(readFileSync(`${R}hub/lib/variants.js`, 'utf8'), /sharp\.concurrency\(0\)/);
+  assert.match(readFileSync(`${R}hub/lib/variants.js`, 'utf8'), /sharp\.concurrency\(SMALL_RAM \? 2 : 0\)/); // alle Kerne, außer auf Geräten mit < 1,5 GB RAM (dort 2)
   assert.match(readFileSync(`${R}hub/lib/variants.js`, 'utf8'), /'nice', '-n', '19'/, 'Umwandlungen bleiben niedrig priorisiert');
 });
 
