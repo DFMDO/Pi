@@ -282,3 +282,44 @@ Unter *Abspiellisten* steht bei jeder Liste „Eine Runde dauert 2:00 Minuten“
 
 ## 37. App „An diesem Tag“
 *Apps → An diesem Tag* zeigt täglich einen Eintrag aus **eurer eigenen Liste** („An diesem Tag in der Fußballgeschichte“). Ein Eintrag pro Zeile: `04.07.1954 Text` (das Jahr ist optional: `24.12. Text`). Gibt es für heute nichts, erscheint der nächste Eintrag. Die mitgelieferten Beispiele bitte **prüfen und ergänzen**. Braucht kein Internet. Mehr zu Apps in [`apps.md`](apps.md).
+
+## 38. Notfall-Meldung mit einem Klick
+Auf der Startseite: **🚨 Notfall-Meldung**. Du wählst einen fertigen Text (zum Beispiel „Bitte das Gebäude verlassen“, „Technische Störung“, „Heute geschlossen“) oder schreibst einen eigenen, wählst die Dauer und bestätigst. Die Meldung erscheint **sofort auf allen Bildschirmen** in großer weißer Schrift auf rotem Grund und ersetzt alles andere: auch Szenen, Schnellaktionen und geteilte Bildschirme. Beendet wird sie über den Hinweis auf der Startseite („Meldung jetzt beenden“) oder nach der eingestellten Zeit.
+- **Wichtig:** Das ist eine Durchsage am Bildschirm, **keine Alarmanlage** und kein Ersatz für Lautsprecher oder Brandschutz-Technik. Bildschirme, die nachts per Zeitschaltung ausgeschaltet sind, bleiben aus.
+- Die **Beispieltexte** sind nur Vorschläge. Admins ändern sie unter „Texte ändern“ (bis zu 6 Texte); bitte mit der Leitung und dem Brandschutz abstimmen.
+- Redakteure und Admins dürfen auslösen. Jede Meldung steht im Protokoll (mit Name und Zeit).
+
+## 39. Update per USB-Stick
+Kopiere die Update-Datei (`dfm-signage-update-….dfmpkg`) auf einen USB-Stick und stecke ihn **am Hub** ein. Auf der Startseite erscheint „📦 Update auf dem USB-Stick“ mit der Version und dem Hinweis „Signatur ✔“. Mit **Installieren** und einer Rückfrage wird es eingespielt; der Hub startet danach kurz neu. Die Bildschirme laden das Update danach auf Wunsch (*Erweitert → Update einspielen → Alle Bildschirme laden das Update*). Unter *Erweitert → Update einspielen* siehst du auch Pakete, die nicht verwendet werden können, mit dem Grund (zum Beispiel falsche Signatur).
+- Ohne **gültige Signatur** wird nichts installiert. Ein älteres Paket wird mit deutlichem Hinweis angeboten („ÄLTER als die installierte Version“).
+- Ein Update ändert das **Programm**, nicht das Betriebssystem. Neue Systemdateien (zum Beispiel die USB-Erkennung selbst) kommen nur mit einem neuen SD-Karten-Image.
+- **Einmalig nötig (Techniker):** Damit ein Update-Paket auf schon eingerichteten Geräten gilt, muss beim Bauen immer derselbe Signaturschlüssel benutzt werden (GitHub-Geheimnis `DFM_SIGN_KEY`). Ohne dieses Geheimnis entsteht bei jedem Image ein eigener Einmal-Schlüssel, und es wird kein Update-Paket erzeugt.
+
+## 40. Meldung bei Ausfall (E-Mail) und Statusadresse
+*Erweitert → Meldung bei Ausfall*: Du trägst den **Mailserver des Museums** ein (Adresse, Port, Verschlüsselung, Absender und bis zu 5 Empfänger). Fällt ein Bildschirm länger aus (einstellbar, mindestens 5 Minuten), schickt der Hub **eine E-Mail**, bei mehreren gleichzeitig **eine gemeinsame**. Auf Wunsch meldet er auch, wenn der Bildschirm wieder da ist. Mit **Speichern und Test-E-Mail senden** prüfst du alles sofort.
+- Bildschirme in **Wartung** und noch nie gesehene Geräte lösen keine Mail aus. Mit der **Ruhezeit** (zum Beispiel 22:00 bis 07:00) gehen nachts keine Mails raus; sie werden nach der Ruhezeit nachgeholt.
+- Gegen Mail-Fluten: Eine Verbindung, die ständig wackelt, löst höchstens alle 30 Minuten eine Ausfall-Mail aus. Ist der Mailserver kaputt, versucht der Hub es alle 5 Minuten neu.
+- Das Passwort des Mailservers wird **verschlüsselt** gespeichert und nie angezeigt. Anmeldung ohne Verschlüsselung ist nicht möglich. „Zertifikat nicht prüfen“ nur nutzen, wenn die IT das Zertifikat nicht ändern kann.
+- **Fällt der Hub selbst aus, kann er nichts melden.** Dafür gibt es die **Statusadresse für die IT-Überwachung**: *Zugang für die Überwachung erzeugen* zeigt Adresse und Zugangs-Token (nur einmal). Nagios, Zabbix oder Uptime Kuma fragen `https://dfm-signage.local/api/v1/status` mit dem Header `X-Live-Token` ab: **200 = alles in Ordnung, 503 = Ausfall** (`?strict=1` meldet auch „keine Verbindung“, `?format=text` liefert Klartext). Das Token erlaubt nur Lesen und lässt sich unter „Benutzer → Wandmodus“ widerrufen.
+
+## 41. Hub ersetzen (Assistent)
+Im Menü **🛟 Hub ersetzen** (nur Admins): Der **Vorsorge-Check** zeigt, ob das Backup eingerichtet und frisch ist und ob schon eine Kopie auf einem anderen Rechner liegt (Backup herunterladen und auf einem anderen Rechner oder Netzlaufwerk ablegen, etwa einmal im Monat). Die **Einrichtungsdatei** `dfm-setup.txt` für den Ersatz-Hub entsteht nur in deinem Browser (Passphrase und WLAN-Passwort werden nirgends gespeichert). Die **Notfallkarte** (Drucken) enthält Adresse, MAC, Fingerabdruck und die Schritte, damit sie auch bei Ausfall des Hubs zur Hand ist.
+- **Mediendateien sind nicht im Backup.** Nach einem Hub-Wechsel erscheinen Bilder und Videos ohne Vorschau, bis du die Originale wieder hochlädst oder per USB-Stick importierst. Die Bildschirme zeigen bis dahin ihre gespeicherten Inhalte.
+- Das Vorgehen ist noch **nicht auf echter Hardware durchgespielt**: bitte einmal in Ruhe üben.
+
+## 42. Wiedergabe-Nachweis
+*Betrieb → 🎞️ Wiedergabe*: Zeigt, wie oft und wie lange jedes Bild, Video und jede Folie auf den Bildschirmen lief, nach Medium, Bildschirm oder Tag, für frei wählbare Zeiträume (Letzte 7/30 Tage, Dieser/Letzter Monat). **CSV für Excel** exportiert die Einzelwerte (Datum, Bildschirm, Medium, Einblendungen, Minuten); das ist zum Beispiel für Sponsoren-Nachweise gedacht.
+- Gezählt wird jede **Einblendung** auf einem Bildschirm. Nachts ausgeschaltete Bildschirme zählen nicht. Die Zahlen können bei Stromausfall um wenige Minuten abweichen; Bildschirme ohne Verbindung melden nach.
+- Es werden **nur Zähler** gespeichert, keine Besucherdaten. Aufbewahrung 400 Tage. Konten mit Gruppen-Beschränkung sehen nur ihre Bildschirme.
+- Mitgezählt wird erst ab Version 0.2.23.
+
+## 43. Laufband und Uhr auf „Video-optimiert“-Bildschirmen
+Bildschirme mit der Wiedergabe-Art „Video-optimiert“ (mpv) zeigen jetzt auch **Laufband, Uhr und Infozone**, wenn ihnen ein Zonen-Layout zugewiesen ist (*Betrieb → Laufband & Zonen*). Unterschiede zum Browser: Das Laufband **scrollt nicht**, sondern zeigt die Meldungen im Wechsel (alle 6 Sekunden, lange Meldungen in Teilen). Bei **gedrehten** Bildschirmen und auf Geräten mit dem Profil „Lite“ (Zero 2 W) gibt es kein Laufband (immer Vollbild). Auf den Hinweisbildern (Warten, Uhrzeit) und während des Teilens wird es ausgeblendet.
+
+## 44. Bildschirm teilen
+Auf der Startseite: **🖥️ Bildschirm teilen**. Du überträgst deinen PC-Bildschirm (ganz, ein Fenster oder ein Browser-Tab) live auf ausgewählte Museumsbildschirme, zum Beispiel für eine Präsentation. Der Plan pausiert dort, bis du **⏹ Beenden** drückst (roter Balken am unteren Rand), die Zeit abläuft (30 Minuten bis 4 Stunden) oder eine Notfall-Meldung startet.
+- Geht nur am PC mit **Google Chrome oder Microsoft Edge** und mit der Verwaltung über **https**. Die Verwaltungsseite muss geöffnet bleiben; ein Tab im Hintergrund ist in Ordnung.
+- Alles bleibt im Haus (Browser → Hub → Bildschirm). Ton wird nicht übertragen; es entsteht eine Verzögerung von etwa einer halben bis ganzen Sekunde.
+- **Browser-Bildschirme** zeigen etwa 5 Bilder pro Sekunde (flüssig genug für Folien und einfache Bewegung). Bildschirme mit **„Video-optimiert“** zeigen eine einfache Darstellung mit etwa **1 Bild pro Sekunde** (gut für Folien, nicht für Videos).
+- Pro Person läuft eine Übertragung, ein Bildschirm kann immer nur von einer Person geteilt werden. Andere sehen auf der Startseite, wer gerade teilt; Admins können fremde Übertragungen beenden.
+- Dies ist **kein Ersatz für Miracast/AirPlay**: Geräte wie Handys und Tablets können so nicht direkt senden.

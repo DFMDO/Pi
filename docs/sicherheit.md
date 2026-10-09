@@ -61,3 +61,10 @@ TLS-Schlüssel, Hub-Master-Schlüssel, Geräte-ID, Hostname, machine-id, Hotspot
 - **WLAN-Wechsel:** getestet, mit Rückfall; Passwort nur kurz in der privd-Anfrage (Datei mit `0600`, wird nach Ausführung überschrieben und gelöscht).
 - Datenschutz: [`datenschutz.md`](datenschutz.md).
 - **Teil E:** Gestaffelte Updates verlangen `update.manage` (Admin), jeder Start und jeder Rückfall steht im Audit-Log (Sicherheitsereignis); der Rückfall nutzt die bestehende signierte Update-Struktur (`previous`-Link). Der Simulator-Player nutzt denselben Pairing-/Pinning-Weg wie echte Player – es gibt keinen Sonderzugang.
+
+## Version 0.2.23
+- **USB-Update:** nur Pakete mit gültiger Ed25519-Signatur; Dateiname und echter Pfad werden geprüft; der Stick ist schreibgeschützt eingebunden (`ro,nosuid,nodev,noexec`). Installation nur nach Bestätigung durch einen Admin; im Protokoll als Sicherheitsereignis mit Quelle „USB-Stick“.
+- **E-Mail:** Passwort mit dem Hub-Schlüssel verschlüsselt, nie in API-Antworten; Anmeldung ohne TLS wird abgelehnt; Betreff und Adressen werden gegen Zeilenumbrüche (Header-Einschleusung) geprüft.
+- **Statusadresse:** nutzt ein Lese-Token (nur `GET`, nur diese Route und die Live-Ansicht); kann widerrufen werden.
+- **Bildschirm teilen:** nur angemeldete Redakteure/Admins mit CSRF-Schutz, Gruppen-Beschränkung wird beachtet; Bilder sind nur JPEG (Kopf geprüft, ≤ 2,5 MB); Höchstdauer 4 Stunden; die Notfall-Meldung hat Vorrang.
+- **Notfall-Meldung:** Bestätigung Pflicht, Sicherheitsereignis im Protokoll.

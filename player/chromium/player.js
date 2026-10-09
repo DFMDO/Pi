@@ -2,7 +2,7 @@
 // auch bei Hub- und WLAN-Ausfall. Dieselbe Logik wie die Tests (shared/sequencer.js).
 import { resolvePlaylist, playableItems } from '/shared/sequencer.js';
 
-const stage = document.getElementById('stage'), overlay = document.getElementById('overlay');
+const stage = document.getElementById('stage'), overlay = document.getElementById('overlay'), shareBox = document.getElementById('share'), shareImg = shareBox.querySelector('img');
 let plan = null, manifest = null, health = {}, gen = 0, front = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const j = (u) => fetch(u, { cache: 'no-store' }).then((r) => r.json());
@@ -13,6 +13,7 @@ async function refresh() {
   if (typeof applyLayout === 'function') applyLayout();
   const fit = plan?.fit ?? { fit: 'contain', safe: 0 }; stage.style.setProperty('--fit', fit.fit === 'cover' ? 'cover' : 'contain'); stage.style.setProperty('--safe', (fit.safe ?? 0) + '%'); // Hochkant/Seitenverhältnis, Sicherheitsrand gegen Overscan
   const deg = health.orientation ?? 0; stage.className = deg ? 'r' + deg : ''; stage.style.setProperty('--rot', deg + 'deg');
+  if (health.share?.active) { if (shareBox.hidden) shareShow(health.share.n); } else if (!shareBox.hidden) shareHide(); // Sicherheitsnetz, falls ein Ereignis verpasst wurde
 }
 function el(tag, cls, ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
 
@@ -90,7 +91,11 @@ function testPattern(d) {
   const bars = el('div', 'bars'); for (const c of ['#fff', '#ff0', '#0ff', '#0f0', '#f0f', '#f00', '#00f', '#000']) { const b = el('i'); b.style.setProperty('background', c); bars.append(b); }
   overlayShow(el('div', 'pattern', bars, el('div', 'grid'), el('div', 'arrow', '▲ OBEN'), el('div', 'res', `${innerWidth} × ${innerHeight} px · ${(innerWidth / innerHeight).toFixed(2)}:1 · Ränder und Ausrichtung prüfen`)), (d.seconds ?? 120) * 1000);
 }
+// ---- Bildschirm teilen: das letzte Bild vom Agenten, liegt über allem ----
+function shareShow(n) { const im = new Image(); im.onload = () => { shareBox.className = stage.className; shareBox.style.setProperty('--rot', stage.style.getPropertyValue('--rot')); shareImg.src = im.src; shareBox.hidden = false; }; im.src = '/share/frame.jpg?n=' + n; } // erst laden, dann tauschen: kein Flackern
+function shareHide() { shareBox.hidden = true; shareImg.removeAttribute('src'); }
 const ev = new EventSource('/events');
+ev.addEventListener('share', (e) => shareShow(JSON.parse(e.data).n)); ev.addEventListener('shareend', shareHide);
 ev.addEventListener('identify', (e) => identify(JSON.parse(e.data))); ev.addEventListener('testpattern', (e) => testPattern(JSON.parse(e.data)));
 ev.addEventListener('black', () => document.body.classList.add('black')); ev.addEventListener('unblack', () => document.body.classList.remove('black'));
 ev.addEventListener('plan', refresh); ev.addEventListener('manifest', refresh); ev.addEventListener('reload', () => location.reload());

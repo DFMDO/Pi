@@ -27,6 +27,9 @@ body.black #stage, body.black #overlay { visibility: hidden; } /* Bildschirm „
 .clock { padding:0 2vw; text-align:right; line-height:1.1; } .clock b { font-size:4.4vh; display:block; } .clock small { font-size:2.2vh; opacity:.85; }
 .infozone { position:absolute; top:0; right:0; bottom:9vh; width:24vw; box-sizing:border-box; padding:2vw; background:var(--dfm-primary); color:#fff; font-size:3vh; line-height:1.3; z-index:2; white-space:pre-wrap; overflow:hidden; }
 #overlay { position:fixed; inset:0; z-index:20; } #overlay[hidden] { display:none; }
+/* Bildschirm teilen: liegt über allem, dreht mit dem Bildschirm mit */
+#share { position:fixed; left:50%; top:50%; width:100vw; height:100vh; transform:translate(-50%,-50%) rotate(var(--rot,0deg)); transform-origin:center; z-index:30; background:#000; } #share[hidden] { display:none; }
+#share.r90, #share.r270 { width:100vh; height:100vw; } #share img { width:100%; height:100%; object-fit:contain; } body.black #share { visibility:hidden; }
 .ident { width:100%; height:100%; background:var(--dfm-primary); color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:3vh; }
 .ident h1 { font-size:12vw; margin:0; line-height:1; overflow-wrap:anywhere; } .ident p { font-size:5vw; margin:0; } .ident .num { font-size:8vw; font-weight:700; border:.8vw solid #fff; padding:1vh 4vw; border-radius:2vw; }
 .pattern { position:absolute; inset:0; background:#444; } .pattern .bars { position:absolute; left:0; right:0; top:0; height:30%; display:flex; } .pattern .bars i { flex:1; }

@@ -17,6 +17,9 @@ eine falsche Version beenden die Verbindung (Code 1008). Hub und Player nutzen d
 | Player → Hub | `command_result` | `id, ok, result?, error?` |
 | Player → Hub | `screenshot` | `png` (Base64, höchstens 4 MB); der Hub wandelt ihn in ein JPEG (~640 px) und hält es nur im Arbeitsspeicher |
 | Player → Hub | `status` | `current{mediaId,name,kind,since,duration}, next?, source?, scheduleId?` – bei jedem Wechsel (Live-Ansicht Stufe 1) |
+| Player → Hub | `plays` | `id, days` – Wiedergabe-Zähler `{ "JJJJ-MM-TT": { "<Medien-ID>": { n, s, name, kind } } }`, alle 5 Minuten; gleiche `id` wird wiederholt, bis bestätigt |
+| Hub → Player | `plays_ack` | `id` – Meldung angenommen |
+| Hub → Player | `share_start` / `share_frame` / `share_stop` | Bildschirm teilen: `id`; `share_frame` zusätzlich `jpg` (Base64, höchstens 3 MB) |
 | Player → Hub | `signal` | `dbm, wifi?` – alle 2 s im Aufstellmodus (höchstens 15 Minuten) |
 
 ## Verhalten

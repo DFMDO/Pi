@@ -85,3 +85,15 @@ RAM, CPU, WLAN-Durchsatz, Startzeit nach jeder größeren Änderung mit `tools/d
 | E14 | Auf dem Hub: `findmnt -o TARGET,PROPAGATION /` und `journalctl -u 'dfm-usb@*'` | Wurzel „shared“; Meldung „unter /media/usb eingebunden (nur lesen)“; Hub-Dienst sieht den später eingesteckten Stick (Sichtprobe in der Oberfläche) | ☐ |
 | E15 | exFAT- und NTFS-Stick | werden gelesen (falls nicht: Meldung im Journal „lässt sich nicht einbinden“, kein fehlgeschlagener Dienst) | ☐ |
 | E16 | Foto vom Handy (iPhone und Android) zeigen | Foto erscheint auf dem gewählten Bildschirm in < 1 min, danach Rückkehr zum Plan | ☐ |
+
+## Version 0.2.23 – Neue Funktionen auf dem Pi prüfen
+| # | Prüfung | Soll | Pi 3 B+ |
+|---|---|---|---|
+| E17 | Notfall-Meldung auslösen (Browser-Bildschirm UND mpv-Bildschirm) | rote Folie in < 10 s auf allen Bildschirmen, Rückkehr nach „Beenden“ | ☐ |
+| E18 | USB-Stick mit `.dfmpkg` (festen Schlüssel setzen, Image bauen) am Hub | Update erscheint, Installation, Neustart, Bildschirme ziehen nach | ☐ |
+| E19 | Test-E-Mail mit dem echten Mailserver des Museums; Bildschirm abziehen, 10+ Min. warten | Ausfall-Mail und Wiederkehr-Mail kommen an; Zertifikat/Port-Einstellungen der IT passen | ☐ |
+| E20 | Hub-Ersatz komplett üben (zweiter Pi, `dfm-setup.txt` + Backup auf bootfs) | Hub mit alten Konten und Bildschirmen nach ca. 5 Min. da; Bildschirme melden sich ohne neues Pairing | ☐ |
+| E21 | Wiedergabe-Nachweis nach 1 Tag Betrieb | Zahlen stimmen grob mit dem Plan überein (Einblendungen/Tag); nachts (Anzeige aus) nichts gezählt; CSV öffnet in Excel | ☐ |
+| E22 | Laufband und Uhr auf einem mpv-Bildschirm (Pi 3, 1080p) | Leiste unten, Uhr geht richtig, Video wird nicht verdeckt, CPU-Last/Temperatur nicht merklich höher; mit `--vo=drm` sichtbar | ☐ |
+| E23 | Bildschirm teilen auf einen Browser-Bildschirm und auf einen mpv-Bildschirm (Folien) | Verzögerung < 1 s (Browser) bzw. ca. 1 Bild/s (mpv), kein Flackern; nach „Beenden“ sofort Plan | ☐ |
+| E24 | Teilen, während ein Präsentations-Vollbildfenster die Verwaltungsseite verdeckt (≥ 10 Min.) | Übertragung läuft gleichmäßig weiter (Worker wird nicht gedrosselt) | ☐ |

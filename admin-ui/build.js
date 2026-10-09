@@ -11,7 +11,10 @@ const here = dirname(fileURLToPath(import.meta.url)), dist = join(here, 'dist'),
 rmSync(dist, { recursive: true, force: true }); mkdirSync(join(dist, 'assets'), { recursive: true });
 // Zentrale Design-Variablen aus /assets in das Bündel einbinden
 writeFileSync(join(here, 'src', 'theme.generated.css'), readFileSync(join(root, 'assets', 'dfm-theme.css')));
-const r = await build({ entryPoints: { app: join(here, 'src', 'main.js') }, bundle: true, minify: true, format: 'esm', target: 'es2022', outdir: join(dist, 'assets'), entryNames: '[name].[hash]', metafile: true, write: true, loader: { '.css': 'css' }, legalComments: 'none' });
+// Hintergrund-Thread für „Bildschirm teilen“: eigene Datei (CSP erlaubt nur Skripte vom eigenen Server), ihr Name wird ins Hauptbündel eingetragen
+const wk = await build({ entryPoints: { 'share-worker': join(here, 'src', 'share-worker.js') }, bundle: true, minify: true, format: 'iife', target: 'es2022', outdir: join(dist, 'assets'), entryNames: '[name].[hash]', metafile: true, write: true, legalComments: 'none' });
+const workerFile = Object.keys(wk.metafile.outputs).map((f) => f.split('/').pop()).find((f) => f.endsWith('.js'));
+const r = await build({ define: { __SHARE_WORKER__: JSON.stringify('/assets/' + workerFile) }, entryPoints: { app: join(here, 'src', 'main.js') }, bundle: true, minify: true, format: 'esm', target: 'es2022', outdir: join(dist, 'assets'), entryNames: '[name].[hash]', metafile: true, write: true, loader: { '.css': 'css' }, legalComments: 'none' });
 const out = Object.keys(r.metafile.outputs).map((f) => f.split('/').pop());
 const js = out.find((f) => f.endsWith('.js')), css = out.find((f) => f.endsWith('.css'));
 copyFileSync(join(root, 'assets', 'dfm-logo.svg'), join(dist, 'logo.svg'));

@@ -2,7 +2,8 @@
 import './app.css';
 export function h(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs ?? {})) {
+  for (let [k, v] of Object.entries(attrs ?? {})) {
+    if (k.startsWith('aria-') && typeof v === 'boolean') v = String(v); // ARIA braucht „true“/„false“ als Text (ein leeres Attribut gilt nicht als „true“, und CSS [aria-pressed=true] greift sonst nicht)
     if (v == null || v === false) continue;
     if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; /* per CSSOM: erlaubt unter strenger CSP */ else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else if (k === 'value') e.value = v; else if (k === 'checked') e.checked = !!v; else e.setAttribute(k, v === true ? '' : v);

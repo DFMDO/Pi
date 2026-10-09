@@ -3,6 +3,7 @@ import { h, dialog, confirmDlg, toast, field } from '../ui.js';
 import { get, post, del, put, can } from '../api.js';
 import { presentationDialog } from './praesentation.js';
 import { notfallDlg } from './notfall.js';
+import { shareDlg, shareNotices } from './teilen.js';
 
 const DURS = [['30', '30 Minuten'], ['60', '1 Stunde'], ['120', '2 Stunden'], ['eod', 'bis Tagesende']];
 const durBody = (v) => (v === 'eod' ? { endOfDay: true } : { minutes: Number(v) });
@@ -13,9 +14,10 @@ async function contentSelect() {
 const parse = (v) => { const [type, ...id] = v.split(':'); return { type, id: id.join(':') }; };
 
 export async function quickActions(route) {
-  const [ov, scenes, devices] = await Promise.all([get('/overrides'), get('/scenes'), get('/devices')]);
+  const [ov, scenes, devices, shares] = await Promise.all([get('/overrides'), get('/scenes'), get('/devices'), get('/share').catch(() => [])]);
   const box = h('section', { class: 'card', style: 'margin-bottom:16px' }, h('h2', { style: 'margin-top:0' }, 'Schnellaktionen'));
   for (const o of ov) box.append(h('div', { class: 'notice' }, '⚡ ', o.text, ' ', h('button', { class: 'btn link', onclick: async () => { await del(`/overrides/${o.id}`); toast('Zurück zum normalen Plan.'); route(); } }, 'Zurück zum normalen Plan')));
+  box.append(...shareNotices(shares, route));
   box.append(h('div', { class: 'row' },
     h('button', { class: 'btn big', onclick: async () => { const c = await contentSelect(); const d = h('select', { 'aria-label': 'Dauer' }, DURS.map(([k, t]) => h('option', { value: k }, t)));
       dialog('Jetzt auf allen Bildschirmen zeigen', h('div', {}, h('p', { class: 'notice' }, 'Das übersteuert alle Termine und Szenen auf ALLEN Bildschirmen. Danach springen sie automatisch zum normalen Plan zurück.'), field('Was soll laufen?', c), field('Wie lange?', d)),
@@ -24,6 +26,7 @@ export async function quickActions(route) {
       const s = h('select', { 'aria-label': 'Bildschirm' }, devices.filter((x) => x.status.level !== 'pending').map((x) => h('option', { value: x.id }, x.name)));
       dialog('Auf einem Bildschirm zeigen', h('div', {}, field('Bildschirm', s), field('Was soll laufen?', c), field('Wie lange?', d)), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Zeigen', fn: async () => { try { const r = await post('/overrides', { scope: 'device', targetId: s.value, content: parse(c.value), ...durBody(d.value) }); toast(r.text); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]); } }, '🖥️ Auf einem Bildschirm zeigen'),
     can('media.write') && can('playlists.write') ? h('button', { class: 'btn big sec', onclick: () => presentationDialog(route) }, '📑 Präsentation zeigen (PowerPoint)') : null,
+    h('button', { class: 'btn big sec', onclick: () => shareDlg(route) }, '🖥️ Bildschirm teilen'),
     h('button', { class: 'btn big danger', onclick: () => notfallDlg(route) }, '🚨 Notfall-Meldung')));
   const pub = scenes.filter((s) => s.state === 'published');
   if (pub.length) box.append(h('h3', {}, 'Szenen'), h('div', { class: 'row' }, pub.map((s) => s.active

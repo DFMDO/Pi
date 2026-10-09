@@ -30,3 +30,8 @@ Der Hub prüft täglich und löscht abgelaufene Übersteuerungen/Szenenverläufe
 
 ## Stromausfall
 Alle Geräte starten selbstständig. Player warten geduldig auf den Hub (ohne Fehlermeldungen über den Inhalten) und zeigen bis dahin ihre gespeicherten Inhalte. Für den Hub wird eine **USV** empfohlen (siehe [`hardware-empfehlung.md`](hardware-empfehlung.md)).
+
+## Wiedergabe-Nachweis, Ausfall-Mails, Bildschirm teilen (seit 0.2.23)
+- **Wiedergabe-Nachweis:** Gespeichert werden nur Zähler je Tag, Bildschirm und Medium (Anzahl, Sekunden, Medienname). Es gibt **keine** Besucherdaten und keine Personenbezüge. Aufbewahrung 400 Tage, danach automatische Löschung. Konten mit Gruppen-Beschränkung sehen nur ihre Bildschirme.
+- **Ausfall-Mails:** Gespeichert werden Mailserver, Absender und Empfänger-Adressen (Personenbezug möglich: bitte Funktionsadressen wie it@… nutzen) sowie das Passwort **verschlüsselt**. Die Mails enthalten Bildschirmnamen und Zeiten, sonst nichts.
+- **Bildschirm teilen:** Die Bilder werden nur durchgereicht und **nicht gespeichert**. Im Protokoll stehen Name, Zeit und Bildschirme der Übertragung. Wer teilt, entscheidet selbst, was auf dem PC sichtbar ist: Bitte keine Fenster mit vertraulichen Inhalten (E-Mails, Personaldaten) teilen. Auf den Bildschirmen im Besucherbereich sieht das jeder.

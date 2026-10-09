@@ -11,7 +11,7 @@ test('mpv: Bild bleibt stehen (duration inf) und wird nur bei Änderung neu gela
   assert.match(src, /const show = \(file, force = false\) => \{ if \(!force && file === shown\) return;/);
   assert.ok(!/send\(\['loadfile'/.test(src.replace(/const show = [^\n]*\n/, '')), 'loadfile nur noch über show()');
   assert.match(src, /show\(fileOf\(current\), current\.kind === 'video'\)/, 'Videos werden immer neu gestartet (Schleife mit einem Video)');
-  assert.match(src, /s\.on\('connect', \(\) => \{ if \(sock === s\) \{ shown = null; tick\(\); \} \}\)/, 'nach mpv-Neustart wird wieder geladen');
+  assert.match(src, /s\.on\('connect', \(\) => \{ if \(sock === s\) \{ shown = null; zoneKey = null; zoneOn = false; tick\(\); applyZones\(\); \} \}\)/, 'nach mpv-Neustart wird wieder geladen');
 });
 
 test('mpv: Speicher-Wächter startet mpv neu, wenn er zu viel belegt; end-file nur bei eof weiter', () => {

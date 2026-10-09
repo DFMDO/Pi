@@ -19,6 +19,8 @@ import extras5Plugin from './lib/extras5.js';
 import extras6Plugin from './lib/extras6.js';
 import notfallPlugin from './lib/notfall.js';
 import alertsPlugin from './lib/alerts.js';
+import teilenPlugin from './lib/teilen.js';
+import nachweisPlugin, { createPlays } from './lib/nachweis.js';
 import { createMetrics } from './lib/metrics.js';
 import systemPlugin from './lib/system.js';
 import { createVariantQueue } from './lib/variants.js';
@@ -67,7 +69,8 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   const variants = createVariantQueue({ db, mediaDir, onChange: () => app.pushAll?.() });
   app.decorate('variants', variants);
   const metrics = createMetrics({ db, now });
-  await app.register(devicesPlugin, { db, key, audit, tls, dataDir, mediaDir, hubInfo: hubInfo ?? (() => ({ host: 'dfm-signage.local' })), metrics, now });
+  const plays = createPlays({ db, now });
+  await app.register(devicesPlugin, { db, key, audit, tls, dataDir, mediaDir, hubInfo: hubInfo ?? (() => ({ host: 'dfm-signage.local' })), metrics, plays, now });
   await app.register(contentPlugin, { db, audit, mediaDir, variants, now });
   await app.register(extrasPlugin, { db, audit, now });
   await app.register(extras2Plugin, { db, audit, mediaDir, dataDir, variants, now, importRoots, ...(usbDir ? { usbDir } : {}) });
@@ -76,6 +79,8 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   await app.register(extras5Plugin, { db, audit, variants, now, fetchText });
   await app.register(extras6Plugin, { db, audit, variants, now });
   await app.register(notfallPlugin, { db, audit, variants, now });
+  await app.register(nachweisPlugin, { db, now });
+  await app.register(teilenPlugin, { db, audit, now });
   await app.register(alertsPlugin, { db, key, audit, now, ...(mailer ? { mailer } : {}) });
   await app.register(systemPlugin, { db, audit, dataDir, mediaDir, tls, updateKeyPem, appDir: appDir ?? join(dataDir, 'app'), baseDir, onRestart, ...(usbDir ? { usbDir } : {}) });
 

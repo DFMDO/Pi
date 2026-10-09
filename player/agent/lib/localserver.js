@@ -27,7 +27,7 @@ function sniff(file) {
 }
 
 export function createLocalServer({ getPlan, getManifest, getHealth, onStatus = () => {}, mediaDir, port = 8080 }) {
-  const clients = new Set();
+  const clients = new Set(); let frame = null, frameN = 0; // Bildschirm teilen: zuletzt empfangenes Bild
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1'); const p = url.pathname;
     if (req.method === 'POST' && p === '/status') { // „Ist“-Meldung der Playerseite (nur Loopback, klein, nur JSON)
@@ -36,6 +36,7 @@ export function createLocalServer({ getPlan, getManifest, getHealth, onStatus = 
     }
     if (req.method !== 'GET') { res.writeHead(405, HEAD).end(); return; }
     if (STATIC.has(p)) { const [f, t] = STATIC.get(p); if (!existsSync(f)) { res.writeHead(404, HEAD).end(); return; } res.writeHead(200, { ...HEAD, 'Content-Type': t }); createReadStream(f).pipe(res); return; }
+    if (p === '/share/frame.jpg') { if (!frame) { res.writeHead(404, HEAD).end(); return; } res.writeHead(200, { ...HEAD, 'Content-Type': 'image/jpeg', 'Content-Length': frame.length }); res.end(frame); return; }
     if (p === '/plan.json') return json(res, getPlan() ?? { segments: [], playlists: {}, defaultPlaylistId: null });
     if (p === '/manifest.json') return json(res, getManifest() ?? { items: [] });
     if (p === '/health') return json(res, getHealth());
@@ -60,6 +61,8 @@ export function createLocalServer({ getPlan, getManifest, getHealth, onStatus = 
   return {
     listen: () => new Promise((r) => server.listen(port, '127.0.0.1', () => r(server.address().port))),
     close: () => new Promise((r) => { for (const c of clients) c.end(); server.close(() => r()); }),
+    setFrame(buf) { frame = buf; frameN++; this.emit('share', { n: frameN }); },
+    clearFrame() { const had = !!frame; frame = null; if (had) this.emit('shareend', {}); },
     emit: (event, data = {}) => { for (const c of clients) c.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); },
   };
 }

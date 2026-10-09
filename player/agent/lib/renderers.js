@@ -5,6 +5,7 @@ import net from 'node:net';
 import { dirname } from 'node:path';
 import { totalmem } from 'node:os';
 import { resolvePlaylist, playableItems } from '../../../shared/sequencer.js';
+import { zonesFor, RES } from './zones.js';
 
 function supervise(start, log) {
   let child = null, stopped = false, delay = 1000;
@@ -37,7 +38,7 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
   net: netLib = net, spawnFn = spawn, reconnectMs = 1000 }) {
   const sup = supervise(() => spawnFn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--msg-level=all=warn', '--keep-open=no',
     '--image-display-duration=inf', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', '--osd-font-size=42', `--video-rotate=${getRotation()}`], { stdio: ['ignore', 'ignore', 'inherit'] }), log); // Fehlermeldungen von mpv ins Journal des Agents
-  let sock = null, idx = 0, timer = null, current = null, stopped = false, shown = null;
+  let sock = null, idx = 0, timer = null, current = null, stopped = false, shown = null, zoneKey = null, zoneTimer = null, zoneOn = false, sharing = false;
   const send = (cmd) => { try { sock?.write(JSON.stringify({ command: cmd }) + '\n'); } catch {} };
   // Eine Datei nur dann neu laden, wenn sie sich ändert: Das ständige Neuladen desselben Bilds (Standby alle 5 s) ließ mpv im Pilot auf 522 MB wachsen.
   const show = (file, force = false) => { if (!force && file === shown) return; shown = file; send(['loadfile', file, 'replace']); };
@@ -49,7 +50,7 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
     if (stopped) return; try { sock?.destroy(); } catch {}
     const s = netLib.connect(socket); sock = s;
     s.on('error', () => {}); // danach kommt „close“ – dort wird neu verbunden
-    s.on('connect', () => { if (sock === s) { shown = null; tick(); } });
+    s.on('connect', () => { if (sock === s) { shown = null; zoneKey = null; zoneOn = false; tick(); applyZones(); } });
     s.on('data', (d) => { const t = d.toString(); if (t.includes('"reason":"eof"') && t.includes('"end-file"') && current?.kind === 'video') next(); });
     s.on('close', () => { if (sock === s) scheduleConnect(); });
   };
@@ -64,6 +65,7 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
   }
   function tick() { // aktuelles Element starten
     clearTimeout(timer); if (stopped) return;
+    if (sharing) { timer = setTimeout(tick, 2000); return; } // Bildschirm teilen: der Plan pausiert
     const { r, items } = pick(); const hs = getHealth();
     // Vorgerenderte Bilder statt Browser-Seiten (Lite hat keinen Browser): Uhrzeit, Warten auf Bestätigung, Hilfe, Standby
     const special = hs.pairing ? 'wartet' : hs.timeSynced === false ? 'uhrzeit' : (hs.offlineSince && Date.now() - hs.offlineSince > 24 * 3600e3 && hs.cacheEmpty) ? 'hilfe' : null;
@@ -82,7 +84,23 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
   }
   function next() { idx++; tick(); }
   const osd = (text, ms) => send(['show-text', text, ms]);
-  return { ...sup, osd, stop: () => { stopped = true; clearTimeout(timer); clearTimeout(reconnectT); clearInterval(watchdog); try { sock?.destroy(); } catch {} sup.stop(); }, notify: () => { idx = 0; tick(); },
+  // Laufband, Uhr, Infozone (nur wenn der Hub für diesen Bildschirm ein Layout vorgibt): einfache Einblendung statt Webseite, siehe zones.js.
+  // Nicht bei gedrehtem Bildschirm (die Einblendung würde nicht mitgedreht) und nicht auf den Hinweisbildern (Warten, Uhrzeit, Hilfe).
+  function applyZones() {
+    if (stopped) return; const hs = getHealth(), plan = getPlan();
+    const hidden = sharing || getRotation() !== 0 || hs.displayOff || hs.pairing || hs.timeSynced === false || (hs.offlineSince && now() - hs.offlineSince > 24 * 3600e3 && hs.cacheEmpty);
+    const z = hidden ? null : zonesFor({ layout: plan?.layout, tickers: plan?.tickers ?? [], now: now() }), key = z?.key ?? '';
+    if (key === zoneKey) return; zoneKey = key; // nur bei Änderung neu senden (Seitenwechsel des Laufbands, Minute der Uhr)
+    if (!z) { if (zoneOn) { send(['osd-overlay', 1, 'none', '']); send(['set_property', 'video-margin-ratio-bottom', 0]); send(['set_property', 'video-margin-ratio-right', 0]); } zoneOn = false; return; } // nur aufräumen, was wir gezeichnet haben
+    send(['set_property', 'video-margin-ratio-bottom', z.marginBottom]); send(['set_property', 'video-margin-ratio-right', z.marginRight]); send(['osd-overlay', 1, 'ass-events', z.events.join('\n'), RES.x, RES.y]); zoneOn = true;
+  }
+  zoneTimer = setInterval(applyZones, 2000); zoneTimer.unref?.();
+  /** Bildschirm teilen: ein Bild (Datei) zeigen; null = Übertragung beendet, der Plan läuft weiter */
+  function share(file) {
+    if (stopped) return;
+    if (file) { sharing = true; show(file, true); applyZones(); } else if (sharing) { sharing = false; shown = null; zoneKey = null; tick(); applyZones(); }
+  }
+  return { ...sup, osd, share, stop: () => { stopped = true; clearInterval(zoneTimer); clearTimeout(timer); clearTimeout(reconnectT); clearInterval(watchdog); try { sock?.destroy(); } catch {} sup.stop(); }, notify: () => { idx = 0; tick(); applyZones(); },
     screenshot: () => new Promise((res, rej) => { // mpv schreibt das Bild in eine Datei
       const f = dirname(socket) + '/shot.png'; send(['screenshot-to-file', f, 'window']); setTimeout(() => { try { res(require_fs().readFileSync(f)); } catch (e) { rej(e); } }, 800); }) };
 }

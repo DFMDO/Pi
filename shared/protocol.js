@@ -20,6 +20,11 @@ const SCHEMAS = {
   status: { current: obj, next: opt((x) => x === null || obj(x)), source: opt(str(20)), scheduleId: opt((x) => x === null || str(64)(x)) },
   signal: { dbm: (x) => x === null || num(x), wifi: opt((x) => x === null || obj(x)) },
   screenshot: { png: str(4 * 1024 * 1024), mime: opt(str(20)) }, // base64
+  plays: { id: num, days: obj },  // Wiedergabe-Nachweis: Player → Hub, { id, days: { 'JJJJ-MM-TT': { '<Medien-ID>': { n, s, name, kind } } } } (Hub prüft den Inhalt streng)
+  share_start: { id: str(64) },   // Bildschirm teilen: Hub → Player, Übertragung beginnt
+  share_frame: { id: str(64), jpg: str(4 * 1024 * 1024 + 1024) }, // ein Bild (JPEG, base64, höchstens 3 MB)
+  share_stop: { id: str(64) },    // Übertragung beendet
+  plays_ack: { id: num },         // Hub → Player: Meldung angenommen, Player darf die Zähler löschen
 };
 
 /** @returns {string|null} Fehlertext oder null wenn gültig */

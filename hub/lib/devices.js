@@ -34,7 +34,7 @@ function summary(d, st) {
   return `${d.name}: ${s.label.toLowerCase()}`;
 }
 
-async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubInfo, metrics = null, now = () => Date.now() }) {
+async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubInfo, metrics = null, plays = null, now = () => Date.now() }) {
   const sockets = new Map(); // deviceId -> ws
   const challenges = new Map(); // nonce -> expires
   const pairLim = createLimiter({ max: 20, baseMs: 60000, now });
@@ -298,6 +298,8 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
         db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...st, playerStatus: { current: m.current, next: m.next ?? null, source: m.source ?? null, scheduleId: m.scheduleId ?? null, ts: now() } }).slice(0, 20000), d.id);
       } else if (m.type === 'command_result') {
         db.prepare("UPDATE commands SET status=?, result_json=? WHERE id=? AND device_id=?").run(m.ok ? 'done' : 'failed', JSON.stringify(m.result ?? { error: m.error }), m.id, d.id);
+      } else if (m.type === 'plays') { // Wiedergabe-Nachweis: Zähler des Bildschirms aufnehmen und bestätigen (auch Doppeltes wird bestätigt, aber nicht doppelt gezählt)
+        try { plays?.ingest(d.id, m); } catch {} sendTo(d.id, 'plays_ack', { id: m.id });
       } else if (m.type === 'signal') {
         signals.set(d.id, { dbm: m.dbm, wifi: m.wifi ?? null, ts: now() });
       } else if (m.type === 'screenshot') {

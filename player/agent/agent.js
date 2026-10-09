@@ -19,6 +19,7 @@ import { validateMessage, msg } from '../../shared/protocol.js';
 import { stage, activate } from '../../hub/lib/update.js';
 import { pairWithHub, PairError } from './lib/pair.js';
 import { shred } from '../../setup/lib/firstboot.js';
+import { createPlayCounter } from './lib/plays.js';
 
 const readText = (f) => { try { return readFileSync(f, 'utf8').trim(); } catch { return null; } };
 export const backoff = (n, rnd = Math.random) => Math.min(60000, 1000 * 2 ** Math.min(n, 6)) * (0.75 + rnd() * 0.5); // 1 s … 60 s mit Jitter
@@ -29,19 +30,21 @@ export function ownAddresses() {
 }
 
 export class Agent {
-  constructor({ dataDir, version = '0.2.22', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.23', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });
     this.cfg = readJson(this.cfgFile); this.plan = readJson(join(dataDir, 'cache', 'plan.json')); this.manifest = readJson(join(dataDir, 'cache', 'manifest.json'));
     this.syncState = { total: 0, done: 0 }; this.connected = false; this.ws = null; this.stopped = false; this.attempt = 0; this.syncing = false;
     this.nowPlaying = null; this.displayOff = false; this.displayRule = null;
+    this.share = null; this.shareDir = process.env.DFM_SHARE_DIR ?? '/run/dfm-agent'; this.shareIdleMs = 30000; this.shareCheckMs = 5000; // Bildschirm teilen (nur im Arbeitsspeicher; endet, wenn 30 s lang kein Bild mehr kommt)
+    this.plays = createPlayCounter({ file: join(dataDir, 'state', 'plays.json') }); this.playsMs = 300000; // Wiedergabe-Nachweis: lokal zählen, alle 5 Minuten gesammelt melden
     this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health(), onStatus: (s) => this.onPlayerStatus(s) });
   }
   health() { let cached = []; try { cached = readdirSync(this.mediaDir).filter((f) => !f.endsWith('.part')); } catch {}
     return { cached, displayOff: !!this.displayOff, pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
     cacheEmpty: !(this.manifest?.items?.length), offlineSince: this.offlineSince ?? null,
-    isHub: !!this.cfg?.local, addresses: ownAddresses() }; } // Adressen: der Standby-Bildschirm zeigt dem Einrichter, wo die Verwaltung erreichbar ist
+    isHub: !!this.cfg?.local, addresses: ownAddresses(), share: this.share ? { active: true, n: this.share.n } : null }; } // Adressen: der Standby-Bildschirm zeigt dem Einrichter, wo die Verwaltung erreichbar ist
 
   async start() {
     this.boundPort = await this.server.listen();            // 1) sofort anzeigen, was im Cache liegt (kein Hub nötig)
@@ -50,6 +53,8 @@ export class Agent {
     this.rssTimer = setInterval(() => { const mb = process.memoryUsage().rss / 1048576; if (mb > (this.rssLimitMB ?? 300)) { this.log(`Speicherverbrauch zu hoch (${Math.round(mb)} MB) – Neustart`); this.exit(75); } }, 60000); this.rssTimer.unref();
     const authority = () => !!this.cfg?.local; // Hub + Bildschirm in einem: dieses Gerät ist selbst die Zeitquelle
     this.timeOk = await timeSynced({ authority: authority() }); this.timeTimer = setInterval(async () => { this.timeOk = await timeSynced({ authority: authority() }); this.checkDisplay(); }, 30000).unref();
+    this.playsTimer = setInterval(() => this.sendPlays(), this.playsMs); this.playsTimer.unref();
+    this.shareTimer = setInterval(() => { if (this.share && Date.now() - this.share.last > this.shareIdleMs) this.shareStop('keine Bilder mehr'); }, this.shareCheckMs); this.shareTimer.unref();
     this.renderer?.start?.();
     if (!this.cfg?.token && this.cfg?.pairing) await this.pairNow();   // Erstverbindung mit dem Hub (Einmalcode)
     if (!this.cfg?.token) throw new Error('Dieses Gerät ist noch nicht mit einem Hub verbunden.');
@@ -72,7 +77,7 @@ export class Agent {
       }
     }
   }
-  async stop() { this.stopped = true; clearInterval(this.rssTimer); clearInterval(this.timeTimer); clearTimeout(this.retryT); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
+  async stop() { this.stopped = true; clearInterval(this.shareTimer); this.shareStop('Agent beendet'); clearInterval(this.playsTimer); clearTimeout(this.playsKick); this.plays.stop(); clearInterval(this.rssTimer); clearInterval(this.timeTimer); clearTimeout(this.retryT); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
 
   async loop() {
     while (!this.stopped) {
@@ -110,6 +115,7 @@ export class Agent {
         opened = true; this.ws = ws; this.reconnects = (this.reconnects ?? 0) + 1; this.connected = true; this.offlineSince = null; this.attempt = 0; this.cfg.lastIp = new URL(base).hostname; writeJson(this.cfgFile, this.cfg);
         this.send('hello', { version: this.version, profile: this.cfg.profile, model: this.cfg.model, hw: this.cfg.hw });
         this.sendHeartbeat(); this.hb = setInterval(() => this.sendHeartbeat(), this.heartbeatMs);
+        clearTimeout(this.playsKick); this.playsKick = setTimeout(() => this.sendPlays(), 15000); this.playsKick.unref?.(); // nach (Wieder-)Verbindung gleich nachmelden
       });
       ws.on('message', (raw) => this.onMessage(raw.toString()));
       ws.on('close', (code) => { clearInterval(this.hb); this.ws = null; if (code === 4001) this.revoked = true; opened ? resolve() : reject(new Error('geschlossen')); });
@@ -141,7 +147,21 @@ export class Agent {
     const r = resolvePlaylist(this.plan, Date.now());
     this.playerStatus = { current: cur, next: nxt, source: r.source, scheduleId: r.scheduleId ?? null };
     this.send('status', this.playerStatus);
+    this.plays.start(this.displayOff ? null : cur); // Wiedergabe-Nachweis (bei ausgeschaltetem Bildschirm wird nicht gezählt)
   }
+  /** Gesammelte Wiedergabe-Zähler an den Hub melden; wird wiederholt, bis der Hub bestätigt */
+  /** Bildschirm teilen (Hub → Player): geteilte Bilder zeigen, bis der Hub stoppt oder 30 s lang nichts mehr kommt */
+  shareStart(id) { this.share = { id, last: Date.now(), n: 0 }; this.log('Bildschirm wird geteilt'); }
+  shareFrame(m) {
+    if (!this.share || this.share.id !== m.id) this.shareStart(m.id); // z. B. nach kurzem Verbindungsabbruch: das Bild ist dann der Start
+    const buf = Buffer.from(m.jpg, 'base64'); if (buf.length < 100 || buf.length > 3 * 1048576 || buf[0] !== 0xff || buf[1] !== 0xd8) return; // nur echte JPEG-Bilder
+    this.share.last = Date.now(); this.share.n++;
+    if (this.renderer?.share) { // mpv: das Bild als Datei (im Arbeitsspeicher) laden, abwechselnd zwei Dateinamen
+      try { mkdirSync(this.shareDir, { recursive: true }); const f = join(this.shareDir, `share-${this.share.n % 2}.jpg`); writeFileSync(f, buf); this.renderer.share(f); } catch (e) { this.log('Teilen: Bild nicht geschrieben', e.message); }
+    } else this.server.setFrame(buf);
+  }
+  shareStop(why) { if (!this.share) return; this.share = null; this.log('Teilen beendet:', why); this.server.clearFrame(); this.renderer?.share?.(null); }
+  sendPlays() { try { const p = this.plays.payload(); if (p && this.ws?.readyState === 1) this.send('plays', p); this.plays.save(); } catch (e) { this.log('Wiedergabe-Nachweis:', e.message); } }
   nowPlayingInfo() { // reine Anzeige für „zeigt gerade …“
     const r = resolvePlaylist(this.plan, Date.now()); if (!r.playlistId) return null;
     const m = this.manifest?.items?.find((i) => i.id === this.plan?.playlists?.[r.playlistId]?.items?.[0]?.mediaId);
@@ -154,6 +174,10 @@ export class Agent {
     if (m.type === 'schedule_update') { const { v, type, ...plan } = m; this.plan = plan; this.applyHubSettings(plan); writeJson(join(this.dataDir, 'cache', 'plan.json'), plan, 0o644); this.server.emit('plan'); this.renderer?.notify?.(); }
     else if (m.type === 'media_manifest') { const { v, type, ...mf } = m; this.manifest = mf; writeJson(join(this.dataDir, 'cache', 'manifest.json'), mf, 0o644); this.runSync(); }
     else if (m.type === 'command') this.runCommand(m);
+    else if (m.type === 'plays_ack') this.plays.ack(m.id);
+    else if (m.type === 'share_start') this.shareStart(m.id);
+    else if (m.type === 'share_frame') this.shareFrame(m);
+    else if (m.type === 'share_stop') this.shareStop('vom Hub beendet');
   }
 
   fetchRange = async (url, start) => { // gepinnter Download mit Range-Fortsetzung
@@ -181,7 +205,7 @@ export class Agent {
   /** „Bildschirm von 22:00 bis 07:00 aus“: zuerst HDMI-CEC/wlr-randr/vcgencmd (privd), sonst schwarzes Bild + klare Meldung im Hub */
   checkDisplay(now = Date.now()) {
     const off = !!this.displayRule && inSyncWindow(`${this.displayRule.from}-${this.displayRule.to}`, now);
-    if (off === this.displayOff) return; this.displayOff = off;
+    if (off === this.displayOff) return; this.displayOff = off; if (off) this.plays.start(null); // Nachweis: Anzeige aus = nichts mehr zählen
     try { privRequest(this.privdDir, 'display-power', { state: off ? 'off' : 'on' }); } catch {}
     this.server.emit(off ? 'black' : 'unblack'); // Fallback: schwarzes Bild, falls die Hardware nicht abschaltbar ist
   }
