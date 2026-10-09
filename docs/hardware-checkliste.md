@@ -107,3 +107,14 @@ RAM, CPU, WLAN-Durchsatz, Startzeit nach jeder größeren Änderung mit `tools/d
 | E28 | Regel während einer Hand-Aktion und während einer Notfall-Meldung | Hand-Aktion/Notfall bleiben sichtbar, danach Rückkehr zur Regel | ☐ |
 | E29 | „Nächster Programmpunkt“ mit dem echten Kalender (Räume = Orte der Termine) | Countdown stimmt mit der Uhr; je Bildschirm das richtige Programm; Änderung im Kalender erscheint nach ≤ 5 Min. | ☐ |
 | E30 | Prognose nach ≥ 24 Stunden Betrieb (Hub + Bildschirme) | Werte plausibel (freier Platz, Temperatur); keine falschen Alarme | ☐ |
+
+## Version 0.2.26 – Neue Funktionen auf dem Pi prüfen
+| # | Prüfung | Soll | Pi 3 B+ |
+|---|---|---|---|
+| E31 | Bild-Wächter: Bildprobe alle ~10 Min. auf Chromium- UND mpv-Bildschirm über mehrere Stunden | Last/Temperatur nicht merklich höher, keine Ruckler beim Probebild, kein Speicheranstieg (Betrieb → Verlauf) | ☐ |
+| E32 | Bild-Wächter schwarz: Liste mit schwarzem Bild auf einen Bildschirm legen | Warnung nach ca. 15–20 Min. in Gesundheit und Startseite; verschwindet nach Inhaltswechsel | ☐ |
+| E33 | Bild-Wächter „steht“: Player-Prozess anhalten (z. B. `kill -STOP`) bzw. Wiedergabe einfrieren | „Wiedergabe steht“ nach ca. 15–25 Min.; nach Neu laden weg; **keine Fehlalarme** über 24 h im Normalbetrieb | ☐ |
+| E34 | Einschub „alle 5 Min. / 10 s“ auf Browser- UND mpv-Bildschirm (Bild und Video) | Erscheint zuverlässig, Liste läuft danach an der richtigen Stelle weiter, Video wird nicht abgeschnitten; im Wiedergabe-Nachweis gezählt | ☐ |
+| E35 | Einschub bei Notfall-Meldung, Tor-Jubel, Hand-Aktion | erscheint währenddessen nicht; danach normal | ☐ |
+| E36 | Etiketten auf Normalpapier und Etikettenbogen drucken, QR mit dem Handy scannen | Größe passt, QR öffnet nach Anmeldung die Live-Ansicht des richtigen Bildschirms | ☐ |
+| E37 | Pflege: Aufgabe abhaken, Hinweis auf der Startseite | Hinweis verschwindet, Datum und Name stehen in der Übersicht | ☐ |

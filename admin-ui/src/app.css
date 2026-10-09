@@ -93,3 +93,11 @@ dialog.wide{max-width:min(900px,96vw);width:96vw}.wallwrap{padding:12px;backgrou
 .printcard th{text-align:left;width:34%;vertical-align:top}.printcard ol{padding-left:1.3em}.printcard li{margin-bottom:6px}
 @media print{nav.side,.noprint,#toasts{display:none!important}.shell{display:block!important}main{padding:0!important}.card{box-shadow:none!important;border:1px solid #999!important;break-inside:avoid}body{background:#fff!important;color:#000!important}}
 .sharebar{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 16px;background:#b00020;color:#fff;box-shadow:0 -2px 10px rgba(0,0,0,.4)}.sharebar .hint{color:#fff;opacity:.9}.sharebar .btn{background:#fff;color:#b00020;border-color:#fff}
+/* Etiketten zum Drucken (Bildschirme → Etiketten drucken) */
+.labels{display:grid;gap:6px;margin-top:12px}.labels.lab-s{grid-template-columns:repeat(3,63.5mm)}.labels.lab-l{grid-template-columns:repeat(2,99.1mm)}
+.lab{display:flex;gap:2.5mm;align-items:center;box-sizing:border-box;border:1px dashed #888;padding:2.5mm;overflow:hidden;background:#fff;color:#000;break-inside:avoid}
+.lab-s .lab{width:63.5mm;height:38.1mm}.lab-l .lab{width:99.1mm;height:67.7mm;gap:4mm;padding:4mm}
+.lab-qr{flex:none;background:#fff;line-height:0}.lab-qr svg{display:block}.lab-s .lab-qr{width:24mm}.lab-l .lab-qr{width:38mm}
+.lab-txt{min-width:0;font-size:2.8mm;line-height:1.25;overflow-wrap:anywhere}.lab-name{display:block;font-size:4.2mm;line-height:1.15;margin-bottom:1mm}.lab-nr{font-weight:700;font-size:3.6mm}.lab-small{font-size:2.4mm;opacity:.85}
+.lab-l .lab-txt{font-size:4mm}.lab-l .lab-name{font-size:6.5mm}.lab-l .lab-nr{font-size:5.5mm}.lab-l .lab-small{font-size:3.4mm}
+@media print{body.print-labels .shell{display:none!important}body.print-labels dialog{position:static!important;inset:auto!important;transform:none!important;max-height:none!important;max-width:none!important;width:auto!important;overflow:visible!important;border:0!important;padding:0!important;margin:0!important;background:#fff!important;color:#000!important;box-shadow:none!important}body.print-labels dialog::backdrop{display:none}body.print-labels dialog h2,body.print-labels dialog>.row,body.print-labels dialog .noprint{display:none!important}body.print-labels .labels{margin:0;gap:0}@page{margin:10mm}}

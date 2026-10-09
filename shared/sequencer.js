@@ -30,6 +30,28 @@ export function resolvePlaylist(plan, now) {
   return { playlistId: plan.defaultPlaylistId ?? null, until: cap(next?.start ?? null), scheduleId: null, source: plan.defaultPlaylistId ? 'standard' : 'none' };
 }
 
+/**
+ * Einschübe („alle N Minuten diese Folie für S Sekunden“): Welcher Einschub ist jetzt fällig?
+ * last: Map Einschub-Nummer → Zeitpunkt der letzten Einblendung (wird hier gepflegt: der erste Einschub erscheint frühestens nach einer vollen Wartezeit).
+ * Einschübe erscheinen nur im normalen Betrieb (Standard, Termin, Sondertag, Regel) – nie bei Notfall, Tor-Jubel, Hand-Aktionen, Wartung oder Schließtag.
+ */
+export function dueInsert(plan, r, now, last) {
+  const list = plan?.inserts; if (!Array.isArray(list) || !list.length || !r) return null;
+  const normal = r.source === 'standard' || r.source === 'termin' || r.source === 'sondertag' || (r.source === 'uebersteuerung' && r.override?.kind === 'regel'); if (!normal) return null;
+  const day = epochToLocal(now).date; let best = null, bestOver = -1;
+  for (const i of list) {
+    if ((i.validFrom && day < i.validFrom) || (i.validTo && day > i.validTo)) continue;
+    if (!last.has(i.id)) { last.set(i.id, now); continue; }
+    const over = now - last.get(i.id) - i.everyS * 1000; if (over >= 0 && over > bestOver) { best = i; bestOver = over; }
+  }
+  return best;
+}
+/** Der Einschub als abspielbares Element (null, wenn das Medium fehlt, abgelaufen oder nicht darstellbar ist) */
+export function insertItem(ins, manifest, opts) {
+  const p = { playlists: { __einschub: { items: [{ mediaId: ins.mediaId, duration: ins.seconds, transition: 'fade' }] } } };
+  return playableItems(p, '__einschub', manifest, opts).items[0] ?? null;
+}
+
 /** Kinds, die ein Renderer darstellen kann. Lite (mpv) hat keinen Browser. */
 const RENDERABLE = { lite: new Set(['image', 'video', 'pdfpage', 'text-image']), standard: new Set(['image', 'video', 'pdfpage', 'text']), pro: new Set(['image', 'video', 'pdfpage', 'text']) };
 

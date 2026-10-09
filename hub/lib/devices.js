@@ -69,7 +69,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const st = d.state_json ? JSON.parse(d.state_json) : null;
     const g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id) : null;
     return { id: d.id, display: d.display_json ? JSON.parse(d.display_json) : null, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, renderer: d.renderer ?? 'auto', orientation: d.orientation,
-      status: deviceStatus(d), summary: summary(d, st), lastSeen: d.last_seen, state: st, hw: d.hw_json ? JSON.parse(d.hw_json) : null,
+      status: deviceStatus(d), summary: summary(d, st), location: d.location ?? null, lastSeen: d.last_seen, state: st, hw: d.hw_json ? JSON.parse(d.hw_json) : null,
       spki: d.spki_seen ? formatFingerprint(d.spki_seen) : null, online: sockets.has(d.id), isHub: isHubDevice(d.id) };
   };
 
@@ -289,6 +289,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
       db.prepare('UPDATE devices SET last_seen=? WHERE id=?').run(now(), d.id);
       if (m.type === 'hello') {
         db.prepare('UPDATE devices SET model=COALESCE(?,model), hw_json=COALESCE(?,hw_json) WHERE id=?').run(m.model ?? null, m.hw ? JSON.stringify(m.hw) : null, d.id);
+        try { const st = JSON.parse(cur.state_json ?? '{}'); if (m.version && st.version !== m.version) db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...st, version: m.version }).slice(0, 20000), d.id); } catch {} // Version sofort übernehmen: Der Plan hängt davon ab, was der Bildschirm versteht (z. B. Einschübe ab 0.2.26)
         pushPlan(getDevice(d.id)); deliverQueued(d.id);
         sendTo(d.id, 'plays_ack', { id: 0 }); // Fähigkeits-Meldung: dieser Hub versteht „plays“. Ein alter Hub würde die Nachricht ablehnen und die Verbindung trennen, deshalb senden neue Bildschirme erst nach diesem Signal.
       } else if (m.type === 'heartbeat') {
@@ -308,6 +309,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
         const buf = Buffer.from(m.png, 'base64');
         if (buf.subarray(0, 4).toString('hex') === '89504e47' || buf.subarray(0, 2).toString('hex') === 'ffd8') {
           sharp(buf).resize({ width: 640, withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer().then((j) => shots.set(d.id, { buf: j, mime: 'image/jpeg', ts: now() })).catch(() => {});
+          try { app.waechter?.ingest(d.id, buf).catch(() => {}); } catch {} // Bild-Wächter (nur Prüfsumme und Helligkeit, das Bild wird nicht aufgehoben)
         }
       }
     });

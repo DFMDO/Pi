@@ -1,9 +1,19 @@
 // Aus Datenbankzeilen werden Zeitpläne, Abspiellisten und Manifeste für Geräte.
 import { buildTimeline, findConflicts } from '../../shared/schedule.js';
 import { deviceWarnings } from './health.js';
+import { careWarnings } from './pflege.js';
 
 export const DAY = 86400000;
 export const PROFILES = ['lite', 'standard', 'pro'];
+/** Bildschirme ab dieser Version verstehen das Planfeld „inserts“ (Einschübe); ältere würden den Plan wegen des unbekannten Feldes ablehnen */
+export const INSERTS_MIN_VERSION = '0.2.26';
+export const verGte = (v, min) => { const a = String(v ?? '').split('.').map(Number), b = String(min).split('.').map(Number); if (a.length < 3 || a.some((x) => !Number.isInteger(x))) return false; for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] > b[i]; } return true; };
+/** Aktive Einschübe, die diesen Bildschirm betreffen */
+export function insertsFor(db, device) {
+  return db.prepare('SELECT * FROM inserts WHERE enabled=1 ORDER BY created_at, id').all()
+    .filter((i) => i.scope === 'all' || (i.scope === 'device' && i.target_id === device.id) || (i.scope === 'group' && i.target_id && i.target_id === device.group_id))
+    .map((i) => ({ id: i.id, mediaId: i.media_id, everyS: i.every_min * 60, seconds: i.seconds, ...(i.valid_from ? { validFrom: i.valid_from } : {}), ...(i.valid_to ? { validTo: i.valid_to } : {}) }));
+}
 
 export const rowToSchedule = (r) => ({
   state: r.state ?? 'published', draftOf: r.draft_of ?? null, note: r.note ?? null, createdBy: r.created_by ?? null,
@@ -51,9 +61,12 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   const hold = device.maintenance_since ? 'wartung' : device.ready === 0 ? 'nicht_bereit' : null;
   const tickers = db.prepare("SELECT text,valid_from AS validFrom,valid_to AS validTo FROM tickers WHERE state='published' AND (target_type='all' OR (target_type='device' AND target_id=?) OR (target_type='group' AND target_id=?))").all(device.id, device.group_id ?? '');
   const stg = Object.fromEntries(db.prepare("SELECT key,value FROM settings WHERE key LIKE 'maintenance.%'").all().map((r) => [r.key, r.value]));
+  let version = ''; try { version = JSON.parse(device.state_json ?? '{}').version ?? ''; } catch {}
+  const inserts = verGte(version, INSERTS_MIN_VERSION) ? insertsFor(db, device) : [];
   return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation, renderer: rendererOf(device), fit: device.fit_json ? JSON.parse(device.fit_json) : null, overrides, specialDays, hold, tickers,
     layout: device.profile === 'lite' ? null : device.layout_json ? JSON.parse(device.layout_json) : null,
     maintenance: { nightlyReboot: (stg['maintenance.nightlyReboot'] ?? 'true') === 'true' ? (stg['maintenance.rebootAt'] ?? '03:30') : null },
+    ...(inserts.length ? { inserts } : {}),
     display: device.display_json ? JSON.parse(device.display_json) : null, sync: { window: st['sync.window'] ?? '', bandwidthKbps: Number(st['sync.bandwidthKbps'] ?? 0) } };
 }
 
@@ -74,6 +87,7 @@ export function manifestPayload(db, device, now = Date.now()) {
     if (r.content_type === 'media') ids.add(r.content_id);
     else for (const i of db.prepare('SELECT media_id FROM playlist_items WHERE playlist_id=?').all(r.content_id)) ids.add(i.media_id);
   }
+  for (const r of db.prepare('SELECT media_id FROM inserts WHERE enabled=1').all()) ids.add(r.media_id); // Einschübe: Medium vorab laden
   const items = [];
   for (const id of ids) {
     const m = db.prepare('SELECT * FROM media WHERE id=?').get(id);
@@ -105,9 +119,10 @@ export function warnings(db, now = Date.now()) {
   }
   for (const d of db.prepare("SELECT * FROM devices WHERE status='active'").all()) {
     const st = d.state_json ? JSON.parse(d.state_json) : null;
-    for (const w of deviceWarnings(d, st, now)) out.push({ kind: w.kind, ids: [d.id], text: w.text });
+    for (const w of deviceWarnings(d, st, now, { watch: db.prepare('SELECT * FROM watch_state WHERE device_id=?').get(d.id) })) out.push({ kind: w.kind, ids: [d.id], text: w.text });
     if (st?.syncState && st.syncState.done < st.syncState.total) out.push({ kind: 'medien_laden', ids: [d.id], text: `„${d.name}“ lädt noch Medien (${st.syncState.done} von ${st.syncState.total}).` });
   }
+  for (const c of careWarnings(db, now)) out.push(c);
   return out;
 }
 

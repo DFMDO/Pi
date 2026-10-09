@@ -191,8 +191,8 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
     return { ok: true, text: req.body.on ? 'Wartungsmodus an: der Bildschirm zeigt ein neutrales Bild, Warnungen sind stumm.' : 'Wartungsmodus aus.' };
   });
   app.get('/api/v1/health', { config: { perm: 'devices.read' } }, async (req) => activeDevices(req.user).map((d) => {
-    const st = stOf(d), status = deviceStatus(d, now()), w = deviceWarnings(d, st, now(), { warnDbm: Number(settings()['wifi.warnDbm'] ?? -72) });
-    return { id: d.id, name: d.name, status, warnings: w, level: w.some((x) => x.level === 'bad') || status.level === 'bad' ? 'bad' : w.length || status.level === 'warn' ? 'warn' : 'ok', maintenance: !!d.maintenance_since,
+    const watch = db.prepare('SELECT * FROM watch_state WHERE device_id=?').get(d.id), st = stOf(d), status = deviceStatus(d, now()), w = deviceWarnings(d, st, now(), { warnDbm: Number(settings()['wifi.warnDbm'] ?? -72), watch });
+    return { id: d.id, name: d.name, status, warnings: w, watch: watch && watch.checked_at ? { status: watch.status, note: watch.note, checkedAt: watch.checked_at } : null, level: w.some((x) => x.level === 'bad') || status.level === 'bad' ? 'bad' : w.length || status.level === 'warn' ? 'warn' : 'ok', maintenance: !!d.maintenance_since,
       metrics: st && { tempC: st.cpuTemp, ramFreeMB: st.ramTotalMB ? st.ramTotalMB - st.ramUsedMB : null, diskFreeMB: st.diskFreeMB ?? null, signalDbm: st.signalDbm ?? null, throttled: st.throttled ?? null, uptimeS: st.uptimeS, sdErrors: st.sdErrors ?? 0, version: st.version } };
   }));
   // Verfügbarkeitsverlauf: Ereignisse „offline/online“ je Gerät, Wartungszeiten zählen nicht als Ausfall
@@ -210,7 +210,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
   });
   app.get('/api/v1/report/weekly', { config: { perm: 'devices.read' } }, async (req) => {
     const t = now(), ds = activeDevices(req.user), site = settings()['site.name'] ?? '';
-    return { generatedAt: t, from: t - 7 * DAY, to: t, site, devices: ds.map((d) => { const a = availability(d, 7), st = stOf(d), w = deviceWarnings(d, st, t); return { id: d.id, name: d.name, uptimePercent: a.uptimePercent, outages: a.outages.length, longestOutageS: Math.max(0, ...a.outages.map((o) => o.durationS)), reboots: a.reboots,
+    return { generatedAt: t, from: t - 7 * DAY, to: t, site, devices: ds.map((d) => { const a = availability(d, 7), st = stOf(d), w = deviceWarnings(d, st, t, { watch: db.prepare('SELECT * FROM watch_state WHERE device_id=?').get(d.id) }); return { id: d.id, name: d.name, uptimePercent: a.uptimePercent, outages: a.outages.length, longestOutageS: Math.max(0, ...a.outages.map((o) => o.durationS)), reboots: a.reboots,
       warnings: w.map((x) => x.text), diskFreeMB: st?.diskFreeMB ?? null }; }),
       storage: db.prepare('SELECT COALESCE(SUM(size),0) s FROM media').get().s };
   });

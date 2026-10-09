@@ -2,6 +2,7 @@ import { h, dialog, confirmDlg, toast, field, statusEl, empty, fmtDate, help } f
 import { get, post, put, patch, del, api, state, can } from '../api.js';
 import { shot } from './home.js';
 import { commissioning } from './betrieb.js';
+import { labelsDlg } from './etiketten.js';
 
 /** „Neuen Bildschirm verbinden“: Einmalcode + Fingerabdruck + Startkarte */
 export async function pairDialog(after) {
@@ -36,7 +37,7 @@ export async function devicesPage({ route }) {
         d.state ? h('p', { class: 'hint' }, `Temperatur ${d.state.cpuTemp ?? '–'} °C · Speicher ${d.state.ramUsedMB ?? '–'}/${d.state.ramTotalMB ?? '–'} MB · WLAN-Signal ${d.state.signalDbm ?? '–'} dBm · Medien ${d.state.syncState?.done ?? 0}/${d.state.syncState?.total ?? 0}`) : null)),
       can('devices.manage') ? h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn sec', onclick: () => editDlg(d, groups, route) }, 'Bearbeiten'), cmdMenu(d, route)) : null]));
   return h('div', {}, h('h1', {}, 'Bildschirme'), h('p', { class: 'lead' }, 'Hier verwaltest du alle Bildschirme im Museum.'),
-    can('devices.manage') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', onclick: () => pairDialog(route) }, '➕ Neuen Bildschirm verbinden'), h('button', { class: 'btn sec', onclick: () => groupDlg(route) }, 'Gruppe anlegen'), h('button', { class: 'btn sec', onclick: () => replaceInfo(route) }, 'Bildschirm ersetzen'), h('a', { class: 'btn sec', href: '/api/v1/devices.csv' }, 'Liste als Excel/CSV'), h('button', { class: 'btn sec', onclick: () => hubInfo() }, 'Hub-Adresse & Fingerabdruck')) : null,
+    can('devices.manage') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', onclick: () => pairDialog(route) }, '➕ Neuen Bildschirm verbinden'), h('button', { class: 'btn sec', onclick: () => labelsDlg(devices) }, '🏷️ Etiketten drucken'), h('button', { class: 'btn sec', onclick: () => groupDlg(route) }, 'Gruppe anlegen'), h('button', { class: 'btn sec', onclick: () => replaceInfo(route) }, 'Bildschirm ersetzen'), h('a', { class: 'btn sec', href: '/api/v1/devices.csv' }, 'Liste als Excel/CSV'), h('button', { class: 'btn sec', onclick: () => hubInfo() }, 'Hub-Adresse & Fingerabdruck')) : null,
     rows.length ? h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(340px,1fr))' }, rows) : empty('Noch kein Bildschirm verbunden', 'Klicke oben auf „Neuen Bildschirm verbinden“.'));
 }
 function cmdMenu(d, route) {

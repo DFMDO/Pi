@@ -357,3 +357,34 @@ Im Menü **🤖 Regeln** legst du fest, was die Bildschirme **automatisch** zeig
 - Es sind **Schätzungen** (eine gerade Linie durch die Stundenmittelwerte der letzten 7 Tage). Sie brauchen **mindestens 24 Stunden** Messwerte und werden mit jedem Tag genauer. Ein großes Video, das morgen hochgeladen wird, sieht die Schätzung nicht voraus. Ist der Verlauf zu unregelmäßig, sagt der Hub das ehrlich und schätzt nichts.
 - Ampel: ✔ in Ordnung · ▲ Hinweis zum Vorbeugen (Speicher in unter 30 Tagen voll, Gerät oft über 60 °C) · ✖ dringend (unter 14 Tagen, Arbeitsspeicher in unter 12 Stunden knapp, oft über 70 °C).
 - Der **freie Speicherplatz** der Bildschirme wird erst ab Version 0.2.24 mitgeschrieben; bis dahin steht dort „noch keine Werte“.
+
+## 49. Bild-Wächter: erkennt schwarze und eingefrorene Bildschirme
+*Betrieb → 🩺 Gesundheit*: Ein Bildschirm kann „online“ sein und trotzdem nur Schwarz zeigen oder stehen geblieben sein. Der Hub fragt deshalb **etwa alle 10 Minuten** ein Bild ab (wie die Live-Ansicht) und prüft drei Dinge:
+- **Bild ist schwarz:** zwei Proben hintereinander (also nach etwa 15 bis 20 Minuten), obwohl es Inhalt geben müsste. Das Standby-Bild mit dem Logo zählt nicht als schwarz.
+- **Bild steht still:** Die Liste müsste wechseln, das Bild bleibt aber gleich. Damit es **keine Fehlalarme** gibt, rechnet der Hub je Liste aus, wie viele gleiche Proben praktisch nur bei einem eingefrorenen Bild vorkommen. Das dauert je nach Liste **ein bis vier Stunden**. Bei einer Liste mit nur einem Bild, mit sehr ungleich langen Elementen oder mit Uhr im Bild meldet er das gar nicht.
+- **Wiedergabe steht:** Der Bildschirm meldet seit über 15 Minuten keinen Wechsel mehr (länger bei langen Videos). Das braucht kein Bild und gilt auch für Lite-Bildschirme.
+- Die Meldung erscheint unter *Betrieb → Gesundheit* und auf der Startseite („… zeigt seit etwa 26 Minuten nur Schwarz“). Oft hilft **Neu laden** (Menü „Weitere Aktionen“ am Bildschirm). Die Zeile „🔍 Bild-Wächter“ auf jeder Karte zeigt, wann zuletzt geprüft wurde.
+- **Es werden keine Bilder gespeichert**, nur eine Prüfsumme und die Helligkeit des verkleinerten Bildes. Admins können den Wächter mit dem Haken oben ausschalten.
+- **Grenzen, bitte beachten:** Der Wächter prüft das Bild, das der **Pi** erzeugt – nicht das, was der **Fernseher** zeigt. Ein ausgeschalteter Fernseher oder ein loses HDMI-Kabel bleiben unbemerkt. Lite-Bildschirme und stark ausgelastete Geräte liefern keine Bildproben. Im Wartungsmodus, bei „Anzeige aus“ und an Schließtagen ist der Wächter still. Er ist **noch nicht auf echter Hardware geprüft**.
+
+## 50. Pflege-Erinnerungen
+*Betrieb → 🧰 Pflege*: Ein Raspberry Pi im Dauerbetrieb braucht ab und zu Zuwendung. Der Hub erinnert an drei Aufgaben: **Kühlkörper, Gehäuse und Lüftung reinigen** (alle 12 Monate), **Netzteil und Kabel prüfen** (alle 12 Monate) und **SD-Karte tauschen** (alle 24 Monate).
+- Jede Aufgabe zeigt die Bildschirme, **fällige zuerst**. Mit **✔ Erledigt** (nur Admins) trägst du ein, dass es gemacht wurde (heute oder ein früherer Tag); „Alle fälligen abhaken“ erledigt mehrere auf einmal.
+- Als Ausgangspunkt gilt, was zuletzt eingetragen wurde, sonst das **Einbaudatum** (Bildschirm bearbeiten), sonst der Tag, an dem der Bildschirm verbunden wurde.
+- Fällige Aufgaben erscheinen auf der **Startseite**, eine Zeile je Aufgabe mit den betroffenen Bildschirmen.
+- Admins können die Abstände (1 bis 60 Monate) ändern und Aufgaben ausschalten („Abstände ändern“).
+- Das ist eine **Erinnerung, keine Messung**: Der Hub weiß nicht, ob wirklich geputzt wurde.
+
+## 51. Einschübe (Menü 📌 Einschübe)
+Eine Folie erscheint regelmäßig zwischendurch, zum Beispiel **„alle 5 Minuten das Sponsor-Logo für 10 Sekunden“**, ohne dass du sie in jede Abspielliste einzeln einbauen musst.
+- Du wählst ein Bild, Video oder eine Folie, den **Abstand** (1 bis 240 Minuten), die **Dauer** (3 bis 120 Sekunden), **wo** (alle Bildschirme, eine Gruppe oder ein Bildschirm) und auf Wunsch einen **Zeitraum**. Ein Einschub darf höchstens die **Hälfte der Zeit** belegen.
+- Der Bildschirm schiebt ihn **zwischen zwei Elementen** ein und setzt die Liste danach an der unterbrochenen Stelle fort. Der Abstand ist daher ungefähr (ein Video läuft immer zu Ende). Das **funktioniert auch ohne Hub**, und jede Einblendung zählt im Wiedergabe-Nachweis mit.
+- **Nicht** erscheint er während einer Notfall-Meldung, eines Tor-Jubels, einer Hand-Aktion (zum Beispiel Präsentation), in der Wartung und an Schließtagen. Der erste Einschub kommt nach einer vollen Wartezeit.
+- **Nur Bildschirme ab Version 0.2.26** zeigen Einschübe (ältere würden den Plan ablehnen). Die Karte sagt, bei wie vielen Bildschirmen das noch aussteht.
+- Redakteure und Admins dürfen Einschübe anlegen (höchstens 20); Konten mit Gruppen-Beschränkung nur für ihre eigenen Gruppen und Bildschirme.
+
+## 52. Etiketten für die Bildschirme drucken
+*Bildschirme → 🏷️ Etiketten drucken* (nur Admins): Für jeden Pi ein Aufkleber mit **Name, Gruppe, kurzer Nummer** (dieselbe Nummer erscheint bei „Diesen Bildschirm erkennen“) und einem **QR-Code**. Scannt die Haustechnik ihn mit dem Handy, öffnet sich die **Live-Ansicht dieses Bildschirms** (nach der Anmeldung).
+- Du wählst die Bildschirme und die Größe (21 Etiketten je A4-Seite oder 8 große). Eine eigene Zeile, zum Beispiel „Störung? Haustechnik Tel. 123“, wird auf jedem Etikett gedruckt und in diesem Browser gemerkt. Gedruckt wird mit dem Druckknopf oder Strg+P.
+- Der QR-Code enthält die **Adresse, unter der du die Verwaltung gerade geöffnet hast**. Bekommt der Hub später eine andere Adresse, müssen die Etiketten neu gedruckt werden.
+- Auf Etikettenbögen müssen eventuell die Seitenränder im Druckdialog angepasst werden. Auf normalem Papier ausdrucken und ausschneiden geht immer.

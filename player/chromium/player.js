@@ -1,9 +1,10 @@
 // Playerseite (Chromium). Wertet den lokal gespeicherten Plan selbst aus – funktioniert
 // auch bei Hub- und WLAN-Ausfall. Dieselbe Logik wie die Tests (shared/sequencer.js).
-import { resolvePlaylist, playableItems } from '/shared/sequencer.js';
+import { resolvePlaylist, playableItems, dueInsert, insertItem } from '/shared/sequencer.js';
 
 const stage = document.getElementById('stage'), overlay = document.getElementById('overlay'), shareBox = document.getElementById('share'), shareImg = shareBox.querySelector('img');
 let plan = null, manifest = null, health = {}, gen = 0, front = null;
+const lastIns = new Map(); // Einschübe: letzte Einblendung je Einschub
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const j = (u) => fetch(u, { cache: 'no-store' }).then((r) => r.json());
 
@@ -51,10 +52,13 @@ async function main() {
   let idx = 0, lastPl = null;
   for (;;) {
     const now = Date.now(), r = resolvePlaylist(plan, now); document.body.classList.toggle('black', !!health.displayOff || r.off === true);
-    const { items } = playableItems(plan, r.playlistId, manifest, { profile: health.profile ?? 'standard', now, have: (m) => (health.cached ?? []).includes(m.id) }); // noch nicht geladene Medien werden übersprungen
+    const have = (m) => (health.cached ?? []).includes(m.id), profile = health.profile ?? 'standard';
+    const { items } = playableItems(plan, r.playlistId, manifest, { profile, now, have }); // noch nicht geladene Medien werden übersprungen
     if (r.playlistId !== lastPl) { idx = 0; lastPl = r.playlistId; }
     if (!items.length) { await show(standby(), 'fade'); await sleep(5000); continue; }
-    const item = items[idx % items.length]; idx++;
+    let item; const due = dueInsert(plan, r, now, lastIns); if (due) lastIns.set(due.id, now);
+    const ins = due ? insertItem(due, manifest, { profile, now, have }) : null; // Einschub: nach dem Einblenden geht es mit dem unterbrochenen Element weiter
+    if (ins) item = ins; else { item = items[idx % items.length]; idx++; }
     const node = build(item); await show(node, item.transition);
     const nx = items[idx % items.length]; fetch('/status', { method: 'POST', body: JSON.stringify({ current: { mediaId: item.mediaId, name: item.name, kind: item.kind, duration: item.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null }) }).catch(() => {});
     let ms = item.duration * 1000;

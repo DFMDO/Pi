@@ -34,3 +34,5 @@ eine falsche Version beenden die Verbindung (Code 1008). Hub und Player nutzen d
 1. `POST /api/v1/pair/challenge` → `{ nonce }` (60 s gültig, einmalig)
 2. `POST /api/v1/pair/request` mit `deviceId, name, model, profile, hw, secretHash, hmac` — `hmac = HMAC-SHA256(Code, SPKI | deviceId | nonce | secretHash)`; der Code selbst geht nie über das Netz
 3. Admin bestätigt im Hub → `POST /api/v1/pair/status {deviceId, secret}` liefert **einmalig** das Geräte-Token (nur als SHA-256 im Hub gespeichert)
+
+**Seit 0.2.26:** `schedule_update` kann das Feld `inserts` enthalten (Liste von `{ id, mediaId, everyS, seconds, validFrom?, validTo? }`). Der Hub sendet es nur an Bildschirme, die in ihrem Heartbeat `version` ≥ 0.2.26 melden, weil ältere Agenten Nachrichten mit unbekannten Feldern ablehnen.

@@ -73,3 +73,9 @@ TLS-Schlüssel, Hub-Master-Schlüssel, Geräte-ID, Hostname, machine-id, Hotspot
 - **Regeln** ändern, was Bildschirme zeigen, ohne dass jemand klickt. Deshalb: nur Admins und Redakteure dürfen sie anlegen (Recht `scenes.write`), jede Änderung und jeder Start/Ende steht im Protokoll (`regel.*`), und sie haben den **niedrigsten Rang** – Notfall-Meldung, Tor-Jubel und Hand-Aktionen gehen vor. Ihre Übersteuerung läuft nur 15 Minuten und wird verlängert: Fällt der Hub aus, endet sie von selbst. Fehlen Daten, löst nichts aus (fail-safe).
 - **Tor-Jubel** kann nie eine Notfall-Meldung verdecken (Rang und eigene Prüfung) und läuft höchstens 60 Sekunden.
 - Neue ausgehende Verbindungen: keine (api.openligadb.de und der Kalender-Server waren schon Ziele der Apps; weiterhin nur lesend, mit den Schutzgrenzen aus `net.js`).
+
+## Version 0.2.26
+- **Bild-Wächter:** nutzt den vorhandenen Screenshot-Befehl (kein neuer Port, keine neue Nachricht); Bilder werden nur im Arbeitsspeicher verkleinert und verworfen (nur Prüfsumme und Helligkeit bleiben). Admins können ihn abschalten (`PUT /api/v1/watch`, Protokoll).
+- **Einschübe** ändern, was Bildschirme zeigen: Recht `schedules.write` (Redakteure und Admins, mit Gruppen-Beschränkung), Protokoll `einschub.*`, höchstens 20, belegen höchstens die Hälfte der Zeit und erscheinen nie während Notfall-Meldung, Tor-Jubel oder Hand-Aktionen.
+- **Pflege:** Abhaken nur durch Admins (`devices.manage`), Protokoll `pflege.erledigt`.
+- **Planfeld `inserts`:** wird nur an Bildschirme ab 0.2.26 gesendet (Protokoll lehnt unbekannte Felder ab).

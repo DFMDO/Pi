@@ -39,3 +39,8 @@ Alle Geräte starten selbstständig. Player warten geduldig auf den Hub (ohne Fe
 ## Live-Spiel, Regeln, Prognose (seit 0.2.24)
 - Es entstehen **keine Besucherdaten**. Gespeichert werden Spielstände (Nummer des letzten gemeldeten Tors, 14 Tage), Regeln (Name, Bedingungen, Inhalt, Ersteller als Konto-Nummer) und der freie Speicherplatz der Geräte im Messwerte-Verlauf (14 Tage).
 - Die Live-App fragt nur Liga und Spieltag bei api.openligadb.de ab, der Kalender wird von der eigenen Adresse gelesen. Es werden keine personenbezogenen Daten gesendet.
+
+## Bild-Wächter, Pflege, Einschübe (seit 0.2.26)
+- **Bild-Wächter:** Der Hub fragt etwa alle 10 Minuten ein Bild vom Bildschirm ab (wie die Live-Ansicht). Gespeichert werden **keine Bilder**, nur eine Prüfsumme, die Helligkeit des verkleinerten Bildes und das Ergebnis je Bildschirm. Auf den Bildschirmen sind nur die Inhalte der Anzeige zu sehen, keine Besucher (es gibt keine Kameras).
+- **Pflege:** Je Bildschirm und Aufgabe das Datum des Abhakens und der Name des abhakenden Kontos.
+- **Einschübe:** Name, Medium, Abstand, Dauer und Bereich.

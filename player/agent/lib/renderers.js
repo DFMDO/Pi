@@ -4,7 +4,7 @@ import { spawn, execFile } from 'node:child_process';
 import net from 'node:net';
 import { dirname } from 'node:path';
 import { totalmem } from 'node:os';
-import { resolvePlaylist, playableItems } from '../../../shared/sequencer.js';
+import { resolvePlaylist, playableItems, dueInsert, insertItem } from '../../../shared/sequencer.js';
 import { zonesFor, RES } from './zones.js';
 
 function supervise(start, log) {
@@ -38,6 +38,7 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
   net: netLib = net, spawnFn = spawn, reconnectMs = 1000 }) {
   const sup = supervise(() => spawnFn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--msg-level=all=warn', '--keep-open=no',
     '--image-display-duration=inf', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', '--osd-font-size=42', `--video-rotate=${getRotation()}`], { stdio: ['ignore', 'ignore', 'inherit'] }), log); // Fehlermeldungen von mpv ins Journal des Agents
+  const lastIns = new Map(); let advance = true; // Einschübe: letzte Einblendung je Einschub; nach einem Einschub geht es mit dem unterbrochenen Element weiter (kein Vorrücken)
   let sock = null, idx = 0, timer = null, current = null, stopped = false, shown = null, zoneKey = null, zoneTimer = null, zoneOn = false, sharing = false;
   const send = (cmd) => { try { sock?.write(JSON.stringify({ command: cmd }) + '\n'); } catch {} };
   // Eine Datei nur dann neu laden, wenn sie sich ändert: Das ständige Neuladen desselben Bilds (Standby alle 5 s) ließ mpv im Pilot auf 522 MB wachsen.
@@ -61,12 +62,12 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
   function pick() {
     const plan = getPlan(), t = now(), r = resolvePlaylist(plan, t);
     const { items } = playableItems(plan, r.playlistId, getManifest(), { profile, now: t, have: (m) => haveFile(m) });
-    return { r, items };
+    return { r, items, plan, t };
   }
   function tick() { // aktuelles Element starten
     clearTimeout(timer); if (stopped) return;
     if (sharing) { timer = setTimeout(tick, 2000); return; } // Bildschirm teilen: der Plan pausiert
-    const { r, items } = pick(); const hs = getHealth();
+    const { r, items, plan, t } = pick(); const hs = getHealth();
     // Vorgerenderte Bilder statt Browser-Seiten (Lite hat keinen Browser): Uhrzeit, Warten auf Bestätigung, Hilfe, Standby
     const special = hs.pairing ? 'wartet' : hs.timeSynced === false ? 'uhrzeit' : (hs.offlineSince && Date.now() - hs.offlineSince > 24 * 3600e3 && hs.cacheEmpty) ? 'hilfe' : null;
     if (hs.displayOff) { show('/usr/share/dfm/schwarz.png'); timer = setTimeout(tick, 5000); return; }
@@ -76,13 +77,14 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
       if (!special && hs.isHub && hs.addresses?.length) send(['show-text', `Verwaltung im Browser öffnen:\n${hs.addresses.map((a) => 'https://' + a).join('\n')}`, 5500]);
       timer = setTimeout(tick, 5000); return;
     }
-    idx %= items.length; current = items[idx];
-    show(fileOf(current), current.kind === 'video'); const nx = items[(idx + 1) % items.length]; onShow({ current: { mediaId: current.mediaId, name: current.name, kind: current.kind, duration: current.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null });
+    const due = dueInsert(plan, r, t, lastIns); let ins = null; if (due) { lastIns.set(due.id, t); ins = insertItem(due, getManifest(), { profile, now: t, have: (m) => haveFile(m) }); }
+    advance = !ins; if (ins) current = ins; else { idx %= items.length; current = items[idx]; }
+    show(fileOf(current), current.kind === 'video'); const nx = items[(ins ? idx : idx + 1) % items.length]; onShow({ current: { mediaId: current.mediaId, name: current.name, kind: current.kind, duration: current.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null });
     let wait = current.kind === 'video' ? (current.durationS ?? 30) * 1000 + 3000 : current.duration * 1000; // Video: end-file löst weiter, Timer nur als Sicherung
     if (r.until) wait = current.kind === 'video' ? wait : Math.min(wait, Math.max(0, r.until - now())); // Bild endet spätestens an der Terminkante; Video wird zu Ende gespielt
     timer = setTimeout(() => { next(); }, Math.max(500, wait));
   }
-  function next() { idx++; tick(); }
+  function next() { if (advance) idx++; tick(); }
   const osd = (text, ms) => send(['show-text', text, ms]);
   // Laufband, Uhr, Infozone (nur wenn der Hub für diesen Bildschirm ein Layout vorgibt): einfache Einblendung statt Webseite, siehe zones.js.
   // Nicht bei gedrehtem Bildschirm (die Einblendung würde nicht mitgedreht) und nicht auf den Hinweisbildern (Warten, Uhrzeit, Hilfe).

@@ -18,10 +18,11 @@ import { grundrissPage } from './pages/grundriss.js';
 import { appsPage } from './pages/apps.js';
 import { hubErsatzPage } from './pages/ersatz.js';
 import { regelnPage } from './pages/regeln.js';
+import { einschuebePage } from './pages/einschuebe.js';
 
 const app = document.getElementById('app');
 const NAV = [['#/', 'Startseite', '🏠', homePage], ['#/live', 'Live', '📺', livePage], ['#/bildschirme', 'Bildschirme', '🖥️', devicesPage], ['#/grundriss', 'Grundriss', '🗺️', grundrissPage], ['#/medien', 'Bilder & Videos', '🖼️', mediaPage], ['#/listen', 'Abspiellisten', '▶️', playlistsPage],
-  ['#/kalender', 'Kalender', '📅', calendarPage], ['#/szenen', 'Szenen', '🎬', scenesPage], ['#/regeln', 'Regeln', '🤖', regelnPage], ['#/apps', 'Apps', '🧩', appsPage], ['#/betrieb', 'Betrieb', '🩺', betriebPage], ['#/hilfe', 'Hilfe', '❓', helpPage]];
+  ['#/kalender', 'Kalender', '📅', calendarPage], ['#/szenen', 'Szenen', '🎬', scenesPage], ['#/regeln', 'Regeln', '🤖', regelnPage], ['#/einschuebe', 'Einschübe', '📌', einschuebePage], ['#/apps', 'Apps', '🧩', appsPage], ['#/betrieb', 'Betrieb', '🩺', betriebPage], ['#/hilfe', 'Hilfe', '❓', helpPage]];
 const ADMIN = [['#/benutzer', 'Benutzer', '👥', usersPage, 'users.manage'], ['#/protokoll', 'Protokoll', '📜', auditPage, 'audit.read'], ['#/hub-ersatz', 'Hub ersetzen', '🛟', hubErsatzPage, 'backup.manage'], ['#/einstellungen', 'Erweitert', '⚙️', settingsPage, 'settings.manage']];
 
 async function boot() {

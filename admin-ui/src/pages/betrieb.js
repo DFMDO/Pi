@@ -5,6 +5,7 @@ import { layoutPanel } from './tools.js';
 import { lineChart } from './charts.js';
 import { playsView } from './nachweis.js';
 import { prognoseView } from './prognose.js';
+import { pflegeView } from './pflege.js';
 
 const dur = (s) => (s < 90 ? `${s} Sekunden` : s < 5400 ? `${Math.round(s / 60)} Minuten` : s < 172800 ? `${Math.round(s / 3600)} Stunden` : `${Math.round(s / 86400)} Tage`);
 const bars = (n) => h('span', { class: 'sigbars', 'aria-hidden': 'true' }, [1, 2, 3, 4].map((i) => h('i', { class: i <= n ? 'on' : '' })));
@@ -13,18 +14,21 @@ const spark = (series) => { const pts = series.map((p) => p.dbm).filter((x) => x
 
 export async function betriebPage({ route }) {
   let tab = 'gesundheit'; const root = h('div', {}, h('h1', {}, 'Betrieb'), h('p', { class: 'lead' }, 'Geht es den Bildschirmen gut? Hier siehst du Warnungen, Empfang und den Wochenbericht.')), tabs = h('div', { class: 'row', role: 'tablist' }), view = h('div', {});
-  const TABS = [['gesundheit', '🩺 Gesundheit'], ['verlauf', '📈 Verlauf'], ['prognose', '🔮 Prognose'], ['verbindung', '🔌 Verbindung'], ['empfang', '📶 WLAN-Empfang'], ['bericht', '📄 Wochenbericht'], ['layout', '🧱 Laufband & Zonen'], ['wiedergabe', '🎞️ Wiedergabe']];
+  const TABS = [['gesundheit', '🩺 Gesundheit'], ['verlauf', '📈 Verlauf'], ['prognose', '🔮 Prognose'], ['pflege', '🧰 Pflege'], ['verbindung', '🔌 Verbindung'], ['empfang', '📶 WLAN-Empfang'], ['bericht', '📄 Wochenbericht'], ['layout', '🧱 Laufband & Zonen'], ['wiedergabe', '🎞️ Wiedergabe']];
   const show = async () => { tabs.replaceChildren(...TABS.map(([k, t]) => h('button', { class: 'chip', role: 'tab', 'aria-pressed': tab === k, onclick: () => { tab = k; show(); } }, t)));
-    view.replaceChildren(h('p', {}, 'Wird geladen …')); try { view.replaceChildren(await { gesundheit: health, verlauf: history, prognose: prognoseView, verbindung: connection, empfang: reception, bericht: report, layout: layoutPanel, wiedergabe: playsView }[tab](route)); } catch (e) { view.replaceChildren(h('div', { class: 'notice bad' }, e.message)); } };
+    view.replaceChildren(h('p', {}, 'Wird geladen …')); try { view.replaceChildren(await { gesundheit: health, verlauf: history, prognose: prognoseView, pflege: pflegeView, verbindung: connection, empfang: reception, bericht: report, layout: layoutPanel, wiedergabe: playsView }[tab](route)); } catch (e) { view.replaceChildren(h('div', { class: 'notice bad' }, e.message)); } };
   root.append(tabs, view); await show(); return root;
 }
 
+const WATCH = { ok: ['✔', 'Bild in Ordnung'], schwarz: ['✖', 'Bild ist schwarz'], steht: ['▲', 'Bild steht still'], wiedergabe_steht: ['▲', 'Wiedergabe steht'], aus: ['', 'planmäßig aus'], ausgesetzt: ['', 'pausiert (Wartung oder aus)'], unbekannt: ['', 'noch keine Prüfung'] };
 async function health(route) {
-  const hl = await get('/health'); if (!hl.length) return empty('Noch kein Bildschirm', 'Verbinde zuerst einen Bildschirm.');
-  return h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, hl.map((d) => h('article', { class: 'card' }, h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, d.name), h('span', { class: 'sp' }), d.maintenance ? h('span', { class: 'status warn' }, '🔧 Wartung') : statusEl(d.status)),
+  const [hl, wt] = await Promise.all([get('/health'), get('/watch').catch(() => null)]); if (!hl.length) return empty('Noch kein Bildschirm', 'Verbinde zuerst einen Bildschirm.');
+  const watchLine = (d) => (!wt?.enabled ? null : h('p', { class: 'hint' }, `🔍 Bild-Wächter: ${d.watch ? `${(WATCH[d.watch.status] ?? ['', d.watch.status]).join(' ')} (geprüft vor ${Math.max(1, Math.round((Date.now() - d.watch.checkedAt) / 60000))} Min.)` : 'noch keine Prüfung'}${d.watch?.status === 'ok' && d.watch.note && !/in Ordnung/.test(d.watch.note) ? ' – ' + d.watch.note : ''}`));
+  const toggle = wt && can('settings.manage') ? h('label', { class: 'row', style: 'margin-bottom:8px' }, h('input', { type: 'checkbox', checked: wt.enabled, onchange: async (e) => { try { await put('/watch', { enabled: e.target.checked }); toast(e.target.checked ? 'Der Bild-Wächter ist an.' : 'Der Bild-Wächter ist aus.'); } catch (er) { toast(er.message, 'err'); } route(); } }), h('span', {}, ' Bild-Wächter: schwarze oder eingefrorene Bildschirme erkennen (fragt etwa alle 10 Minuten ein Bild ab, speichert keine Bilder)')) : null;
+  return h('div', {}, toggle, h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, hl.map((d) => h('article', { class: 'card' }, h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, d.name), h('span', { class: 'sp' }), d.maintenance ? h('span', { class: 'status warn' }, '🔧 Wartung') : statusEl(d.status)),
     d.warnings.length ? d.warnings.map((w) => h('p', { class: 'notice' + (w.level === 'bad' ? ' bad' : '') }, (w.level === 'bad' ? '✖ ' : '▲ ') + w.text)) : h('p', {}, d.maintenance ? 'Im Wartungsmodus sind Warnungen stumm.' : '✔ Alles in Ordnung.'),
-    d.metrics ? h('p', { class: 'hint' }, `${d.metrics.tempC ?? '–'} °C · frei ${d.metrics.diskFreeMB ?? '–'} MB · Signal ${d.metrics.signalDbm ?? '–'} dBm · Version ${d.metrics.version ?? '–'}`) : null,
-    h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => deviceDlg(d.id, route) }, 'Profil & Verlauf'), can('devices.manage') ? h('button', { class: 'btn sec', onclick: () => commissioning(d.id, d.name, route) }, 'Bildschirm prüfen') : null))));
+    d.metrics ? h('p', { class: 'hint' }, `${d.metrics.tempC ?? '–'} °C · frei ${d.metrics.diskFreeMB ?? '–'} MB · Signal ${d.metrics.signalDbm ?? '–'} dBm · Version ${d.metrics.version ?? '–'}`) : null, watchLine(d),
+    h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => deviceDlg(d.id, route) }, 'Profil & Verlauf'), can('devices.manage') ? h('button', { class: 'btn sec', onclick: () => commissioning(d.id, d.name, route) }, 'Bildschirm prüfen') : null)))));
 }
 
 /** Verlauf: freier Speicher, Temperatur und Last von Hub und Bildschirmen (Lecks und Hitze sieht man als Kurve) */
