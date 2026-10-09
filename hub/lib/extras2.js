@@ -285,6 +285,7 @@ async function extras2Plugin(app, { db, audit, mediaDir, dataDir, variants, now 
   function retentionTick() {
     const s = settings(), t = now(), days = (k, d) => Math.max(1, Number(s[k] ?? d)); let n = 0;
     n += db.prepare('DELETE FROM overrides WHERE COALESCE(ended_at, until) < ?').run(t - days('retention.overrideDays', 30) * DAY).changes;
+    db.prepare('DELETE FROM override_kind WHERE id NOT IN (SELECT id FROM overrides)').run();
     n += db.prepare('DELETE FROM wifi_history WHERE ts < ?').run(t - days('retention.historyDays', 90) * DAY).changes;
     n += db.prepare('DELETE FROM device_events WHERE ts < ?').run(t - days('retention.historyDays', 180) * DAY).changes;
     n += db.prepare("DELETE FROM special_days WHERE source='custom' AND COALESCE(date_to,date) < ?").run(iso(new Date(t - days('retention.overrideDays', 30) * DAY))).changes;

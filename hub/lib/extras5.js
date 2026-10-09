@@ -1,9 +1,14 @@
-// Erweiterung 5: Apps (Wetter, Datum & Öffnungszeiten, Tagesprogramm aus dem Event-Kalender, Nachrichten, Fußball-Spieltag).
+// Erweiterung 5: Apps (Wetter, Datum & Öffnungszeiten, Tagesprogramm aus dem Event-Kalender, Nachrichten, Fußball-Spieltag, Live-Spiel mit Tor-Jubel, Nächster Programmpunkt).
 import { createApps, APP_TYPES } from './apps/index.js';
+import { createJubel } from './jubel.js';
 import { can } from './permissions.js';
 
 async function extras5Plugin(app, { db, audit, variants, now = () => Date.now(), fetchText }) {
-  const apps = createApps({ db, variants, pushAll: () => app.pushAll?.(), now, ...(fetchText ? { fetchText } : {}) });
+  const pushAll = () => app.pushAll?.();
+  const jubel = createJubel({ db, audit, variants, pushAll, now, shareActive: () => (app.share?.active?.() ?? []).length > 0 });
+  // Nach jedem erfolgreichen Abruf: Tor-Jubel prüfen und die Wenn-Dann-Regeln mit den frischen Werten auswerten (app.rules kommt aus regeln.js)
+  const onRun = async (type, { cfg, state }) => { if (type === 'livespiel') jubel.process(cfg, state, now()); if (type === 'wetter' || type === 'livespiel') await app.rules?.tick?.(); };
+  const apps = createApps({ db, variants, pushAll, now, onRun, ...(fetchText ? { fetchText } : {}) });
   app.decorate('apps', apps);
   const A = (req, action, target, detail) => audit.log({ user: req.user, action, target, ip: req.ip, detail });
   const typeSchema = { type: 'object', required: ['type'], properties: { type: { enum: APP_TYPES } } };
@@ -14,6 +19,9 @@ async function extras5Plugin(app, { db, audit, variants, now = () => Date.now(),
     try { apps.save(req.params.type, { enabled: !!req.body.enabled, config }); } catch (e) { return reply.code(e.status ?? 400).send({ error: e.message }); }
     A(req, 'app.gespeichert', req.params.type, { aktiv: !!req.body.enabled });
     return req.body.enabled ? { ok: true, ...(await apps.run(req.params.type)), text: undefined } : { ok: true };
+  });
+  app.post('/api/v1/apps/livespiel/jubel-test', { config: { perm: 'settings.manage' } }, async (req, reply) => {
+    const r = jubel.test(apps.cfgOf('livespiel')); A(req, 'tor_jubel.getestet', null, { ok: r.ok }); return r.ok ? r : reply.code(409).send({ error: r.error });
   });
   app.post('/api/v1/apps/:type/run', { config: { perm: 'settings.manage' }, schema: { params: typeSchema } }, async (req, reply) => {
     try { const r = await apps.run(req.params.type); A(req, 'app.aktualisiert', req.params.type, { ok: r.ok }); return { ...r, text: undefined }; } catch (e) { return reply.code(400).send({ error: e.message }); }

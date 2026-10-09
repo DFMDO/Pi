@@ -150,6 +150,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
         db.prepare('UPDATE devices SET orientation=?, display_json=?, layout_json=?, location=?, floor=?, notes=?, doc_url=?, installed_at=?, serial=NULL, mac=NULL WHERE id=?').run(old.orientation, old.display_json, old.layout_json, old.location, old.floor, old.notes, old.doc_url, new Date(now()).toISOString().slice(0, 10), d.id);
         db.prepare("UPDATE schedules SET target_id=? WHERE target_type='device' AND target_id=?").run(d.id, old.id);
         db.prepare("UPDATE overrides SET target_id=? WHERE scope='device' AND target_id=?").run(d.id, old.id);
+        db.prepare("UPDATE rules SET target_id=? WHERE scope='device' AND target_id=?").run(d.id, old.id);
         db.prepare("UPDATE devices SET status='blocked', token_hash=NULL, name=?, replaced_by=?, group_id=NULL WHERE id=?").run(`${old.name} (ersetzt)`, d.id, old.id);
       })();
       sockets.get(old.id)?.close(4001, 'revoked'); audit.log({ user: req.user, action: 'bildschirm.ersetzt', target: d.id, ip: req.ip, security: true, detail: { alt: old.id } });

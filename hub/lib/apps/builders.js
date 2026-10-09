@@ -29,7 +29,17 @@ export function buildWeather({ hourly, current, nowMs, place }) {
   if (cur?.temperature != null) lines.push(`Jetzt: ${num(Math.round(cur.temperature))} °C, ${describeHour(current?.condition ? current : nowH ?? current)}`);
   const t = dayLine('Heute', by(today)), m = dayLine('Morgen', by(tomorrow)); if (t) lines.push(t); if (m) lines.push(m);
   if (!lines.length) throw new Error('Der Wetterdienst hat keine Daten für diesen Ort geliefert.');
-  return { title: `Wetter in ${place}`, body: lines.join('\n') + '\n\nQuelle: Deutscher Wetterdienst', compact: false };
+  return { title: `Wetter in ${place}`, body: lines.join('\n') + '\n\nQuelle: Deutscher Wetterdienst', compact: false, state: weatherState({ hourly, current, nowMs }) };
+}
+const WET = new Set(['rain', 'sleet', 'snow', 'hail', 'thunderstorm']);
+const precip = (h) => Number(h?.precipitation ?? h?.precipitation_60 ?? h?.precipitation_30 ?? h?.precipitation_10 ?? 0) || 0;
+const wet = (h) => !!h && (WET.has(h.condition) || precip(h) >= 0.1);
+/** Wetterwerte für die Wenn-Dann-Regeln: Temperatur, Regen jetzt, Regen in den nächsten 3 Stunden */
+export function weatherState({ hourly = [], current = null, nowMs }) {
+  const nowH = hourly.reduce((best, h) => (!best || Math.abs(Date.parse(h.timestamp) - nowMs) < Math.abs(Date.parse(best.timestamp) - nowMs) ? h : best), null), cur = current?.temperature != null ? current : nowH;
+  if (!cur) return null;
+  const soon = hourly.filter((h) => { const x = Date.parse(h.timestamp); return x > nowMs && x <= nowMs + 3 * 3600e3; });
+  return { tempC: Number.isFinite(Number(cur.temperature)) ? Number(cur.temperature) : null, rain: wet(current?.condition ? current : nowH), rainSoon: wet(current?.condition ? current : nowH) || soon.some(wet), ts: nowMs };
 }
 
 // ---------------------------------------------------------------- Fußball (OpenLigaDB)
@@ -102,4 +112,84 @@ export function buildOnThisDay(nowMs, { entries = '' } = {}) {
   for (const e of list) { let t = Date.UTC(y, e.m - 1, e.d); if (t < Date.UTC(y, mo - 1, d)) t = Date.UTC(y + 1, e.m - 1, e.d); const dist = (t - Date.UTC(y, mo - 1, d)) / 86400000; if (dist < bestDist) { bestDist = dist; best = e; } }
   const next = list.filter((e) => e.d === best.d && e.m === best.m);
   return { title: `Am ${best.d}. ${MONTHS[best.m - 1]}`, body: next.slice(0, 4).map(line).join('\n\n'), compact: next.length > 2 };
+}
+
+// ---------------------------------------------------------------- Live-Spiel (OpenLigaDB): Spielstand, Tore, Anstoß-Countdown
+const lc = (s) => String(s ?? '').toLowerCase();
+const shortName = (tm) => cut(tm?.shortName || tm?.teamName || '?', 14);
+/** Auf welcher Seite spielt der Lieblingsverein? 1 = Heimmannschaft, 2 = Gast, 0 = gar nicht */
+export function favoriteSide(m, favorite) {
+  const f = lc(favorite).trim(); if (!f) return 0;
+  const has = (tm) => [tm?.teamName, tm?.shortName].some((n) => n && lc(n).includes(f));
+  return has(m.team1) ? 1 : has(m.team2) ? 2 : 0;
+}
+export const MATCH_MAX_MS = 3.5 * 3600e3; // länger als dies nach dem Anstoß gilt ein Spiel als beendet (auch wenn die Datenquelle es noch nicht meldet)
+/** Aus der Antwort von OpenLigaDB ein einheitliches Spiel machen: Tore mit der Mannschaft, die getroffen hat (aus dem Stand abgeleitet, auch Eigentore) */
+export function normalizeMatch(m, nowMs, side = 0) {
+  const kickoff = Date.parse(m.matchDateTimeUTC ?? (m.matchDateTime ? m.matchDateTime + 'Z' : '')); if (!Number.isFinite(kickoff)) return null;
+  const goals = (Array.isArray(m.goals) ? m.goals : []).map((g) => ({ id: Number(g.goalID), s1: Number(g.scoreTeam1), s2: Number(g.scoreTeam2), minute: Number.isFinite(Number(g.matchMinute)) && g.matchMinute != null ? Number(g.matchMinute) : null, scorer: cut(g.goalGetterName ?? '', 24), penalty: !!g.isPenalty, own: !!g.isOwnGoal }))
+    .filter((g) => Number.isFinite(g.id) && Number.isFinite(g.s1) && Number.isFinite(g.s2)).sort((a, b) => a.id - b.id);
+  let prev = [0, 0]; for (const g of goals) { g.team = g.s1 > prev[0] ? 1 : g.s2 > prev[1] ? 2 : 0; prev = [g.s1, g.s2]; } // 0 = Korrektur (Stand ging nicht hoch)
+  const res = (m.matchResults ?? []).find((r) => r.resultTypeID === 2) ?? (m.matchResults ?? []).at(-1);
+  const fromRes = res && Number.isFinite(Number(res.pointsTeam1)) ? [Number(res.pointsTeam1), Number(res.pointsTeam2)] : null, fromGoals = goals.length ? prev : null;
+  const score = fromRes && fromGoals ? (fromGoals[0] + fromGoals[1] > fromRes[0] + fromRes[1] ? fromGoals : fromRes) : fromRes ?? fromGoals ?? (nowMs >= kickoff ? [0, 0] : null);
+  const finished = !!m.matchIsFinished || nowMs > kickoff + MATCH_MAX_MS;
+  return { id: String(m.matchID ?? `${kickoff}`), kickoff, finished, provisional: finished && !m.matchIsFinished, status: finished ? 'finished' : nowMs >= kickoff ? 'live' : 'upcoming', team1: shortName(m.team1), team2: shortName(m.team2), name1: cut(m.team1?.teamName ?? '', 40), name2: cut(m.team2?.teamName ?? '', 40), score, goals, side };
+}
+/** Das Spiel des Lieblingsvereins an diesem Spieltag: laufendes vor kommendem vor beendetem */
+export function pickFavoriteMatch(matches, favorite, nowMs) {
+  const all = (Array.isArray(matches) ? matches : []).map((m) => normalizeMatch(m, nowMs, favoriteSide(m, favorite))).filter((m) => m && m.side);
+  const order = { live: 0, upcoming: 1, finished: 2 };
+  return all.sort((a, b) => order[a.status] - order[b.status] || (a.status === 'finished' ? b.kickoff - a.kickoff : a.kickoff - b.kickoff))[0] ?? null;
+}
+/** Ungefähre Spielminute aus der Anstoßzeit (die Quelle liefert keine laufende Minute): Halbzeit rund um Minute 46 bis 62 */
+export function liveMinute(kickoff, nowMs) {
+  const m = Math.max(0, Math.floor((nowMs - kickoff) / 60000)); if (m <= 45) return { minute: Math.max(1, m), label: `ca. ${Math.max(1, m)}. Minute` };
+  if (m < 62) return { minute: 45, label: m < 48 ? 'ca. 45. Minute (Nachspielzeit)' : 'Halbzeit' };
+  const s = m - 15; return { minute: Math.min(s, 120), label: s <= 90 ? `ca. ${s}. Minute` : s <= 97 ? 'Nachspielzeit' : 'Verlängerung oder Ende' };
+}
+/** „in 25 Min.“ – grob gerundet, damit sich der Text nicht jede Minute ändert (jede Änderung wird an alle Bildschirme verteilt) */
+export function inText(ms) {
+  const min = Math.ceil(ms / 60000); if (min <= 1) return 'jetzt gleich'; if (min <= 15) return `in ${min} Min.`;
+  const r = Math.ceil(min / 5) * 5; if (r < 60) return `in ${r} Min.`; const h = Math.floor(r / 60), mm = r % 60; return mm ? `in ${h} Std. ${mm} Min.` : `in ${h} Std.`;
+}
+const goalLine = (g) => `${g.minute != null ? g.minute + "' " : ''}${g.scorer || 'Tor'} (${g.s1}:${g.s2})${g.penalty ? ' Elfmeter' : ''}${g.own ? ' Eigentor' : ''}`;
+export function buildLive(matches, { favorite = 'Dortmund' } = {}, nowMs = Date.now()) {
+  if (!Array.isArray(matches) || !matches.length) throw new Error('Für diese Liga liegen gerade keine Spiele vor.');
+  const m = pickFavoriteMatch(matches, favorite, nowMs);
+  if (!m) return { title: `Spiel ${cut(favorite, 20)}`, body: `An diesem Spieltag steht kein Spiel von ${cut(favorite, 20)} an.`, compact: false, state: { match: null, ts: nowMs } };
+  const state = { match: { id: m.id, kickoff: m.kickoff, finished: m.finished, side: m.side, team1: m.team1, team2: m.team2, score: m.score, goals: m.goals.map(({ id, team, s1, s2 }) => ({ id, team, s1, s2 })) }, ts: nowMs };
+  const when = new Date(m.kickoff).toLocaleDateString('de-DE', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' }) + ' um ' + epochToLocal(m.kickoff).time + ' Uhr';
+  if (m.status === 'upcoming') return { title: 'Nächstes Spiel', body: `${when}\n${m.name1 || m.team1} – ${m.name2 || m.team2}\n\nAnstoß ${inText(m.kickoff - nowMs)}`, compact: false, state };
+  const [a, b] = m.score ?? [0, 0], lines = m.goals.slice(-5).map(goalLine), head = m.status === 'live' ? `LIVE – ${liveMinute(m.kickoff, nowMs).label}` : m.provisional ? 'Endstand (vorläufig)' : 'Endstand';
+  return { title: `${m.team1} ${a}:${b} ${m.team2}`, body: `${head}\n\n${lines.length ? lines.join('\n') : m.status === 'live' ? 'Noch kein Tor.' : 'Keine Tore.'}`, compact: lines.length > 3, state };
+}
+/** Wie oft soll die App fragen? Rund um das Spiel jede Minute, sonst selten (schont die kostenlose Datenquelle) */
+export function liveIntervalMin(state, nowMs) {
+  const m = state?.match; if (!m) return 15;
+  const live = !m.finished && nowMs >= m.kickoff && nowMs <= m.kickoff + MATCH_MAX_MS;
+  if (live || (!m.finished && m.kickoff - nowMs <= 15 * 60000 && m.kickoff > nowMs)) return 1;
+  if (!m.finished && m.kickoff > nowMs && m.kickoff - nowMs <= 3 * 3600e3) return 5;
+  return 15;
+}
+
+// ---------------------------------------------------------------- Nächster Programmpunkt (Event-Kalender) mit Countdown, je Raum eine Folie
+export function parseRooms(s) { return [...new Set(String(s ?? '').split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean))].slice(0, 8); }
+export function buildNext(ics, nowMs, { title = 'Als Nächstes', rooms = '', maxItems = 3 } = {}) {
+  const evs = parseIcs(ics), today = epochToLocal(nowMs).date, tomorrow = addDays(today, 1);
+  const all = [...eventsOnDate(evs, today), ...eventsOnDate(evs, tomorrow)].filter((e) => !e.allDay).sort((a, b) => a.start - b.start);
+  const list = parseRooms(rooms), keys = list.length ? list : [''];
+  const slides = keys.map((room) => {
+    const f = room.toLowerCase(), mine = room ? all.filter((e) => e.location.toLowerCase().includes(f)) : all;
+    const line = (e) => `${epochToLocal(e.start).time} Uhr  ${cut(e.title, 60)}${!room && e.location ? ` (${cut(e.location, 24)})` : ''}`;
+    const running = mine.filter((e) => e.start <= nowMs && nowMs < e.end), upcoming = mine.filter((e) => e.start > nowMs), out = [];
+    if (running.length) out.push(`Läuft gerade (noch ${running[0].end - nowMs <= 60000 ? '1 Min.' : inText(running[0].end - nowMs).replace(/^in /, '')}):\n${line(running[0])}`);
+    if (upcoming.length) {
+      const first = upcoming[0], sameDay = epochToLocal(first.start).date === today;
+      out.push(`Als Nächstes ${sameDay ? inText(first.start - nowMs) : `morgen um ${epochToLocal(first.start).time} Uhr`}:\n${sameDay ? line(first) : cut(first.title, 60)}`);
+      const rest = upcoming.slice(1, Math.max(1, maxItems)).filter((e) => epochToLocal(e.start).date === epochToLocal(first.start).date); if (rest.length) out.push(`Danach:\n${rest.map(line).join('\n')}`);
+    } else if (!running.length) out.push('Heute gibt es hier keine weiteren Programmpunkte.');
+    return { key: room, title: room ? `${title} · ${cut(room, 24)}` : title, body: out.join('\n\n'), compact: out.join('\n').split('\n').length > 7 };
+  });
+  return { slides, state: null };
 }

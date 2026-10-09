@@ -97,3 +97,13 @@ RAM, CPU, WLAN-Durchsatz, Startzeit nach jeder größeren Änderung mit `tools/d
 | E22 | Laufband und Uhr auf einem mpv-Bildschirm (Pi 3, 1080p) | Leiste unten, Uhr geht richtig, Video wird nicht verdeckt, CPU-Last/Temperatur nicht merklich höher; mit `--vo=drm` sichtbar | ☐ |
 | E23 | Bildschirm teilen auf einen Browser-Bildschirm und auf einen mpv-Bildschirm (Folien) | Verzögerung < 1 s (Browser) bzw. ca. 1 Bild/s (mpv), kein Flackern; nach „Beenden“ sofort Plan | ☐ |
 | E24 | Teilen, während ein Präsentations-Vollbildfenster die Verwaltungsseite verdeckt (≥ 10 Min.) | Übertragung läuft gleichmäßig weiter (Worker wird nicht gedrosselt) | ☐ |
+
+## Version 0.2.24 – Neue Funktionen auf dem Pi prüfen
+| # | Prüfung | Soll | Pi 3 B+ |
+|---|---|---|---|
+| E25 | „Tor-Jubel testen“ (Apps) bei Browser- UND mpv-Bildschirm, 20 s | grünes „TOR!“ erscheint in < 3 s (mpv: Bild war vorab geladen), nach 20 s zurück zum Plan; bei laufendem Video kein Hängen | ☐ |
+| E26 | Echter Spieltag mit Live-App: Tor des Vereins beobachten | Jubel kommt, aber verzögert (OpenLigaDB: oft 1–2 Min.); kein Doppel-Jubel; Gegentor ohne Jubel | ☐ |
+| E27 | Regel „Bei Regen“ mit echtem Wetter (oder Test mit Bedingung „mehr als … °C“) | Anzeige wechselt, nach Ende der Bedingung ca. 2 Min. später zurück; Hub vom Strom nehmen → nach ≤ 15 Min. zeigen die Bildschirme wieder den Plan | ☐ |
+| E28 | Regel während einer Hand-Aktion und während einer Notfall-Meldung | Hand-Aktion/Notfall bleiben sichtbar, danach Rückkehr zur Regel | ☐ |
+| E29 | „Nächster Programmpunkt“ mit dem echten Kalender (Räume = Orte der Termine) | Countdown stimmt mit der Uhr; je Bildschirm das richtige Programm; Änderung im Kalender erscheint nach ≤ 5 Min. | ☐ |
+| E30 | Prognose nach ≥ 24 Stunden Betrieb (Hub + Bildschirme) | Werte plausibel (freier Platz, Temperatur); keine falschen Alarme | ☐ |

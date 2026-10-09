@@ -29,3 +29,15 @@ test('playableItems: überspringt Ungültiges, Fehlendes, Nicht-Darstellbares', 
   assert.ok(lite.items.every((i) => i.transition === 'cut'), 'Lite: nur harter Schnitt');
   assert.deepEqual(playableItems(plan, 'sommer', manifest, { profile: 'standard', now, have: (m) => m.id !== 'v' }).items.map((i) => i.mediaId), ['a', 't']);
 });
+
+test('Übersteuerungen: feste Rangfolge Notfall > Tor-Jubel > Hand > Regel; Regeln untereinander nach Wichtigkeit; ohne Art wie bisher (alter Hub)', () => {
+  const ov = (id, extra = {}) => ({ id, scope: 'device', playlistId: id, until: 9e12, createdAt: 1, ...extra });
+  const pick = (...overrides) => resolvePlaylist({ segments: [], playlists: {}, defaultPlaylistId: 'def', overrides }, 1000).playlistId;
+  assert.equal(pick(ov('regel', { kind: 'regel', scope: 'all', createdAt: 9 }), ov('hand')), 'hand');
+  assert.equal(pick(ov('hand', { scope: 'all', createdAt: 9 }), ov('tor', { kind: 'tor' })), 'tor');
+  assert.equal(pick(ov('tor', { kind: 'tor', scope: 'all', createdAt: 9 }), ov('notfall', { kind: 'notfall' })), 'notfall');
+  assert.equal(pick(ov('a', { kind: 'regel', prio: 3, scope: 'all', createdAt: 9 }), ov('b', { kind: 'regel', prio: 7 })), 'b');
+  assert.equal(pick(ov('alt1', { createdAt: 1 }), ov('alt2', { createdAt: 2 })), 'alt2', 'ohne Art: neueste gewinnt, wie in Version 0.2.23');
+  assert.equal(pick(ov('alt1', { createdAt: 5 }), ov('alt2', { scope: 'all', createdAt: 2 })), 'alt2', 'ohne Art: „alle“ vor einzelnem Bildschirm, wie bisher');
+  assert.equal(pick(ov('abgelaufen', { kind: 'notfall', until: 500 }), ov('hand')), 'hand', 'abgelaufene zählen nicht');
+});

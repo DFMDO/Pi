@@ -22,6 +22,8 @@ import alertsPlugin from './lib/alerts.js';
 import teilenPlugin from './lib/teilen.js';
 import nachweisPlugin, { createPlays } from './lib/nachweis.js';
 import { createMetrics } from './lib/metrics.js';
+import prognosePlugin from './lib/prognose.js';
+import regelnPlugin from './lib/regeln.js';
 import systemPlugin from './lib/system.js';
 import { createVariantQueue } from './lib/variants.js';
 import { createLimiter } from './lib/ratelimit.js';
@@ -68,7 +70,7 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   await app.register(authPlugin, { db, key, audit, now });
   const variants = createVariantQueue({ db, mediaDir, onChange: () => app.pushAll?.() });
   app.decorate('variants', variants);
-  const metrics = createMetrics({ db, now });
+  const metrics = createMetrics({ db, now, dataDir });
   const plays = createPlays({ db, now });
   await app.register(devicesPlugin, { db, key, audit, tls, dataDir, mediaDir, hubInfo: hubInfo ?? (() => ({ host: 'dfm-signage.local' })), metrics, plays, now });
   await app.register(contentPlugin, { db, audit, mediaDir, variants, now });
@@ -77,6 +79,8 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   await app.register(extras3Plugin, { db, audit, mediaDir, now });
   await app.register(extras4Plugin, { db, audit, mediaDir, metrics, now });
   await app.register(extras5Plugin, { db, audit, variants, now, fetchText });
+  await app.register(regelnPlugin, { db, audit, now });
+  await app.register(prognosePlugin, { db, now });
   await app.register(extras6Plugin, { db, audit, variants, now });
   await app.register(notfallPlugin, { db, audit, variants, now });
   await app.register(nachweisPlugin, { db, now });

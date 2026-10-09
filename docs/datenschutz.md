@@ -35,3 +35,7 @@ Alle Geräte starten selbstständig. Player warten geduldig auf den Hub (ohne Fe
 - **Wiedergabe-Nachweis:** Gespeichert werden nur Zähler je Tag, Bildschirm und Medium (Anzahl, Sekunden, Medienname). Es gibt **keine** Besucherdaten und keine Personenbezüge. Aufbewahrung 400 Tage, danach automatische Löschung. Konten mit Gruppen-Beschränkung sehen nur ihre Bildschirme.
 - **Ausfall-Mails:** Gespeichert werden Mailserver, Absender und Empfänger-Adressen (Personenbezug möglich: bitte Funktionsadressen wie it@… nutzen) sowie das Passwort **verschlüsselt**. Die Mails enthalten Bildschirmnamen und Zeiten, sonst nichts.
 - **Bildschirm teilen:** Die Bilder werden nur durchgereicht und **nicht gespeichert**. Im Protokoll stehen Name, Zeit und Bildschirme der Übertragung. Wer teilt, entscheidet selbst, was auf dem PC sichtbar ist: Bitte keine Fenster mit vertraulichen Inhalten (E-Mails, Personaldaten) teilen. Auf den Bildschirmen im Besucherbereich sieht das jeder.
+
+## Live-Spiel, Regeln, Prognose (seit 0.2.24)
+- Es entstehen **keine Besucherdaten**. Gespeichert werden Spielstände (Nummer des letzten gemeldeten Tors, 14 Tage), Regeln (Name, Bedingungen, Inhalt, Ersteller als Konto-Nummer) und der freie Speicherplatz der Geräte im Messwerte-Verlauf (14 Tage).
+- Die Live-App fragt nur Liga und Spieltag bei api.openligadb.de ab, der Kalender wird von der eigenen Adresse gelesen. Es werden keine personenbezogenen Daten gesendet.

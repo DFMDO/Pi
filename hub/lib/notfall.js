@@ -41,8 +41,9 @@ async function notfallPlugin(app, { db, audit, variants, now = () => Date.now() 
     if (!m) { m = randomUUID(); db.prepare("INSERT INTO media(id,name,kind,text_json,folder,created_by,created_at) VALUES(?,?,'text',?,'Notfall',?,?)").run(m, `Notfall: ${title}`.slice(0, 100), json, req.user.id, t); }
     const id = randomUUID();
     db.transaction(() => {
-      db.prepare('UPDATE overrides SET ended_at=? WHERE ended_at IS NULL AND until>?').run(t, t); // alles andere (auch Szenen) endet
+      db.prepare("UPDATE overrides SET ended_at=? WHERE ended_at IS NULL AND until>? AND id NOT IN (SELECT id FROM override_kind WHERE kind IN ('regel','tor'))").run(t, t); // alles andere (auch Szenen) endet; Regeln/Tor-Jubel verlieren in der Rangfolge ohnehin
       db.prepare('INSERT INTO overrides VALUES(?,?,?,?,?,?,?,?,?,?,?,NULL)').run(id, 'all', null, 'media', m, null, NOTFALL_LABEL, req.user.id, req.user.name, t, until);
+      db.prepare("INSERT INTO override_kind(id,kind) VALUES(?, 'notfall')").run(id);
     })();
     app.share?.stopAll?.('Notfall-Meldung'); // geteilte Bildschirme enden: die Meldung darf nie verdeckt werden
     variants?.ensureAll(); A(req, 'notfall.gestartet', id, { text: title, bis: new Date(until).toISOString() }); app.pushAll();

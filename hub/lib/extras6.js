@@ -12,6 +12,9 @@ async function extras6Plugin(app, { db, audit, variants, now = () => Date.now() 
     for (const r of db.prepare("SELECT content_id FROM overrides WHERE content_type='media' AND ended_at IS NULL AND until > ?").all(now())) used.add(r.content_id);
     for (const r of db.prepare("SELECT content_id FROM special_days WHERE content_type='media' AND content_id IS NOT NULL").all()) used.add(r.content_id);
     for (const r of db.prepare('SELECT media_id FROM apps WHERE media_id IS NOT NULL').all()) used.add(r.media_id);
+    for (const r of db.prepare('SELECT media_id FROM app_slides').all()) used.add(r.media_id);
+    const tor = db.prepare("SELECT value FROM settings WHERE key='live.torMediaId'").get()?.value; if (tor) used.add(tor);
+    for (const r of db.prepare("SELECT content_id FROM rules WHERE content_type='media'").all()) used.add(r.content_id);
     const blobs = [...db.prepare('SELECT items_json j FROM scenes').all(), ...db.prepare('SELECT items_json j FROM week_templates').all(), ...db.prepare('SELECT fields_json j FROM templates').all()].map((r) => r.j).join('\n');
     return { used, blobs };
   }

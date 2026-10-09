@@ -4,6 +4,7 @@ import { get, post, put, can } from '../api.js';
 import { layoutPanel } from './tools.js';
 import { lineChart } from './charts.js';
 import { playsView } from './nachweis.js';
+import { prognoseView } from './prognose.js';
 
 const dur = (s) => (s < 90 ? `${s} Sekunden` : s < 5400 ? `${Math.round(s / 60)} Minuten` : s < 172800 ? `${Math.round(s / 3600)} Stunden` : `${Math.round(s / 86400)} Tage`);
 const bars = (n) => h('span', { class: 'sigbars', 'aria-hidden': 'true' }, [1, 2, 3, 4].map((i) => h('i', { class: i <= n ? 'on' : '' })));
@@ -12,9 +13,9 @@ const spark = (series) => { const pts = series.map((p) => p.dbm).filter((x) => x
 
 export async function betriebPage({ route }) {
   let tab = 'gesundheit'; const root = h('div', {}, h('h1', {}, 'Betrieb'), h('p', { class: 'lead' }, 'Geht es den Bildschirmen gut? Hier siehst du Warnungen, Empfang und den Wochenbericht.')), tabs = h('div', { class: 'row', role: 'tablist' }), view = h('div', {});
-  const TABS = [['gesundheit', '🩺 Gesundheit'], ['verlauf', '📈 Verlauf'], ['verbindung', '🔌 Verbindung'], ['empfang', '📶 WLAN-Empfang'], ['bericht', '📄 Wochenbericht'], ['layout', '🧱 Laufband & Zonen'], ['wiedergabe', '🎞️ Wiedergabe']];
+  const TABS = [['gesundheit', '🩺 Gesundheit'], ['verlauf', '📈 Verlauf'], ['prognose', '🔮 Prognose'], ['verbindung', '🔌 Verbindung'], ['empfang', '📶 WLAN-Empfang'], ['bericht', '📄 Wochenbericht'], ['layout', '🧱 Laufband & Zonen'], ['wiedergabe', '🎞️ Wiedergabe']];
   const show = async () => { tabs.replaceChildren(...TABS.map(([k, t]) => h('button', { class: 'chip', role: 'tab', 'aria-pressed': tab === k, onclick: () => { tab = k; show(); } }, t)));
-    view.replaceChildren(h('p', {}, 'Wird geladen …')); try { view.replaceChildren(await { gesundheit: health, verlauf: history, verbindung: connection, empfang: reception, bericht: report, layout: layoutPanel, wiedergabe: playsView }[tab](route)); } catch (e) { view.replaceChildren(h('div', { class: 'notice bad' }, e.message)); } };
+    view.replaceChildren(h('p', {}, 'Wird geladen …')); try { view.replaceChildren(await { gesundheit: health, verlauf: history, prognose: prognoseView, verbindung: connection, empfang: reception, bericht: report, layout: layoutPanel, wiedergabe: playsView }[tab](route)); } catch (e) { view.replaceChildren(h('div', { class: 'notice bad' }, e.message)); } };
   root.append(tabs, view); await show(); return root;
 }
 

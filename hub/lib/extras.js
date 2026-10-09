@@ -33,7 +33,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
     else if (!db.prepare('SELECT 1 FROM media WHERE id=?').get(c.id)) return 'Dieses Bild oder Video gibt es nicht.';
     return null;
   }
-  const endOverrides = (scope, targetId, t) => db.prepare('UPDATE overrides SET ended_at=? WHERE ended_at IS NULL AND until>? AND scope=? AND COALESCE(target_id,\'\')=?').run(t, t, scope, targetId ?? '');
+  const endOverrides = (scope, targetId, t) => db.prepare('UPDATE overrides SET ended_at=? WHERE ended_at IS NULL AND until>? AND scope=? AND COALESCE(target_id,\'\')=? AND id NOT IN (SELECT id FROM override_kind WHERE kind IN (\'regel\',\'tor\'))').run(t, t, scope, targetId ?? '');
   function startOverride(req, { scope, targetId, content, until, label, sceneId }) {
     const t = now(), id = randomUUID();
     endOverrides(scope, targetId, t);
@@ -41,8 +41,9 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
     return id;
   }
   const targetName = (o) => o.scope === 'all' ? 'alle Bildschirme' : o.scope === 'group' ? `Gruppe „${db.prepare('SELECT name FROM device_groups WHERE id=?').get(o.target_id)?.name ?? '?'}“` : `„${db.prepare('SELECT name FROM devices WHERE id=?').get(o.target_id)?.name ?? '?'}“`;
+  const kindOf = (id) => db.prepare('SELECT kind FROM override_kind WHERE id=?').get(id)?.kind ?? 'manual';
   const overrideView = (o) => ({ id: o.id, scope: o.scope, targetId: o.target_id, targetName: targetName(o), content: { type: o.content_type, id: o.content_id }, contentName: nameOf(o.content_type, o.content_id), sceneId: o.scene_id, label: o.label, by: o.created_by_name, createdAt: o.created_at, until: o.until,
-    text: `${o.label === 'NOTFALL' ? 'NOTFALL-MELDUNG' : o.scene_id ? `Szene „${o.label}“` : 'Schnellaktion'} von ${o.created_by_name} auf ${targetName(o)}, bis ${hhmm(o.until)} Uhr` });
+    kind: kindOf(o.id), text: kindOf(o.id) === 'tor' ? `Tor-Jubel auf ${targetName(o)}, bis ${hhmm(o.until)} Uhr` : kindOf(o.id) === 'regel' ? `Regel „${String(o.label ?? '').replace(/^REGEL:\s*/, '')}“ zeigt auf ${targetName(o)} (automatisch, solange die Bedingung gilt)` : `${o.label === 'NOTFALL' ? 'NOTFALL-MELDUNG' : o.scene_id ? `Szene „${o.label}“` : 'Schnellaktion'} von ${o.created_by_name} auf ${targetName(o)}, bis ${hhmm(o.until)} Uhr` });
   const activeOverrides = () => db.prepare('SELECT * FROM overrides WHERE ended_at IS NULL AND until>? ORDER BY created_at DESC').all(now());
 
   app.get('/api/v1/overrides', { config: { perm: 'live.read' } }, async (req) => activeOverrides().filter((o) => o.scope === 'all' || !req.user.groups || req.user.role === 'admin'

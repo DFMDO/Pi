@@ -40,9 +40,10 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   const segments = tl.map((s) => ({ start: s.start, end: s.end, source: s.source ? { ...s.source, content: use(s.source.content) } : null }));
   if (def) playlists[def] = { name: db.prepare('SELECT name FROM playlists WHERE id=?').get(def).name, items: playlistItems(db, def, now) };
   // Übersteuerungen/Schnellaktionen (Z.2): nur aktive, die dieses Gerät betreffen. Wirken auch offline bis zu ihrem Ablauf (der Player prüft „until“ selbst).
+  const kinds = new Map(db.prepare('SELECT id,kind,prio FROM override_kind').all().map((r) => [r.id, r]));
   const overrides = db.prepare('SELECT * FROM overrides WHERE ended_at IS NULL AND until > ?').all(now)
     .filter((o) => o.scope === 'all' || (o.scope === 'device' && o.target_id === device.id) || (o.scope === 'group' && o.target_id && o.target_id === device.group_id))
-    .map((o) => ({ id: o.id, scope: o.scope, playlistId: use({ type: o.content_type, id: o.content_id }).id, until: o.until, createdAt: o.created_at, label: o.label, by: o.created_by_name }));
+    .map((o) => ({ id: o.id, scope: o.scope, playlistId: use({ type: o.content_type, id: o.content_id }).id, until: o.until, createdAt: o.created_at, label: o.label, by: o.created_by_name, kind: kinds.get(o.id)?.kind ?? 'manual', ...(kinds.get(o.id)?.prio ? { prio: kinds.get(o.id).prio } : {}) }));
   // Sondertage (Z.6): Feiertage/Schließtage/Betriebsferien der nächsten 14 Tage
   const d0 = new Date(from + 2 * 3600000).toISOString().slice(0, 10), d1 = new Date(to + 2 * 3600000).toISOString().slice(0, 10);
   const specialDays = db.prepare('SELECT * FROM special_days WHERE date <= ? AND COALESCE(date_to, date) >= ? ORDER BY CASE source WHEN \'custom\' THEN 0 ELSE 1 END, date').all(d1, d0)
@@ -67,6 +68,12 @@ export function manifestPayload(db, device, now = Date.now()) {
   for (const r of db.prepare("SELECT content_id FROM overrides WHERE content_type='media' AND ended_at IS NULL AND until > ?").all(now)) ids.add(r.content_id);
   for (const r of db.prepare("SELECT content_id FROM special_days WHERE content_type='media' AND content_id IS NOT NULL").all()) ids.add(r.content_id);
   for (const r of db.prepare("SELECT media_id FROM playlist_items i JOIN playlists p ON p.id=i.playlist_id WHERE p.id IN (SELECT content_id FROM overrides WHERE content_type='playlist' AND ended_at IS NULL AND until > ?)").all(now)) ids.add(r.media_id);
+  // Vorab laden, was später per Automatik erscheinen kann: die Tor-Jubel-Folie (solange die Live-App an ist) und die Inhalte eingeschalteter Regeln
+  if (db.prepare("SELECT 1 FROM apps WHERE type='livespiel' AND enabled=1").get()) { const tor = db.prepare("SELECT value FROM settings WHERE key='live.torMediaId'").get()?.value; if (tor) ids.add(tor); }
+  for (const r of db.prepare('SELECT content_type,content_id FROM rules WHERE enabled=1').all()) {
+    if (r.content_type === 'media') ids.add(r.content_id);
+    else for (const i of db.prepare('SELECT media_id FROM playlist_items WHERE playlist_id=?').all(r.content_id)) ids.add(i.media_id);
+  }
   const items = [];
   for (const id of ids) {
     const m = db.prepare('SELECT * FROM media WHERE id=?').get(id);

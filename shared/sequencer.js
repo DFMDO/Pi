@@ -2,6 +2,10 @@
 // im Lite-Player (mpv-Steuerung) und in den Tests identisch laufen.
 import { epochToLocal } from './time.js';
 
+/** Rangfolge der Übersteuerungen (Art kommt vom Hub; fehlt sie, gilt „von Hand“): Notfall vor Tor-Jubel vor Hand-Übersteuerung vor Regel. Ältere Player kennen die Art nicht und sortieren wie bisher. */
+const RANK = { notfall: 100, tor: 60, manual: 50, regel: 10 };
+export const overrideRank = (o) => (RANK[o?.kind] ?? 50) + Math.max(0, Math.min(9, Number(o?.prio) || 0)) / 10; // prio ordnet Regeln untereinander
+
 /**
  * Aktuelle Playlist + Ende des Zeitfensters (null = bis auf Weiteres).
  * Auflösungsreihenfolge (A3): 0. Halt (Wartung/noch nicht bereit) → 1. Übersteuerung/Schnellaktion → 2. aktive Termine (Gerät vor Gruppe, Priorität,
@@ -10,7 +14,7 @@ import { epochToLocal } from './time.js';
 export function resolvePlaylist(plan, now) {
   if (!plan) return { playlistId: null, until: null, scheduleId: null, source: 'none' };
   if (plan.hold) return { playlistId: null, until: null, scheduleId: null, source: plan.hold };
-  const ov = (plan.overrides ?? []).filter((o) => o.until > now && !(o.from > now)).sort((a, b) => (b.scope === 'all') - (a.scope === 'all') || b.createdAt - a.createdAt)[0];
+  const ov = (plan.overrides ?? []).filter((o) => o.until > now && !(o.from > now)).sort((a, b) => overrideRank(b) - overrideRank(a) || (b.scope === 'all') - (a.scope === 'all') || b.createdAt - a.createdAt)[0];
   if (ov) return { playlistId: ov.playlistId, until: ov.until, scheduleId: null, source: 'uebersteuerung', override: ov };
   const seg = plan.segments?.find((s) => now >= s.start && now < s.end);
   const nextOv = (plan.overrides ?? []).filter((o) => o.from > now).map((o) => o.from).sort((a, b) => a - b)[0];

@@ -68,3 +68,8 @@ TLS-Schlüssel, Hub-Master-Schlüssel, Geräte-ID, Hostname, machine-id, Hotspot
 - **Statusadresse:** nutzt ein Lese-Token (nur `GET`, nur diese Route und die Live-Ansicht); kann widerrufen werden.
 - **Bildschirm teilen:** nur angemeldete Redakteure/Admins mit CSRF-Schutz, Gruppen-Beschränkung wird beachtet; Bilder sind nur JPEG (Kopf geprüft, ≤ 2,5 MB); Höchstdauer 4 Stunden; die Notfall-Meldung hat Vorrang.
 - **Notfall-Meldung:** Bestätigung Pflicht, Sicherheitsereignis im Protokoll.
+
+## Version 0.2.24
+- **Regeln** ändern, was Bildschirme zeigen, ohne dass jemand klickt. Deshalb: nur Admins und Redakteure dürfen sie anlegen (Recht `scenes.write`), jede Änderung und jeder Start/Ende steht im Protokoll (`regel.*`), und sie haben den **niedrigsten Rang** – Notfall-Meldung, Tor-Jubel und Hand-Aktionen gehen vor. Ihre Übersteuerung läuft nur 15 Minuten und wird verlängert: Fällt der Hub aus, endet sie von selbst. Fehlen Daten, löst nichts aus (fail-safe).
+- **Tor-Jubel** kann nie eine Notfall-Meldung verdecken (Rang und eigene Prüfung) und läuft höchstens 60 Sekunden.
+- Neue ausgehende Verbindungen: keine (api.openligadb.de und der Kalender-Server waren schon Ziele der Apps; weiterhin nur lesend, mit den Schutzgrenzen aus `net.js`).
