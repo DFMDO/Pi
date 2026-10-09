@@ -24,7 +24,7 @@ for d in hub shared player setup assets; do rsync -a --chmod=D755,F644 --chown=0
 [ -d "$REPO/admin-ui/dist" ] && rsync -a --chmod=D755,F644 --chown=0:0 --delete "$REPO/admin-ui/dist/" "$M/opt/dfm/admin-ui/dist/" || echo "HINWEIS: admin-ui/dist fehlt (vorher 'npm run build:ui')"
 cp "$REPO/package.json" "$M/opt/dfm/package.json"; echo "$VERSION" > "$M/etc/dfm/version"
 # Fester Update-Schlüssel (öffentlicher Teil, aus build/keys, wird von build/gen-release-key.sh angelegt): Damit nimmt auch das lokale Image Updates an, die mit dem festen Schlüssel signiert sind.
-if [ -f "$REPO/build/keys/update-key.pub" ]; then install -m 644 -o 0 -g 0 "$REPO/build/keys/update-key.pub" "$M/etc/dfm/update-key.pub"; echo "Update-Schlüssel aus build/keys übernommen"; else echo "HINWEIS: build/keys/update-key.pub fehlt – das Image behält den Update-Schlüssel des Basis-Images"; fi
+if [ -f "$REPO/build/keys/update-key.pub" ]; then sed 's/\r$//' "$REPO/build/keys/update-key.pub" > "$M/etc/dfm/update-key.pub"; chmod 644 "$M/etc/dfm/update-key.pub"; chown 0:0 "$M/etc/dfm/update-key.pub"; echo "Update-Schlüssel aus build/keys übernommen"; else echo "HINWEIS: build/keys/update-key.pub fehlt – das Image behält den Update-Schlüssel des Basis-Images"; fi
 find "$M/usr/lib/dfm" "$M/etc/systemd/system" "$M/etc/chromium" "$M/etc/NetworkManager" "$M/etc/udev/rules.d" -type f -exec sed -i 's/\r$//' {} + 2>/dev/null
 chmod +x "$M"/usr/lib/dfm/*
 [ -f "$M/boot/firmware/config.txt" ] && { sed -i '/^# --- DFM Signage ---$/,$d' "$M/boot/firmware/config.txt"; sed 's/\r$//' "$REPO/build/boot/config.txt.add" >> "$M/boot/firmware/config.txt"; }
