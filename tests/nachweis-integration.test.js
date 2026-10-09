@@ -21,7 +21,7 @@ test('Nachweis: Agent zählt Einblendungen, meldet sie über WSS, Hub bestätigt
   const dataDir = mkdtempSync(join(tmpdir(), 'agent-plays-')); writeFileSync(join(dataDir, 'agent.json'), JSON.stringify({ deviceId, hubUrl, hubSpki: h.tls.spki, token, profile: 'standard', syncJitterMs: 0 }));
   const agent = new Agent({ dataDir, port: 0, heartbeatMs: 200, pollMs: 300, exit: () => {} }); await agent.start();
   try {
-    await until(() => agent.connected);
+    await until(() => agent.connected); await until(() => agent.hubPlays, 4000); // der neue Hub meldet nach „hello“, dass er „plays“ versteht
     const rows = () => h.db.prepare('SELECT media_id,name,plays,seconds FROM plays WHERE device_id=? ORDER BY media_id').all(deviceId);
     agent.onPlayerStatus({ current: img }); agent.onPlayerStatus({ current: film }); agent.onPlayerStatus({ current: img });
     agent.sendPlays(); await until(() => rows().length === 2 && agent.plays.peek().inflight === null, 6000); // Hub hat gespeichert UND bestätigt
@@ -40,4 +40,16 @@ test('Nachweis: Agent zählt Einblendungen, meldet sie über WSS, Hub bestätigt
     agent.displayOff = true; agent.onPlayerStatus({ current: img }); agent.onPlayerStatus({ current: film });
     assert.equal(agent.plays.payload(Date.now() + 1e6), null, 'bei ausgeschaltetem Bildschirm nichts zu melden'); agent.displayOff = false;
   } finally { await agent.stop(); await h.cleanup(); rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('Alter Hub (Version 0.2.22 und älter): Der Bildschirm sendet „plays“ erst, nachdem der Hub durch plays_ack gezeigt hat, dass er die Nachricht versteht', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'agent-compat-')); writeFileSync(join(dataDir, 'agent.json'), JSON.stringify({ deviceId: randomUUID(), hubUrl: 'https://127.0.0.1:1', hubSpki: 'ab', token: 't', profile: 'standard' }));
+  const agent = new Agent({ dataDir, port: 0, exit: () => {} }); const sent = []; agent.ws = { readyState: 1, send: (s) => sent.push(JSON.parse(s)) };
+  try {
+    agent.onPlayerStatus({ current: img }); agent.onPlayerStatus({ current: film });
+    agent.sendPlays(); assert.equal(sent.filter((m) => m.type === 'plays').length, 0, 'ohne Signal des Hubs nichts senden (ein alter Hub würde die Verbindung trennen)'); assert.equal(agent.plays.peek().seq, 0, 'dabei wird auch keine Nummer vergeben'); assert.equal(agent.plays.peek().inflight, null);
+    agent.onMessage(JSON.stringify({ v: 1, type: 'plays_ack', id: 0 })); assert.equal(agent.hubPlays, true, 'Signal des neuen Hubs');
+    agent.sendPlays(); const p = sent.filter((m) => m.type === 'plays'); assert.equal(p.length, 1); assert.equal(p[0].id, 1); assert.equal(Object.values(Object.values(p[0].days)[0]).length, 2, 'beide bisher gezeigten Medien');
+    agent.onMessage(JSON.stringify({ v: 1, type: 'plays_ack', id: 1 })); assert.equal(agent.plays.peek().inflight, null, 'bestätigt');
+  } finally { rmSync(dataDir, { recursive: true, force: true }); }
 });

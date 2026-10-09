@@ -98,8 +98,9 @@ test('Sperren: Token sofort ungültig und WebSocket sofort beendet', async () =>
   const msgs = []; ws.on('message', (m) => msgs.push(JSON.parse(m)));
   await new Promise((r, j) => { ws.on('open', r); ws.on('error', j); });
   ws.send(JSON.stringify({ v: 1, type: 'hello', version: '0.1.0', profile: 'pro' }));
-  for (let i = 0; i < 100 && msgs.length < 2; i++) await new Promise((r) => setTimeout(r, 20));
-  assert.deepEqual(msgs.map((m) => m.type).sort(), ['media_manifest', 'schedule_update']);
+  for (let i = 0; i < 100 && msgs.length < 3; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(msgs.map((m) => m.type).sort(), ['media_manifest', 'plays_ack', 'schedule_update'], 'Plan, Medienliste und die Fähigkeits-Meldung des Hubs');
+  assert.equal(msgs.find((m) => m.type === 'plays_ack').id, 0, 'Signal „dieser Hub versteht plays“: neue Bildschirme senden erst danach (ein alter Hub würde die Nachricht ablehnen)');
   const closed = new Promise((r) => ws.on('close', (c) => r(c)));
   await h.admin('POST', `/api/v1/devices/${d.deviceId}/block`);
   assert.equal(await closed, 4001);

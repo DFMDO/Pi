@@ -289,6 +289,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
       if (m.type === 'hello') {
         db.prepare('UPDATE devices SET model=COALESCE(?,model), hw_json=COALESCE(?,hw_json) WHERE id=?').run(m.model ?? null, m.hw ? JSON.stringify(m.hw) : null, d.id);
         pushPlan(getDevice(d.id)); deliverQueued(d.id);
+        sendTo(d.id, 'plays_ack', { id: 0 }); // Fähigkeits-Meldung: dieser Hub versteht „plays“. Ein alter Hub würde die Nachricht ablehnen und die Verbindung trennen, deshalb senden neue Bildschirme erst nach diesem Signal.
       } else if (m.type === 'heartbeat') {
         let keep = {}; if (m.state.playerStatus === undefined) { try { keep = { playerStatus: JSON.parse(getDevice(d.id).state_json ?? '{}').playerStatus }; } catch {} } // „Ist“ aus der letzten status-Meldung bleibt erhalten
         db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...keep, ...m.state }).slice(0, 20000), d.id);

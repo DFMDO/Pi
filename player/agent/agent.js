@@ -37,6 +37,7 @@ export class Agent {
     this.cfg = readJson(this.cfgFile); this.plan = readJson(join(dataDir, 'cache', 'plan.json')); this.manifest = readJson(join(dataDir, 'cache', 'manifest.json'));
     this.syncState = { total: 0, done: 0 }; this.connected = false; this.ws = null; this.stopped = false; this.attempt = 0; this.syncing = false;
     this.nowPlaying = null; this.displayOff = false; this.displayRule = null;
+    this.hubPlays = false; // erst true, wenn der Hub „plays“ versteht (siehe plays_ack)
     this.share = null; this.shareDir = process.env.DFM_SHARE_DIR ?? '/run/dfm-agent'; this.shareIdleMs = 30000; this.shareCheckMs = 5000; // Bildschirm teilen (nur im Arbeitsspeicher; endet, wenn 30 s lang kein Bild mehr kommt)
     this.plays = createPlayCounter({ file: join(dataDir, 'state', 'plays.json') }); this.playsMs = 300000; // Wiedergabe-Nachweis: lokal zählen, alle 5 Minuten gesammelt melden
     this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health(), onStatus: (s) => this.onPlayerStatus(s) });
@@ -115,7 +116,7 @@ export class Agent {
         opened = true; this.ws = ws; this.reconnects = (this.reconnects ?? 0) + 1; this.connected = true; this.offlineSince = null; this.attempt = 0; this.cfg.lastIp = new URL(base).hostname; writeJson(this.cfgFile, this.cfg);
         this.send('hello', { version: this.version, profile: this.cfg.profile, model: this.cfg.model, hw: this.cfg.hw });
         this.sendHeartbeat(); this.hb = setInterval(() => this.sendHeartbeat(), this.heartbeatMs);
-        clearTimeout(this.playsKick); this.playsKick = setTimeout(() => this.sendPlays(), 15000); this.playsKick.unref?.(); // nach (Wieder-)Verbindung gleich nachmelden
+        this.hubPlays = false; clearTimeout(this.playsKick); this.playsKick = setTimeout(() => this.sendPlays(), 15000); this.playsKick.unref?.(); // nach (Wieder-)Verbindung gleich nachmelden
       });
       ws.on('message', (raw) => this.onMessage(raw.toString()));
       ws.on('close', (code) => { clearInterval(this.hb); this.ws = null; if (code === 4001) this.revoked = true; opened ? resolve() : reject(new Error('geschlossen')); });
@@ -161,7 +162,7 @@ export class Agent {
     } else this.server.setFrame(buf);
   }
   shareStop(why) { if (!this.share) return; this.share = null; this.log('Teilen beendet:', why); this.server.clearFrame(); this.renderer?.share?.(null); }
-  sendPlays() { try { const p = this.plays.payload(); if (p && this.ws?.readyState === 1) this.send('plays', p); this.plays.save(); } catch (e) { this.log('Wiedergabe-Nachweis:', e.message); } }
+  sendPlays() { try { if (!this.hubPlays) { this.plays.save(); return; } /* alter Hub: nichts senden, sonst trennt er die Verbindung */ const p = this.plays.payload(); if (p && this.ws?.readyState === 1) this.send('plays', p); this.plays.save(); } catch (e) { this.log('Wiedergabe-Nachweis:', e.message); } }
   nowPlayingInfo() { // reine Anzeige für „zeigt gerade …“
     const r = resolvePlaylist(this.plan, Date.now()); if (!r.playlistId) return null;
     const m = this.manifest?.items?.find((i) => i.id === this.plan?.playlists?.[r.playlistId]?.items?.[0]?.mediaId);
@@ -174,7 +175,7 @@ export class Agent {
     if (m.type === 'schedule_update') { const { v, type, ...plan } = m; this.plan = plan; this.applyHubSettings(plan); writeJson(join(this.dataDir, 'cache', 'plan.json'), plan, 0o644); this.server.emit('plan'); this.renderer?.notify?.(); }
     else if (m.type === 'media_manifest') { const { v, type, ...mf } = m; this.manifest = mf; writeJson(join(this.dataDir, 'cache', 'manifest.json'), mf, 0o644); this.runSync(); }
     else if (m.type === 'command') this.runCommand(m);
-    else if (m.type === 'plays_ack') this.plays.ack(m.id);
+    else if (m.type === 'plays_ack') { this.hubPlays = true; this.plays.ack(m.id); }
     else if (m.type === 'share_start') this.shareStart(m.id);
     else if (m.type === 'share_frame') this.shareFrame(m);
     else if (m.type === 'share_stop') this.shareStop('vom Hub beendet');
