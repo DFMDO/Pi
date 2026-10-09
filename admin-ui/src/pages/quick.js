@@ -1,6 +1,7 @@
 // Schnellaktionen und Szenen (Z.2): sofortige Aktionen mit eigener Bestätigung, laufen nicht über den Entwurfsmodus.
 import { h, dialog, confirmDlg, toast, field } from '../ui.js';
 import { get, post, del, put, can } from '../api.js';
+import { presentationDialog } from './praesentation.js';
 
 const DURS = [['30', '30 Minuten'], ['60', '1 Stunde'], ['120', '2 Stunden'], ['eod', 'bis Tagesende']];
 const durBody = (v) => (v === 'eod' ? { endOfDay: true } : { minutes: Number(v) });
@@ -20,7 +21,8 @@ export async function quickActions(route) {
         [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Auf allen Bildschirmen zeigen', cls: 'danger', fn: async () => { try { const r = await post('/overrides', { scope: 'all', content: parse(c.value), confirm: true, ...durBody(d.value) }); toast(r.text); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]); } }, '📢 Jetzt auf allen Bildschirmen zeigen'),
     h('button', { class: 'btn big sec', onclick: async () => { const c = await contentSelect(); const d = h('select', { 'aria-label': 'Dauer' }, DURS.map(([k, t]) => h('option', { value: k }, t)));
       const s = h('select', { 'aria-label': 'Bildschirm' }, devices.filter((x) => x.status.level !== 'pending').map((x) => h('option', { value: x.id }, x.name)));
-      dialog('Auf einem Bildschirm zeigen', h('div', {}, field('Bildschirm', s), field('Was soll laufen?', c), field('Wie lange?', d)), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Zeigen', fn: async () => { try { const r = await post('/overrides', { scope: 'device', targetId: s.value, content: parse(c.value), ...durBody(d.value) }); toast(r.text); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]); } }, '🖥️ Auf einem Bildschirm zeigen')));
+      dialog('Auf einem Bildschirm zeigen', h('div', {}, field('Bildschirm', s), field('Was soll laufen?', c), field('Wie lange?', d)), [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Zeigen', fn: async () => { try { const r = await post('/overrides', { scope: 'device', targetId: s.value, content: parse(c.value), ...durBody(d.value) }); toast(r.text); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]); } }, '🖥️ Auf einem Bildschirm zeigen'),
+    can('media.write') && can('playlists.write') ? h('button', { class: 'btn big sec', onclick: () => presentationDialog(route) }, '📑 Präsentation zeigen (PowerPoint)') : null));
   const pub = scenes.filter((s) => s.state === 'published');
   if (pub.length) box.append(h('h3', {}, 'Szenen'), h('div', { class: 'row' }, pub.map((s) => s.active
     ? h('button', { class: 'btn', onclick: async () => { await post(`/scenes/${s.id}/stop`); toast(`Szene „${s.name}“ beendet.`); route(); } }, `⏹ ${s.name} beenden`)

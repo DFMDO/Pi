@@ -18,6 +18,9 @@ import { localToEpoch } from '../../shared/time.js';
 const pexec = promisify(execFile);
 const LOCAL_DT = '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$', DATE = '^\\d{4}-\\d{2}-\\d{2}$';
 const TRASH_DAYS = 30;
+// PowerPoint & Co. kann der Hub nicht selbst öffnen (dafür wäre LibreOffice nötig – zu groß und zu speicherhungrig für den Pi). Der Weg läuft über PDF oder Video.
+export const PRESENTATION_NAME = /\.(pptx?|ppsx?|potx?|odp|key)$/i;
+export const PRESENTATION_HELP = 'PowerPoint-Dateien kann der Hub nicht selbst öffnen. So geht es in einer Minute: Öffne die Präsentation in PowerPoint → „Datei“ → „Exportieren“ → „PDF/XPS-Dokument erstellen“ und lade das PDF hoch (jede Folie wird ein Bild, höchstens 60). Mit Animationen oder Ton: „Exportieren“ → „Video erstellen“ → Full HD → als MP4 hochladen. Auf der Startseite gibt es dafür den Knopf „Präsentation zeigen“.';
 
 async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => Date.now() }) {
   await app.register(multipart, { limits: { fileSize: LIMITS.video, files: 1, fields: 5, parts: 8 } });
@@ -43,6 +46,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
       if (part.file.truncated) throw Object.assign(new Error('too big'), { friendly: 'Die Datei ist zu groß.' });
       const fd = openSync(tmp, 'r'); const head = Buffer.alloc(16); readSync(fd, head, 0, 16, 0); closeSync(fd);
       const kind = detectKind(head);
+      if (!kind && PRESENTATION_NAME.test(String(part.filename ?? ''))) throw Object.assign(new Error('ppt'), { friendly: PRESENTATION_HELP });
       if (!kind) throw Object.assign(new Error('type'), { friendly: 'Dieses Dateiformat wird nicht unterstützt. Erlaubt sind Bilder (JPG, PNG, WebP), Videos (MP4, MOV, MKV) und PDF.' });
       const size = statSync(tmp).size;
       if (size > LIMITS[kind]) throw Object.assign(new Error('size'), { friendly: `Die Datei ist zu groß (maximal ${Math.round(LIMITS[kind] / 1048576)} MB für diesen Typ).` });
