@@ -1,6 +1,6 @@
 {
   "name": "@dfm/agent",
-  "version": "0.2.24",
+  "version": "0.2.25",
   "private": true,
   "type": "module",
   "main": "agent.js",

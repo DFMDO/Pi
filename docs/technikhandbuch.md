@@ -175,3 +175,9 @@ Tabellen: `users, sessions, roles, permissions, devices, device_groups, media, m
 - **Nächster Programmpunkt:** `buildNext`; Zwischenspeicher `fetchCached` (5 Min.) im Apps-Rahmen.
 - **Prognose** (`hub/lib/prognose.js`, `GET /api/v1/prognose`, Recht `system.read`): Stundenmittel der letzten 7 Tage aus `metrics`, Regression (kleinste Quadrate) mit Güte r²; Schwellen im Quelltext. Der Hub misst `disk_free` per `statfs` des Datenordners, Bildschirme liefern `diskFreeMB` im Heartbeat. Aufbewahrung der Messwerte weiter 14 Tage.
 - Tests: `livespiel`, `regeln`, `naechster`, `prognose` (hub/test), Rangfolge in `shared/sequencer.test.js`.
+
+## 13. Version 0.2.25 – Größe des Systembereichs
+- Das Image hat drei Partitionen: Start (96 MB), **System (p2, ext4, schreibgeschützt)** und Daten (p3, wächst beim ersten Start über `growpart`/`resize2fs` auf den Rest der SD-Karte). Bis 0.2.24 war p2 nur Inhalt + 2 % + 24 MB groß (zuletzt ≈ 2 GB, 97 % belegt, 55–60 MB frei).
+- Seit 0.2.25: p2 = Inhalt + 2 % + **2 GB Reserve** (`DFM_ROOT_HEADROOM_MIB`, Standard 2048). Das Image ist roh ≈ 4,1 GB; der xz-Download bleibt etwa gleich groß, weil der freie Platz nur aus Nullen besteht. Empfohlen werden SD-Karten ab 32 GB, mindestens 16 GB.
+- Eine Partitionsvergrößerung ist **kein Update**: Bestehende Geräte behalten ihr altes Schema, bis die SD-Karte mit einem neuen Image beschrieben wird. Der lokale Schnellbau (`tools/local-image-export.sh`) übernimmt die Partitionsgrößen seines Basis-Images.
+- Größte Posten im System (0.2.24): `/usr/lib` 1,2 GB (davon Systembibliotheken 552 MB, Chromium 394 MB), Node 135 MB, `/usr/bin` 108 MB, `/opt/dfm` 69 MB (davon `node_modules` 68 MB), Schriften 44 MB, Python 46 MB.

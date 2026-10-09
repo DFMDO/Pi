@@ -2,7 +2,7 @@
 # Läuft in einem Container (root) mit den Volumes von pi-gen. Baut aus dem fertigen Root-Dateisystem das SD-Karten-Image –
 # OHNE Loop-Geräte, OHNE Einbinden (mount): Dateisysteme werden direkt aus Verzeichnissen erzeugt (mkfs.ext4 -d, mtools).
 # Dadurch braucht der Bau keine Partitions-Geräte auf dem Host und ist weniger fehleranfällig.
-#   p1 DFMBOOT (FAT32, 96 MB) | p2 DFMROOT (ext4, schreibgeschützt) | p3 DFMDATA (ext4, wächst beim ersten Start)
+#   p1 DFMBOOT (FAT32, 96 MB) | p2 DFMROOT (ext4, schreibgeschützt, Inhalt + 2 GB Reserve) | p3 DFMDATA (ext4, wächst beim ersten Start auf den Rest der SD-Karte)
 set -euo pipefail
 B=/build; ROOT=${DFM_ROOTFS:-/pi-gen/work/dfm-signage-arm64/stage-dfm/rootfs}; OUT=/out; VERSION=${DFM_VERSION:?}
 IMG=$OUT/dfm-signage-arm64-$VERSION.img; TMP=/tmp/dfm-assemble; rm -rf "$TMP"; mkdir -p "$TMP" "$OUT"
@@ -34,7 +34,10 @@ truncate -s $BOOT_SIZE "$TMP/boot.img"; mkfs.vfat -F 32 -n DFMBOOT -S 512 "$TMP/
 mcopy -sQ -i "$TMP/boot.img" "$BOOT"/* ::/ 2>&1 | grep -v "^$" || true
 # Root ohne den Inhalt von /boot/firmware (liegt auf p1)
 mv "$BOOT" "$TMP/bootsrc"; mkdir -p "$BOOT"
-ROOT_USED=$(du -sx --block-size=1 "$ROOT" | cut -f1); ROOT_SIZE=$(( (ROOT_USED * 102 / 100 + 24 * MiB + ALIGN - 1) / ALIGN * ALIGN ))  # Root ist schreibgeschützt: kaum Reserve nötig
+# Das System (p2) ist schreibgeschützt, bekommt aber reichlich Reserve (Standard 2 GB frei): Die Karten im Museum haben mindestens 32 GB, und so passen spätere Funktionen
+# mit zusätzlichen Programmen ohne neues Partitionsschema hinein. Die Daten (p3) wachsen beim ersten Start trotzdem auf den ganzen Rest.
+ROOT_HEADROOM_MIB=${DFM_ROOT_HEADROOM_MIB:-2048}
+ROOT_USED=$(du -sx --block-size=1 "$ROOT" | cut -f1); ROOT_SIZE=$(( (ROOT_USED * 102 / 100 + ROOT_HEADROOM_MIB * MiB + ALIGN - 1) / ALIGN * ALIGN ))
 truncate -s $ROOT_SIZE "$TMP/root.img"
 mkfs.ext4 -q -F -L DFMROOT -O ^64bit,^huge_file -m 1 -d "$ROOT" "$TMP/root.img"
 rmdir "$BOOT"; mv "$TMP/bootsrc" "$BOOT"
@@ -51,6 +54,6 @@ start=$P1, size=$S1, type=c
 start=$P2, size=$S2, type=83
 start=$P3, size=$S3, type=83
 SFD
-for spec in "boot:$P1" "root:$P2" "data:$P3"; do f=${spec%%:*}; s=${spec##*:}; dd if="$TMP/$f.img" of="$IMG" bs=$MiB seek=$((s * 512 / MiB)) conv=notrunc status=none; done
+for spec in "boot:$P1" "root:$P2" "data:$P3"; do f=${spec%%:*}; s=${spec##*:}; dd if="$TMP/$f.img" of="$IMG" bs=$MiB seek=$((s * 512 / MiB)) conv=notrunc,sparse status=none; done
 sfdisk -d "$IMG" | sed 's/^/  /'; ls -lh "$IMG"; rm -rf "$TMP"
 echo "Image fertig: $IMG"; exit $CHECK
