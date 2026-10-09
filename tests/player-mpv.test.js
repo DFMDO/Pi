@@ -11,11 +11,36 @@ test('mpv: Bild bleibt stehen (duration inf) und wird nur bei Änderung neu gela
   assert.match(src, /const show = \(file, force = false\) => \{ if \(!force && file === shown\) return;/);
   assert.ok(!/send\(\['loadfile'/.test(src.replace(/const show = [^\n]*\n/, '')), 'loadfile nur noch über show()');
   assert.match(src, /show\(fileOf\(current\), current\.kind === 'video'\)/, 'Videos werden immer neu gestartet (Schleife mit einem Video)');
-  assert.match(src, /sock\.on\('connect', \(\) => \{ shown = null; tick\(\); \}\)/, 'nach mpv-Neustart wird wieder geladen');
+  assert.match(src, /s\.on\('connect', \(\) => \{ if \(sock === s\) \{ shown = null; tick\(\); \} \}\)/, 'nach mpv-Neustart wird wieder geladen');
 });
 
 test('mpv: Speicher-Wächter startet mpv neu, wenn er zu viel belegt; end-file nur bei eof weiter', () => {
   assert.match(src, /VmRSS/); assert.match(src, /RSS_LIMIT_KB/); assert.match(src, /sup\.restart\(\)/);
   assert.match(src, /clearInterval\(watchdog\)/, 'beim Stoppen aufräumen');
   assert.match(src, /"reason":"eof"/);
+});
+
+// Pilot (0.2.16, Diagnose nach 3 h 48 min): Speicher voll, Systemwächter beendete chrony, avahi, NetworkManager, Hub und Agent; der Agent belegte 349 MB.
+// Ursache: error UND close planten je einen neuen Verbindungsversuch zu mpv → Verdopplung jede Sekunde, jeder mpv-Neustart vervielfachte die offenen Sockets.
+import { EventEmitter } from 'node:events';
+import { liteRenderer } from '../player/agent/lib/renderers.js';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fakeChild = () => { const c = new EventEmitter(); c.pid = 4242; c.kill = () => {}; return c; };
+const mk = (net) => liteRenderer({ getPlan: () => ({ segments: [], playlists: {} }), getManifest: () => ({ items: [] }), haveFile: () => false, fileOf: () => '', net, spawnFn: fakeChild, reconnectMs: 20 });
+
+test('mpv-Verbindung: fehlt mpv, wächst die Zahl der Versuche nur linear (kein Verdoppeln), nach stop() ist Ruhe', async () => {
+  const st = { n: 0 }; const net = { connect: () => { st.n++; const s = new EventEmitter(); s.destroy = () => {}; s.write = () => {}; setImmediate(() => { s.emit('error', new Error('ENOENT')); s.emit('close'); }); return s; } };
+  const r = mk(net); await sleep(500);
+  assert.ok(st.n >= 5 && st.n <= 40, `Verbindungsversuche in 0,5 s: ${st.n} (exponentiell wären Tausende)`);
+  r.stop(); const after = st.n; await sleep(150); assert.equal(st.n, after, 'nach stop() keine weiteren Versuche');
+});
+
+test('mpv-Verbindung: steht die Verbindung, wird ein Standby-Bild nur einmal geladen; nach Abbruch genau eine neue Verbindung', async () => {
+  const st = { n: 0, writes: [] }; let cur = null;
+  const net = { connect: () => { st.n++; const s = new EventEmitter(); s.destroy = () => {}; s.write = (x) => st.writes.push(String(x)); cur = s; setImmediate(() => s.emit('connect')); return s; } };
+  const r = mk(net); await sleep(250);
+  assert.equal(st.n, 1, 'eine Verbindung'); assert.equal(st.writes.filter((w) => w.includes('standby.png')).length, 1, 'Standby-Bild nur einmal geladen');
+  cur.emit('close'); await sleep(250);
+  assert.equal(st.n, 2, 'nach Abbruch genau eine neue Verbindung'); assert.equal(st.writes.filter((w) => w.includes('standby.png')).length, 2, 'danach wird das Bild wieder geladen');
+  r.stop();
 });

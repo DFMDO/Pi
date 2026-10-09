@@ -29,7 +29,7 @@ export function ownAddresses() {
 }
 
 export class Agent {
-  constructor({ dataDir, version = '0.2.19', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.20', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });
@@ -46,6 +46,8 @@ export class Agent {
   async start() {
     this.boundPort = await this.server.listen();            // 1) sofort anzeigen, was im Cache liegt (kein Hub nötig)
     if (this.plan) this.applyHubSettings(this.plan);        // Bildschirm-Zeiten/Sync-Einstellungen gelten auch nach Neustart ohne Hub
+    // Sicherheitsnetz gegen Speicherlecks: Wächst der Agent über 300 MB (normal sind 60–100 MB), startet er sich neu (Code 75 → systemd startet ihn wieder), statt dem ganzen Gerät den Speicher zu nehmen.
+    this.rssTimer = setInterval(() => { const mb = process.memoryUsage().rss / 1048576; if (mb > (this.rssLimitMB ?? 300)) { this.log(`Speicherverbrauch zu hoch (${Math.round(mb)} MB) – Neustart`); this.exit(75); } }, 60000); this.rssTimer.unref();
     const authority = () => !!this.cfg?.local; // Hub + Bildschirm in einem: dieses Gerät ist selbst die Zeitquelle
     this.timeOk = await timeSynced({ authority: authority() }); this.timeTimer = setInterval(async () => { this.timeOk = await timeSynced({ authority: authority() }); this.checkDisplay(); }, 30000).unref();
     this.renderer?.start?.();
@@ -70,7 +72,7 @@ export class Agent {
       }
     }
   }
-  async stop() { this.stopped = true; clearInterval(this.timeTimer); clearTimeout(this.retryT); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
+  async stop() { this.stopped = true; clearInterval(this.rssTimer); clearInterval(this.timeTimer); clearTimeout(this.retryT); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
 
   async loop() {
     while (!this.stopped) {

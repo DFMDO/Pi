@@ -33,15 +33,27 @@ export function chromiumRenderer({ url, profileDir, log = () => {} }) {
 }
 
 /** Lite: mpv ohne Browser. Der Agent steuert mpv über den IPC-Socket und wertet den Plan selbst aus. */
-export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth = () => ({}), getRotation = () => 0, onShow = () => {}, profile = 'lite', socket = '/run/dfm-agent/mpv.sock', log = () => {}, now = () => Date.now() }) {
-  const sup = supervise(() => spawn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--msg-level=all=warn', '--keep-open=no',
+export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth = () => ({}), getRotation = () => 0, onShow = () => {}, profile = 'lite', socket = '/run/dfm-agent/mpv.sock', log = () => {}, now = () => Date.now(),
+  net: netLib = net, spawnFn = spawn, reconnectMs = 1000 }) {
+  const sup = supervise(() => spawnFn('mpv', ['--idle=yes', '--force-window=yes', '--vo=drm', '--hwdec=auto-safe', '--fs', '--no-osc', '--msg-level=all=warn', '--keep-open=no',
     '--image-display-duration=inf', '--loop-playlist=no', `--input-ipc-server=${socket}`, '--no-audio', '--cache=no', '--demuxer-max-bytes=8MiB', '--osd-font-size=42', `--video-rotate=${getRotation()}`], { stdio: ['ignore', 'ignore', 'inherit'] }), log); // Fehlermeldungen von mpv ins Journal des Agents
   let sock = null, idx = 0, timer = null, current = null, stopped = false, shown = null;
   const send = (cmd) => { try { sock?.write(JSON.stringify({ command: cmd }) + '\n'); } catch {} };
   // Eine Datei nur dann neu laden, wenn sie sich ändert: Das ständige Neuladen desselben Bilds (Standby alle 5 s) ließ mpv im Pilot auf 522 MB wachsen.
   const show = (file, force = false) => { if (!force && file === shown) return; shown = file; send(['loadfile', file, 'replace']); };
-  const connect = () => { if (stopped) return; sock = net.connect(socket); sock.on('error', () => setTimeout(connect, 1000)); sock.on('connect', () => { shown = null; tick(); }); sock.on('data', (d) => { if (d.toString().includes('"reason":"eof"') && d.toString().includes('"end-file"') && current?.kind === 'video') next(); }); sock.on('close', () => setTimeout(connect, 1000)); };
-  setTimeout(connect, 1500);
+  // Verbindung zu mpv: IMMER nur ein Socket und nur EIN geplanter Wiederholversuch. (Früher planten „error“ UND „close“ je einen neuen Versuch: Bei fehlendem
+  // mpv verdoppelten sich die Versuche jede Sekunde, jeder mpv-Neustart vervielfachte die offenen Verbindungen – nach Stunden war der Speicher voll, Pilot 0.2.16.)
+  let reconnectT = null;
+  const scheduleConnect = (ms = reconnectMs) => { if (stopped || reconnectT) return; reconnectT = setTimeout(() => { reconnectT = null; connect(); }, ms); };
+  const connect = () => {
+    if (stopped) return; try { sock?.destroy(); } catch {}
+    const s = netLib.connect(socket); sock = s;
+    s.on('error', () => {}); // danach kommt „close“ – dort wird neu verbunden
+    s.on('connect', () => { if (sock === s) { shown = null; tick(); } });
+    s.on('data', (d) => { const t = d.toString(); if (t.includes('"reason":"eof"') && t.includes('"end-file"') && current?.kind === 'video') next(); });
+    s.on('close', () => { if (sock === s) scheduleConnect(); });
+  };
+  scheduleConnect(reconnectMs * 1.5);
   // Sicherheitsnetz: Belegt mpv zu viel Speicher (Leck), wird er neu gestartet – die Anzeige ist nach ~2 s wieder da.
   const RSS_LIMIT_KB = Math.min(400 * 1024, Math.floor(totalmem() / 1024 * 0.45));
   const watchdog = setInterval(() => { const pid = sup.pid(); if (!pid) return; try { const kb = Number(/VmRSS:\s+(\d+)/.exec(readFileSync(`/proc/${pid}/status`, 'utf8'))?.[1]); if (kb > RSS_LIMIT_KB) { log('mpv belegt zu viel Speicher (MB):', Math.round(kb / 1024), '– wird neu gestartet'); sup.restart(); } } catch {} }, 60000); watchdog.unref();
@@ -70,7 +82,7 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
   }
   function next() { idx++; tick(); }
   const osd = (text, ms) => send(['show-text', text, ms]);
-  return { ...sup, osd, stop: () => { stopped = true; clearTimeout(timer); clearInterval(watchdog); sock?.destroy(); sup.stop(); }, notify: () => { idx = 0; tick(); },
+  return { ...sup, osd, stop: () => { stopped = true; clearTimeout(timer); clearTimeout(reconnectT); clearInterval(watchdog); try { sock?.destroy(); } catch {} sup.stop(); }, notify: () => { idx = 0; tick(); },
     screenshot: () => new Promise((res, rej) => { // mpv schreibt das Bild in eine Datei
       const f = dirname(socket) + '/shot.png'; send(['screenshot-to-file', f, 'window']); setTimeout(() => { try { res(require_fs().readFileSync(f)); } catch (e) { rej(e); } }, 800); }) };
 }
