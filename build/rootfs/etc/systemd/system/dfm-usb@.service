@@ -1,0 +1,11 @@
+[Unit]
+Description=DFM USB-Stick %I schreibgeschützt einbinden
+BindsTo=dev-%i.device
+Wants=dfm-mode.service
+After=dev-%i.device dfm-mode.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/dfm/usb-mount mount /dev/%I
+ExecStop=/usr/lib/dfm/usb-mount umount

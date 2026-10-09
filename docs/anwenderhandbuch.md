@@ -230,7 +230,9 @@ Bildschirme → **Bildschirm ersetzen**. Neuen Pi einschalten, wie gewohnt mit C
 - **Bildschirm prüfen** (nach dem Verbinden automatisch, jederzeit unter *Betrieb*): Verbindung, WLAN, Uhrzeit, Netzteil/Temperatur/Speicher, Videotest, Bildtest (Ja/Nein-Frage, während der Bildschirm das Testbild zeigt), Ton (falls vorhanden), Synchronisation. Jeder Punkt hat ✔ / ▲ / ✖ mit Handlungshinweis. Das **Protokoll** ist druckbar und bleibt im Geräteprofil. Ein neuer Bildschirm zeigt nur das Standby-Bild, bis die Prüfung bestanden ist oder ein Admin sie bewusst überspringt (wird protokolliert).
 
 ## 24. Ordner importieren (Massenimport)
-*Bilder & Videos → Ordner importieren*: Ordner von USB-Stick oder Netzwerkfreigabe (z. B. aus Yodeck) einlesen. Du siehst vorab eine **Vorschau** mit Duplikaterkennung, Namensvorschlägen und Hinweisen je Gerätetyp – **nichts wird übernommen, bevor du bestätigst.** Der Hub liest nur Ordner unter `/media` und `/mnt`; die IT bindet Stick oder Freigabe dort ein.
+*Bilder & Videos → Ordner / USB-Stick importieren*: Ordner von USB-Stick oder Netzwerkfreigabe (z. B. aus Yodeck) einlesen. Du siehst vorab eine **Vorschau** mit Duplikaterkennung, Namensvorschlägen und Hinweisen je Gerätetyp – **nichts wird übernommen, bevor du bestätigst.** Der Hub liest nur Ordner unter `/media` und `/mnt`.
+
+**USB-Stick (seit Version 0.2.22):** Stecke den Stick **am Hub** ein (nicht an einem reinen Bildschirm). Der Hub bindet ihn **nur lesend** ein (FAT32, exFAT, NTFS oder ext4); Programme auf dem Stick werden nie ausgeführt. Auf der Startseite erscheint „🔌 USB-Stick erkannt“ mit dem Knopf *Inhalte ansehen und übernehmen*. Das öffnet die Vorschau; **übernommen wird erst nach deiner Bestätigung.** Den Stick kannst du jederzeit einfach abziehen, es wird nichts darauf geschrieben. **PDFs** werden dabei seitenweise in Bilder umgewandelt (höchstens 60 Seiten je PDF); ein zweites Einlesen derselben PDF wird als Duplikat erkannt. **Geduld bei großen Sticks:** Für die Duplikaterkennung liest der Hub jede Datei einmal komplett. Bei einem Stick voller Videos kann die Vorschau am Pi 3 einige Minuten brauchen („Ordner wird gelesen …“). Das ist normal, die Seite hängt nicht.
 
 ## 25. Datenschutz und Aufbewahrung
 Siehe [`datenschutz.md`](datenschutz.md). Unter *Erweitert → Betrieb, Veröffentlichen und Datenschutz* stellst du ein, wie lange Verlaufsdaten und das Protokoll aufbewahrt werden; Altes wird automatisch gelöscht.
@@ -265,3 +267,18 @@ Videos im Format **MP4 (H.264), höchstens Full HD (1920×1080) und 25 oder 30 B
 - Für einen Bildschirm, der **hauptsächlich Videos** zeigt: *Bildschirme → Bearbeiten → Wiedergabe → „Video-optimiert“*. Videos laufen dann direkt über den Video-Chip ohne Browser dazwischen – das ist auf dem Raspberry Pi 3 B+ am flüssigsten. Texte werden dort als Bild gezeigt, Laufband und Zonen gibt es auf diesem Bildschirm nicht. Der Bildschirm startet die Anzeige nach dem Umstellen einmal neu.
 - Videos liegen immer vollständig auf dem Bildschirm, bevor sie gezeigt werden – es wird nie über das WLAN „gestreamt“. Ein schwaches WLAN kann die Wiedergabe deshalb nicht stören.
 - Videos am besten als **Full-HD-MP4 (H.264, 25/30 Bilder pro Sekunde)** liefern (siehe Kapitel 31).
+
+## 33. Foto vom Handy direkt zeigen
+Auf der Startseite: **📷 Foto vom Handy zeigen**. Am Handy öffnest du dazu die Adresse des Hubs und tippst auf den Knopf (praktisch: Adresse mit `/#/foto` am Ende als Lesezeichen oder auf dem Startbildschirm ablegen, dann öffnet sich das Fenster sofort). Foto aufnehmen oder aus der Galerie wählen, **Wo zeigen** (alle Bildschirme oder einen) und **Wie lange** (15 Minuten bis Tagesende) einstellen, *Hochladen und zeigen*. Das Foto übersteuert den Plan und der Bildschirm springt danach von selbst zum normalen Plan zurück. Es bleibt im Ordner „Handy-Fotos“ unter *Bilder & Videos*. Mit **🧹 Aufräumen** (Kapitel 34) wirfst du es später weg. Erlaubt sind JPG, PNG und WebP; bei einem iPhone, das „Format nicht unterstützt“ meldet, stellst du in den Kamera-Einstellungen *Formate → Kompatibelste* ein.
+
+## 34. Aufräumen: Was wird nirgends mehr benutzt?
+*Bilder & Videos → 🧹 Aufräumen* listet alle Bilder, Videos und Folien, die in **keiner Abspielliste, keinem Termin, keiner laufenden Übersteuerung, keinem Sondertag, keiner Szene und keiner App** mehr vorkommen. Du siehst Alter, Größe und ob das Ablaufdatum überschritten ist. Vorausgewählt sind nur Dateien, die älter als ein Tag sind (Frisches legst du vielleicht gleich noch in eine Liste). **Löschen** schiebt in den Papierkorb, dort sind sie 30 Tage zurückholbar. Zugriff wie beim Löschen von Medien (Redakteur und Admin).
+
+## 35. Frage & Antwort
+*Bilder & Videos → ❓ Frage & Antwort*: Du gibst eine Frage und eine Antwort ein, es entstehen **zwei Folien** im Ordner „Quiz“ (Frage blau mit „?“, Antwort grün). Lege beide in einer Abspielliste hintereinander, zum Beispiel Frage 20 Sekunden, Antwort 10 Sekunden. Geeignet für Schulklassen, Ferienprogramm und Quiz-Tage.
+
+## 36. Wie lange läuft eine Abspielliste?
+Unter *Abspiellisten* steht bei jeder Liste „Eine Runde dauert 2:00 Minuten“ (Bilder und Texte zählen mit der eingestellten Zeit, Videos mit ihrer echten Länge). Beim Planen eines **Termins** warnt der Hub vor dem Veröffentlichen, wenn der Termin **kürzer als eine Runde** ist: die Liste würde dann nicht einmal ganz durchlaufen.
+
+## 37. App „An diesem Tag“
+*Apps → An diesem Tag* zeigt täglich einen Eintrag aus **eurer eigenen Liste** („An diesem Tag in der Fußballgeschichte“). Ein Eintrag pro Zeile: `04.07.1954 Text` (das Jahr ist optional: `24.12. Text`). Gibt es für heute nichts, erscheint der nächste Eintrag. Die mitgelieferten Beispiele bitte **prüfen und ergänzen**. Braucht kein Internet. Mehr zu Apps in [`apps.md`](apps.md).

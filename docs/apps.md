@@ -9,6 +9,7 @@ Seit Version 0.2.21 gibt es in der Verwaltung den Menüpunkt **Apps**. Der Hub h
 | ⛅ Wetter | Deutscher Wetterdienst über api.brightsky.dev | 30 Min. | Ort, Koordinaten (Voreinstellung Dortmund) |
 | 🕘 Datum & Öffnungszeiten | keine (lokal) | 10 Min., täglich neu | Öffnungszeiten je Wochentag, geschlossene Tage, letzter Einlass |
 | 📅 Tagesprogramm | eure Kalender-Adresse (iCal/.ics) | 15 Min., täglich neu | Adresse, Überschrift, Filter nach Ort, Höchstzahl |
+| 📜 An diesem Tag | keine (lokal) | 30 Min., täglich neu | Eure Liste „TT.MM.JJJJ Text“ (Beispiele sind enthalten, bitte prüfen); ist heute nichts eingetragen, erscheint der nächste Eintrag |
 | 📰 Nachrichten | RSS-/Atom-Adresse eurer Wahl | 15 Min. | Adresse, Überschrift, Anzahl |
 | ⚽ Fußball-Spieltag | api.openligadb.de | 10 Min. | Liga (Bundesliga, 2. Liga, 3. Liga, DFB-Pokal), Verein mit ★ |
 

@@ -32,8 +32,8 @@ export function qrDlg(route) {
 }
 
 /** Massenimport (Z.10): Vorschau → Bestätigung → Fortschritt */
-export async function importDlg(route) {
-  const r = await get('/import/roots'); const path = h('input', { value: r.roots[0] ?? '', list: 'roots', 'aria-label': 'Ordner' }), dl = h('datalist', { id: 'roots' }, r.roots.map((x) => h('option', { value: x }))), out = h('div', {});
+export async function importDlg(route, opts = {}) {
+  const [r, usb] = await Promise.all([get('/import/roots'), opts.path ? null : get('/import/usb').catch(() => null)]); const start = opts.path ?? (usb?.present ? usb.path : null); const path = h('input', { value: start ?? r.roots[0] ?? '', list: 'roots', 'aria-label': 'Ordner' }), dl = h('datalist', { id: 'roots' }, r.roots.map((x) => h('option', { value: x }))), out = h('div', {});
   let scan = null; const checks = new Map();
   async function doScan() { out.replaceChildren(h('p', {}, '⏳ Ordner wird gelesen …'));
     try { scan = await post('/import/scan', { path: path.value }); checks.clear(); const s = scan.summary;
@@ -41,10 +41,11 @@ export async function importDlg(route) {
         h('table', {}, h('thead', {}, h('tr', {}, ['', 'Datei', 'Name in der Bibliothek', 'Hinweis'].map((x) => h('th', {}, x)))), h('tbody', {}, scan.items.map((i) => { const c = h('input', { type: 'checkbox', checked: !!i.include, disabled: !i.supported, 'aria-label': `${i.rel} übernehmen` }); const n = h('input', { value: i.name ?? '', disabled: !i.supported, maxlength: 100, 'aria-label': 'Name' }); checks.set(i.rel, { c, n, i });
           return h('tr', {}, h('td', {}, c), h('td', {}, i.rel, h('div', { class: 'hint' }, fmtBytes(i.size))), h('td', {}, n), h('td', {}, i.duplicateOf ? `Duplikat von „${i.duplicateOf}“` : i.note ?? (i.hints ?? []).join(' ') ?? '')); }))));
     } catch (e) { out.replaceChildren(h('p', { class: 'bad' }, e.message)); } }
-  dialog('Ordner importieren', h('div', {}, h('p', {}, 'Lies einen Ordner von einem USB-Stick oder einer Netzwerkfreigabe ein, zum Beispiel aus Yodeck. ', h('span', { class: 'hint' }, r.hint)), field('Ordner', path), dl, h('button', { class: 'btn sec', type: 'button', onclick: doScan }, 'Ordner einlesen (Vorschau)'), out), [{ text: 'Schließen', cls: 'sec' },
+  dialog('Ordner oder USB-Stick importieren', h('div', {}, usb?.present || opts.path ? h('p', { class: 'notice ok' }, '🔌 Ein USB-Stick ist eingesteckt. Unten siehst du, was darauf liegt. Bilder, Videos und PDFs (jede PDF-Seite wird ein Bild) kannst du übernehmen.') : null, h('p', {}, 'Lies einen Ordner von einem USB-Stick oder einer Netzwerkfreigabe ein, zum Beispiel aus Yodeck. ', h('span', { class: 'hint' }, r.hint)), field('Ordner', path), dl, h('button', { class: 'btn sec', type: 'button', onclick: doScan }, 'Ordner einlesen (Vorschau)'), out), [{ text: 'Schließen', cls: 'sec' },
     { text: 'Auswahl übernehmen', fn: async () => { if (!scan) { toast('Bitte lies zuerst den Ordner ein.', 'err'); return false; } const items = [...checks.values()].filter(({ c }) => c.checked).map(({ n, i }) => ({ rel: i.rel, name: n.value || i.name, folder: i.folder }));
       if (!items.length) { toast('Nichts ausgewählt.', 'err'); return false; } if (!(await confirmDlg('Jetzt übernehmen?', `${items.length} Dateien werden in die Bibliothek kopiert.`, 'Übernehmen', false))) return false;
       try { const j = await post('/import/commit', { scanId: scan.scanId, confirmed: true, items }); out.replaceChildren(h('p', {}, '⏳ Wird übernommen …')); for (let n = 0; n < 600; n++) { await new Promise((x) => setTimeout(x, 700)); const st = await get(`/import/jobs/${j.jobId}`); out.replaceChildren(h('p', {}, `${st.done} von ${st.total} übernommen${st.failed ? `, ${st.failed} Fehler` : ''} …`), h('progress', { max: st.total, value: st.done })); if (st.finished) { toast(`${st.done} Dateien übernommen.`); route(); return; } } } catch (e) { toast(e.message, 'err'); } return false; } }]);
+  if (start) doScan(); // USB-Stick erkannt oder Ordner vorgegeben: gleich die Vorschau zeigen (übernommen wird erst nach Bestätigung)
 }
 
 /** Feiertage, Schließtage, Sondertage (Z.6) */

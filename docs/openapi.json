@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DFM Signage Hub API",
-    "version": "0.2.2",
+    "version": "0.2.22",
     "description": "Alle Routen liegen unter /api/v1. Anmeldung per Cookie (__Host-dfm_sid) mit CSRF-Header X-CSRF-Token bei schreibenden Aufrufen; Player nutzen ein Bearer-Token. WebSocket: siehe docs/websocket.md."
   },
   "servers": [
@@ -11,6 +11,106 @@
     }
   ],
   "paths": {
+    "/api/v1/apps": {
+      "get": {
+        "summary": "Sitzung + Recht „devices.read“",
+        "x-berechtigung": "devices.read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/apps/{type}": {
+      "put": {
+        "summary": "Sitzung + Recht „settings.manage“",
+        "x-berechtigung": "settings.manage",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "config": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/apps/{type}/run": {
+      "post": {
+        "summary": "Sitzung + Recht „settings.manage“",
+        "x-berechtigung": "settings.manage",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
     "/api/v1/audit": {
       "get": {
         "summary": "Sitzung + Recht „audit.read“",
@@ -1318,6 +1418,122 @@
         }
       }
     },
+    "/api/v1/devices/{id}/plan": {
+      "put": {
+        "summary": "Sitzung + Recht „devices.manage“",
+        "x-berechtigung": "devices.manage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "floorId"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "floorId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40
+                  },
+                  "x": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "y": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/devices/{id}/playback": {
+      "put": {
+        "summary": "Sitzung + Recht „devices.manage“",
+        "x-berechtigung": "devices.manage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "renderer"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "renderer": {
+                    "enum": [
+                      "auto",
+                      "browser",
+                      "mpv"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
     "/api/v1/devices/{id}/profile": {
       "put": {
         "summary": "Sitzung + Recht „devices.manage“",
@@ -1580,6 +1796,206 @@
         }
       }
     },
+    "/api/v1/floors": {
+      "get": {
+        "summary": "Sitzung + Recht „devices.read“",
+        "x-berechtigung": "devices.read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      },
+      "post": {
+        "summary": "Sitzung + Recht „devices.manage“",
+        "x-berechtigung": "devices.manage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/floors/{id}": {
+      "patch": {
+        "summary": "Sitzung + Recht „devices.manage“",
+        "x-berechtigung": "devices.manage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "sort": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 999
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Sitzung + Recht „devices.manage“",
+        "x-berechtigung": "devices.manage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/floors/{id}/image": {
+      "get": {
+        "summary": "Sitzung + Recht „devices.read“",
+        "x-berechtigung": "devices.read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      },
+      "put": {
+        "summary": "Sitzung + Recht „devices.manage“",
+        "x-berechtigung": "devices.manage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
     "/api/v1/groups": {
       "get": {
         "summary": "Sitzung + Recht „devices.read“",
@@ -1817,6 +2233,27 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/import/usb": {
+      "get": {
+        "summary": "Sitzung + Recht „import.run“",
+        "x-berechtigung": "import.run",
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -2131,6 +2568,54 @@
         }
       }
     },
+    "/api/v1/media/quiz": {
+      "post": {
+        "summary": "Sitzung + Recht „media.write“",
+        "x-berechtigung": "media.write",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "question",
+                  "answer"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "answer": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
     "/api/v1/media/text": {
       "post": {
         "summary": "Sitzung + Recht „media.write“",
@@ -2166,7 +2651,9 @@
                     "enum": [
                       "standard",
                       "hinweis",
-                      "highlight"
+                      "highlight",
+                      "frage",
+                      "antwort"
                     ]
                   }
                 }
@@ -2174,6 +2661,27 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/media/unused": {
+      "get": {
+        "summary": "Sitzung + Recht „media.write“",
+        "x-berechtigung": "media.write",
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -2344,6 +2852,27 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/metrics": {
+      "get": {
+        "summary": "Sitzung + Recht „devices.read“",
+        "x-berechtigung": "devices.read",
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -4808,6 +5337,27 @@
         }
       }
     },
+    "/api/v1/system/connectivity": {
+      "get": {
+        "summary": "Sitzung + Recht „devices.read“",
+        "x-berechtigung": "devices.read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
     "/api/v1/system/diagnose": {
       "get": {
         "summary": "Sitzung + Recht „system.read“",
@@ -4833,6 +5383,27 @@
       "get": {
         "summary": "Sitzung + Recht „devices.read“",
         "x-berechtigung": "devices.read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/system/memory": {
+      "get": {
+        "summary": "Sitzung + Recht „system.read“",
+        "x-berechtigung": "system.read",
         "parameters": [],
         "responses": {
           "200": {

@@ -39,6 +39,8 @@ fc-cache -f >/dev/null 2>&1 || true
 # Zeit-Einstellungen je Betriebsart schreibt dfm-mode nach /run/dfm/chrony.d – chrony muss diesen Ordner einlesen (sonst ist der Hub ohne Internet keine Zeitquelle und die Bildschirme warten ewig auf "Die Uhrzeit wird eingestellt")
 grep -q '/run/dfm/chrony.d' /etc/chrony/chrony.conf || echo 'confdir /run/dfm/chrony.d' >> /etc/chrony/chrony.conf
 CHEOF
+# Einhängepunkt für USB-Sticks (das System ist schreibgeschützt: muss im Image existieren)
+install -d "${ROOTFS_DIR}/media/usb"
 # Avahi-Dienstdateien kommen zur Laufzeit (nur im Hub-Betrieb) aus /run/dfm/avahi-services
 # Echtes (leeres) Verzeichnis: dfm-mode bindet /run/dfm/avahi-services beim Start darauf ein (ein Symlink nach /run ist im chroot von avahi nicht erreichbar)
 rm -rf "${ROOTFS_DIR}/etc/avahi/services"; install -d "${ROOTFS_DIR}/etc/avahi/services"

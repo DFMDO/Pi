@@ -94,7 +94,7 @@ function editor({ s, date, st, en, targets, lists, media, scheds, devices, group
   async function saveDraft() { const b = build(); const r = isNew ? await post('/schedules', b) : await put(`/schedules/${s.id}`, b); return r.draftId ?? r.id; }
   async function publishFlow(id) {
     const c = await get(`/schedules/${id}/publish-check`);
-    const body = h('div', {}, h('p', {}, h('b', {}, c.summary)), ...c.problems.map((x) => h('p', { class: 'notice bad' }, '⛔ ', x)), ...c.conflicts.map((x) => h('p', { class: 'notice' }, '⚠ ', x)), c.notLoaded ? h('p', { class: 'notice' }, '⚠ ' + c.notLoaded) : null);
+    const body = h('div', {}, h('p', {}, h('b', {}, c.summary)), ...c.problems.map((x) => h('p', { class: 'notice bad' }, '⛔ ', x)), ...c.conflicts.map((x) => h('p', { class: 'notice' }, '⚠ ', x)), c.notLoaded ? h('p', { class: 'notice' }, '⚠ ' + c.notLoaded) : null, ...(c.hints ?? []).map((x) => h('p', { class: 'notice' }, 'ℹ ', x)));
     if (c.problems.length) { dialog('Veröffentlichen nicht möglich', body, [{ text: 'Verstanden', cls: 'sec' }]); return false; }
     return new Promise((res) => dialog('Jetzt veröffentlichen?', body, [{ text: 'Noch nicht', cls: 'sec', fn: () => res(false) }, { text: 'Veröffentlichen', fn: async () => { try { await post(`/schedules/${id}/publish`); toast('Veröffentlicht. Die Bildschirme bekommen den Termin gleich.'); route(); res(true); } catch (e) { toast(e.message, 'err'); return false; } } }]));
   }

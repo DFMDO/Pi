@@ -22,9 +22,10 @@ rsync -a --exclude=/etc/fstab "$REPO/build/rootfs/" "$M/"                       
 for d in hub shared player setup assets; do rsync -a --exclude node_modules --exclude '*.test.js' --exclude test "$REPO/$d/" "$M/opt/dfm/$d/"; done
 [ -d "$REPO/admin-ui/dist" ] && rsync -a --delete "$REPO/admin-ui/dist/" "$M/opt/dfm/admin-ui/dist/" || echo "HINWEIS: admin-ui/dist fehlt (vorher 'npm run build:ui')"
 cp "$REPO/package.json" "$M/opt/dfm/package.json"; echo "$VERSION" > "$M/etc/dfm/version"
-find "$M/usr/lib/dfm" "$M/etc/systemd/system" "$M/etc/chromium" "$M/etc/NetworkManager" -type f -exec sed -i 's/\r$//' {} + 2>/dev/null
+find "$M/usr/lib/dfm" "$M/etc/systemd/system" "$M/etc/chromium" "$M/etc/NetworkManager" "$M/etc/udev/rules.d" -type f -exec sed -i 's/\r$//' {} + 2>/dev/null
 chmod +x "$M"/usr/lib/dfm/*
 [ -f "$M/boot/firmware/config.txt" ] && { sed -i '/^# --- DFM Signage ---$/,$d' "$M/boot/firmware/config.txt"; sed 's/\r$//' "$REPO/build/boot/config.txt.add" >> "$M/boot/firmware/config.txt"; }
+mkdir -p "$M/media/usb"   # Einhängepunkt für USB-Sticks
 rm -f "$M/etc/resolv.conf"; ln -s /run/NetworkManager/resolv.conf "$M/etc/resolv.conf"   # DNS aus dem Netz (sonst steht dort die resolv.conf des Baurechners)
 echo "== Dienste aktivieren (wie im Image-Skript) =="
 grep -E '^systemctl (enable|disable|mask) ' "$REPO/build/pi-gen/stage-dfm/02-system/00-run.sh" | sed 's/\r$//' > "$M/tmp/dfm-units.sh"

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Bindet einen USB-Stick SCHREIBGESCHÜTZT unter /media/usb ein (nur am Hub; der Hub-Import liest dort, mit Vorschau und Bestätigung).
+# Sicherheit: nur lesen (ro), keine Programme ausführen (noexec), keine Gerätedateien (nodev), keine Sonderrechte (nosuid). Der Inhalt wird nie automatisch benutzt.
+# Zum Testen: DFM_USB_MP (Einhängepunkt) und DFM_MODE (statt /run/dfm/mode) überschreiben.
+set -eu
+MP=${DFM_USB_MP:-/media/usb}
+case "${1:-}" in
+  mount)
+    MODE=${DFM_MODE:-$(cat /run/dfm/mode 2>/dev/null || true)}
+    case "$MODE" in hub|kombi) ;; *) exit 0 ;; esac          # Bildschirme und nicht eingerichtete Geräte lesen keine Sticks ein
+    DEV=${2:?Gerät fehlt}; [ -b "$DEV" ] || exit 1
+    mountpoint -q "$MP" 2>/dev/null && exit 0                  # es ist schon ein Stick eingebunden
+    FS=$(blkid -o value -s TYPE "$DEV" 2>/dev/null || true)
+    case "$FS" in
+      vfat|exfat) OPTS="ro,nosuid,nodev,noexec,uid=990,gid=990,umask=0222,iocharset=utf8" ;;
+      ntfs) FS=ntfs3; OPTS="ro,nosuid,nodev,noexec,uid=990,gid=990,umask=0222" ;;
+      ext4|ext3|ext2|iso9660|udf) OPTS="ro,nosuid,nodev,noexec" ;;
+      *) echo "USB-Stick $DEV: Dateisystem '${FS:-unbekannt}' wird nicht unterstützt" >&2; exit 0 ;;
+    esac
+    mkdir -p "$MP"
+    # Ein Stick, der sich nicht einbinden lässt (defektes Dateisystem, fehlender Treiber), ist kein Systemfehler: nur ins Protokoll schreiben, die Einheit gilt nicht als fehlgeschlagen
+    if mount -t "$FS" -o "$OPTS" "$DEV" "$MP"; then echo "USB-Stick $DEV unter $MP eingebunden (nur lesen)"; else echo "USB-Stick $DEV ($FS) lässt sich nicht einbinden" >&2; fi
+    ;;
+  umount) umount -l "$MP" 2>/dev/null || true ;;
+  *) echo "Aufruf: usb-mount mount <Gerät> | umount" >&2; exit 2 ;;
+esac

@@ -3,7 +3,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { epochToLocal } from '../../../shared/time.js';
 import { fetchText as realFetch } from './net.js';
-import { buildWeather, buildMatchday, buildNews, buildToday, buildProgram, LEAGUES, DAYS, HOURS_RE } from './builders.js';
+import { buildWeather, buildMatchday, buildNews, buildToday, buildProgram, buildOnThisDay, parseOnThisDay, LEAGUES, DAYS, HOURS_RE } from './builders.js';
 
 const MIN = 60000;
 const str = (v, d, max) => { const s = String(v ?? d ?? '').trim(); if (s.length > max) throw new Error(`Der Text ist zu lang (höchstens ${max} Zeichen).`); return s; };
@@ -47,6 +47,12 @@ export const APPS = {
     validate: (c) => ({ url: url(c.url), title: str(c.title, 'Neuigkeiten', 40) || 'Neuigkeiten', maxItems: int(c.maxItems, 5, 1, 8) }),
     hosts: (cfg) => (cfg.url ? [host(cfg.url)] : []),
     async build(cfg, { fetchText }) { return buildNews(await fetchText(cfg.url, { accept: 'application/rss+xml, application/atom+xml, text/xml, */*' }), cfg); },
+  },
+  tagdaten: {
+    title: 'An diesem Tag', icon: '📜', intervalMin: 30, dayChange: true, desc: 'Zeigt täglich einen Eintrag aus eurer eigenen Liste (zum Beispiel „An diesem Tag in der Fußballgeschichte“). Gibt es für heute keinen, erscheint der nächste. Braucht kein Internet.',
+    defaults: { entries: "# Beispiele zum Prüfen und Ergänzen. Format: TT.MM.JJJJ Text  (das Jahr ist optional, Zeilen mit # werden ignoriert)\n04.07.1954 Wunder von Bern: Deutschland schlägt Ungarn 3:2 und wird zum ersten Mal Weltmeister.\n24.08.1963 Start der ersten Bundesliga-Saison.\n30.07.1966 WM-Finale in Wembley: England schlägt Deutschland 4:2 nach Verlängerung.\n07.07.1974 Deutschland wird im Münchner Olympiastadion Weltmeister (2:1 gegen die Niederlande).\n08.07.1990 Deutschland wird in Rom Weltmeister (1:0 gegen Argentinien).\n28.05.1997 Borussia Dortmund gewinnt in München die Champions League (3:1 gegen Juventus).\n13.07.2014 Deutschland wird in Rio de Janeiro Weltmeister (1:0 n. V. gegen Argentinien)." },
+    validate: (c) => { const entries = String(c.entries ?? ''); if (entries.length > 6000) throw new Error('Die Liste ist zu lang (höchstens 6000 Zeichen).'); if (entries.trim() && !parseOnThisDay(entries).length) throw new Error('Keine gültige Zeile gefunden. Bitte so schreiben: 04.07.1954 Text'); return { entries }; },
+    hosts: () => [], async build(cfg, { now }) { return buildOnThisDay(now(), cfg); },
   },
   fussball: {
     title: 'Fußball-Spieltag', icon: '⚽', intervalMin: 10, desc: 'Ergebnisse und Anstoßzeiten des aktuellen Spieltags (Daten von OpenLigaDB), dein Verein ist mit ★ markiert.',

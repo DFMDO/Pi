@@ -10,6 +10,7 @@ html, body { margin:0; height:100%; background:#000; overflow:hidden; cursor:non
 .text { width:100%; height:100%; box-sizing:border-box; padding:6vw; display:flex; flex-direction:column; justify-content:center; gap:3vh; background:var(--dfm-secondary); color:#fff; border-left:2vw solid var(--dfm-primary); }
 .text h1 { margin:0; font-size:7vw; line-height:1.1; overflow-wrap:anywhere; } .text p { margin:0; font-size:3.4vw; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
 .text.compact { gap:2vh; } .text.compact h1 { font-size:5.4vw; } .text.compact p { font-size:2.5vw; line-height:1.35; }
+.text.frage { background:#0b3d91; border-color:var(--dfm-accent); } .text.frage h1::before { content:"?  "; color:var(--dfm-accent); } .text.antwort { background:#1b7f3b; border-color:#fff; }
 .text.hinweis { background:var(--dfm-accent); color:#1a1a1a; border-color:#1a1a1a; } .text.highlight { background:var(--dfm-primary); border-color:#fff; }
 .standby, .notice { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4vh; background:var(--dfm-secondary); color:#fff; text-align:center; }
 .standby .addr { margin:0; font-size:2.2vw; opacity:.85; } .standby .addr.big { font-size:3.6vw; opacity:1; font-weight:700; }

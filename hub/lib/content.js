@@ -88,7 +88,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
 
   app.post('/api/v1/media/text', { config: { perm: 'media.write' }, schema: { body: { type: 'object', required: ['name', 'title'], additionalProperties: false, properties: {
     name: { type: 'string', minLength: 1, maxLength: 100 }, title: { type: 'string', minLength: 1, maxLength: 120 }, body: { type: 'string', maxLength: 1000 },
-    template: { enum: ['standard', 'hinweis', 'highlight'] } } } } }, async (req, reply) => {
+    template: { enum: ['standard', 'hinweis', 'highlight', 'frage', 'antwort'] } } } } }, async (req, reply) => {
     const id = randomUUID(), t = { title: req.body.title, body: req.body.body ?? '', template: req.body.template ?? 'standard' };
     db.prepare("INSERT INTO media(id,name,kind,text_json,created_by,created_at) VALUES(?,?,'text',?,?,?)").run(id, req.body.name, JSON.stringify(t), req.user.id, now());
     variants.ensureAll(); A(req, 'text.angelegt', req.body.name); return reply.code(201).send({ id });
@@ -133,8 +133,10 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
 
   // ---------- Abspiellisten ----------
   const itemsOf = (id) => db.prepare('SELECT id,media_id AS mediaId,duration_s AS duration,transition,valid_from AS validFrom,valid_to AS validTo FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(id);
+  /** Dauer einer Runde in Sekunden: Bilder/Texte nach eingestellter Dauer, Videos nach ihrer Länge */
+  const roundS = (id) => itemsOf(id).reduce((sum, i) => { const m = db.prepare('SELECT kind,duration_s FROM media WHERE id=?').get(i.mediaId); return sum + (m?.kind === 'video' ? Math.round(m.duration_s ?? i.duration ?? 10) : (i.duration ?? 10)); }, 0);
   app.get('/api/v1/playlists', { config: { perm: 'playlists.read' } }, async () =>
-    db.prepare('SELECT * FROM playlists ORDER BY name').all().map((p) => ({ id: p.id, name: p.name, isDefault: !!p.is_default, state: p.state, draftOf: p.draft_of, note: p.note, hasDraft: p.state === 'published' && !!db.prepare('SELECT 1 FROM playlists WHERE draft_of=?').get(p.id), items: itemsOf(p.id) })));
+    db.prepare('SELECT * FROM playlists ORDER BY name').all().map((p) => ({ id: p.id, name: p.name, durationS: roundS(p.id), isDefault: !!p.is_default, state: p.state, draftOf: p.draft_of, note: p.note, hasDraft: p.state === 'published' && !!db.prepare('SELECT 1 FROM playlists WHERE draft_of=?').get(p.id), items: itemsOf(p.id) })));
   app.post('/api/v1/playlists', { config: { perm: 'playlists.write' }, schema: { body: { type: 'object', required: ['name'], additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 80 }, publish: { type: 'boolean' } } } } }, async (req, reply) => {
     if (req.body.publish && !mayPublish(req, 'playlists')) return noPublish(reply);
     const id = randomUUID(); db.prepare('INSERT INTO playlists(id,name,state,created_at) VALUES(?,?,?,?)').run(id, req.body.name, req.body.publish ? 'published' : 'draft', now()); A(req, 'liste.angelegt', req.body.name); return reply.code(201).send({ id });
@@ -227,7 +229,10 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     // Konflikte testweise mit dem Entwurf als veröffentlicht berechnen
     const all = loadSchedules(db).filter((x) => x.id !== (d.draft_of ?? d.id)).concat([{ ...s, id: d.draft_of ?? d.id }]);
     const conflicts = findConflicts(all, now(), now() + 14 * DAY).filter((c) => [c.a, c.b].includes(d.draft_of ?? d.id));
-    return { s, summary: summarizeSchedule(db, s), problems, conflicts: conflicts.length ? [`Dieser Termin überschneidet sich mit einem anderen mit gleicher Wichtigkeit. Der später gestartete gewinnt. Gib einem der Termine eine höhere Wichtigkeit, wenn du das ändern willst.`] : [], notLoaded: notReady.length ? `${notReady.length} Bildschirm(e) laden noch Medien – der Termin greift dort erst danach.` : null, draft: d };
+    const hints = [], mmss = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} Minuten`;
+    if (s.content.type === 'playlist') { const pl = db.prepare('SELECT name FROM playlists WHERE id=?').get(s.content.id), round = roundS(s.content.id); const [sd, st] = String(s.startLocal).split('T'), [ed, et] = String(s.endLocal).split('T'); const len = Math.round((localToEpoch(ed, et) - localToEpoch(sd, st)) / 1000);
+      if (round > 0 && len > 0 && round > len) hints.push(`Die Abspielliste „${pl?.name ?? '?'}“ braucht für eine Runde ${mmss(round)}, der Termin dauert nur ${mmss(len)}. Die Liste läuft also nicht einmal ganz durch.`); }
+    return { s, hints, summary: summarizeSchedule(db, s), problems, conflicts: conflicts.length ? [`Dieser Termin überschneidet sich mit einem anderen mit gleicher Wichtigkeit. Der später gestartete gewinnt. Gib einem der Termine eine höhere Wichtigkeit, wenn du das ändern willst.`] : [], notLoaded: notReady.length ? `${notReady.length} Bildschirm(e) laden noch Medien – der Termin greift dort erst danach.` : null, draft: d };
   }
   function publishSchedule(req, id) {
     const c = publishCheck(id); const d = c.draft; const target = d.draft_of ?? d.id;

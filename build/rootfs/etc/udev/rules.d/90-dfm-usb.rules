@@ -1,0 +1,3 @@
+# USB-Stick (mit Dateisystem) eingesteckt → Dienst starten, der ihn SCHREIBGESCHÜTZT unter /media/usb einbindet (nur am Hub). Beim Abziehen endet der Dienst von selbst.
+ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", TAG+="systemd", ENV{SYSTEMD_WANTS}+="dfm-usb@%k.service"
+ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_BUS}=="usb", ENV{ID_FS_USAGE}=="filesystem", TAG+="systemd", ENV{SYSTEMD_WANTS}+="dfm-usb@%k.service"

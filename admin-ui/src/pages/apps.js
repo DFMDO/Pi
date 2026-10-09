@@ -12,6 +12,7 @@ const WHAT = {
   tagesprogramm: 'Der Hub lädt die Kalender-Datei von der Adresse unten. Sie wird nur gelesen. Die Adresse bleibt geheim und wird anderen Benutzern nicht angezeigt.',
   rss: 'Der Hub lädt den Feed von der Adresse unten und zeigt nur die Überschriften.',
   datum: 'Diese App braucht kein Internet.',
+  tagdaten: 'Diese App braucht kein Internet. Die Beispiele unten sind nur Vorschläge: Bitte prüfen, ändern und ergänzen.',
 };
 
 /** Pro App: Eingabefelder und eine Funktion, die die Eingaben als config liest */
@@ -24,6 +25,8 @@ function form(type, c) {
         read: () => ({ hours: Object.fromEntries(DAYS.map(([k]) => [k, ins[k].value.trim()])), closedDates: closed.value.split(/\s+/).filter(Boolean), lastEntryMin: Number(last.value) }) }; }
     case 'tagesprogramm': { const u = input(c.url, { placeholder: 'https://…/kalender.ics', autocomplete: 'off' }), t = input(c.title, { maxlength: 40 }), l = input(c.locationFilter, { maxlength: 60 }), m = input(c.maxEvents ?? 7, { type: 'number', min: 1, max: 9 });
       return { nodes: [field('Adresse des Kalenders (iCal / .ics)', u, 'Im Kalendersystem unter „Teilen“, „Abonnieren“ oder „iCal“ zu finden. Die Adresse endet oft auf .ics.'), field('Überschrift der Folie', t), field('Nur Veranstaltungen mit diesem Ort (leer = alle)', l, 'Zum Beispiel „Foyer“: Dann erscheint nur, was im Feld „Ort“ des Termins „Foyer“ enthält.'), field('Höchstens so viele Veranstaltungen', m)], read: () => ({ url: u.value.trim(), title: t.value, locationFilter: l.value, maxEvents: Number(m.value) }) }; }
+    case 'tagdaten': { const t = h('textarea', { rows: 12, spellcheck: 'false' }, c.entries ?? '');
+      return { nodes: [field('Eure Liste (ein Eintrag pro Zeile: 04.07.1954 Text)', t, 'Das Jahr ist optional (24.12. Text). Zeilen mit # am Anfang werden ignoriert.')], read: () => ({ entries: t.value }) }; }
     case 'rss': { const u = input(c.url, { placeholder: 'https://…/feed', autocomplete: 'off' }), t = input(c.title, { maxlength: 40 }), m = input(c.maxItems ?? 5, { type: 'number', min: 1, max: 8 });
       return { nodes: [field('Adresse des Feeds (RSS/Atom)', u), field('Überschrift der Folie', t), field('Höchstens so viele Meldungen', m)], read: () => ({ url: u.value.trim(), title: t.value, maxItems: Number(m.value) }) }; }
     case 'fussball': { const l = h('select', {}, LEAGUES.map(([k, n]) => h('option', { value: k, selected: k === c.league ? '' : null }, n))), f = input(c.favorite, { maxlength: 30 });

@@ -81,3 +81,25 @@ export function buildProgram(ics, nowMs, { title = 'Heute im Museum', locationFi
   const body = evs.length ? shown.map((e) => `${e.allDay ? 'ganztägig' : epochToLocal(e.start).time}  ${cut(e.title, 60)}${e.location ? ` (${cut(e.location, 24)})` : ''}`).join('\n') + (more > 0 ? `\n… und ${more} weitere` : '') : 'Heute keine besonderen Veranstaltungen.';
   return { title, body, compact: shown.length > 5 };
 }
+
+// ---------------------------------------------------------------- An diesem Tag (eigene Liste, braucht kein Internet)
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const LINE_RE = /^(\d{1,2})\.(\d{1,2})\.(\d{4})?\s+(\S.*)$/;
+/** Zeilen wie „04.07.1954 Wunder von Bern …“ (Jahr optional: „24.12. Text“); Zeilen mit # am Anfang sind Kommentare */
+export function parseOnThisDay(text) {
+  const out = [];
+  for (const raw of String(text ?? '').split(/\r?\n/)) { const l = raw.trim(); if (!l || l.startsWith('#')) continue; const m = LINE_RE.exec(l); if (!m) continue; const d = +m[1], mo = +m[2]; if (mo < 1 || mo > 12 || d < 1 || d > [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1]) continue; out.push({ d, m: mo, year: m[3] ? +m[3] : null, text: m[4].trim() }); }
+  return out;
+}
+export function buildOnThisDay(nowMs, { entries = '' } = {}) {
+  const list = parseOnThisDay(entries); if (!list.length) throw new Error('In der Liste steht noch kein gültiger Eintrag. Bitte so schreiben: 04.07.1954 Text');
+  const { date } = epochToLocal(nowMs), [y, mo, d] = date.split('-').map(Number);
+  const line = (e) => `${e.year ? e.year + ': ' : ''}${cut(e.text, 150)}`;
+  const today = list.filter((e) => e.d === d && e.m === mo);
+  if (today.length) return { title: `An diesem Tag · ${d}. ${MONTHS[mo - 1]}`, body: today.slice(0, 4).map(line).join('\n\n'), compact: today.length > 2 };
+  // heute nichts: nächster Eintrag in den kommenden 366 Tagen
+  let best = null, bestDist = 1e9;
+  for (const e of list) { let t = Date.UTC(y, e.m - 1, e.d); if (t < Date.UTC(y, mo - 1, d)) t = Date.UTC(y + 1, e.m - 1, e.d); const dist = (t - Date.UTC(y, mo - 1, d)) / 86400000; if (dist < bestDist) { bestDist = dist; best = e; } }
+  const next = list.filter((e) => e.d === best.d && e.m === best.m);
+  return { title: `Am ${best.d}. ${MONTHS[best.m - 1]}`, body: next.slice(0, 4).map(line).join('\n\n'), compact: next.length > 2 };
+}

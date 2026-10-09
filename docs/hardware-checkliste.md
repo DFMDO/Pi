@@ -77,3 +77,11 @@ RAM, CPU, WLAN-Durchsatz, Startzeit nach jeder größeren Änderung mit `tools/d
 | E10 | QR-Code (WLAN + Adresse) mit iPhone/Android aus 2 m scannen | wird gelesen | ☐ | ☐ | ☐ | ☐ |
 | E11 | Nächtlicher Neustart 03:30 | Bildschirm nach < 2 min wieder da | ☐ | ☐ | ☐ | ☐ |
 | E12 | iOS Safari / Android Chrome: Live, Startseite, Kalender | Schrift ≥ 16 px, nichts läuft über | ☐ | – | – | – |
+
+## Version 0.2.22 – Alltagshilfen auf dem Pi prüfen
+| # | Prüfung | Soll | Pi 3 B+ (Hub) |
+|---|---|---|---|
+| E13 | USB-Stick (FAT32 mit Fotos und einer PDF) am Hub einstecken | Startseite zeigt „USB-Stick erkannt“ innerhalb weniger Sekunden; Vorschau zeigt Dateien; PDF wird seitenweise Bilder; Stick abziehen: Hinweis verschwindet. Stecken am **Bildschirm-Pi**: nichts passiert | ☐ |
+| E14 | Auf dem Hub: `findmnt -o TARGET,PROPAGATION /` und `journalctl -u 'dfm-usb@*'` | Wurzel „shared“; Meldung „unter /media/usb eingebunden (nur lesen)“; Hub-Dienst sieht den später eingesteckten Stick (Sichtprobe in der Oberfläche) | ☐ |
+| E15 | exFAT- und NTFS-Stick | werden gelesen (falls nicht: Meldung im Journal „lässt sich nicht einbinden“, kein fehlgeschlagener Dienst) | ☐ |
+| E16 | Foto vom Handy (iPhone und Android) zeigen | Foto erscheint auf dem gewählten Bildschirm in < 1 min, danach Rückkehr zum Plan | ☐ |

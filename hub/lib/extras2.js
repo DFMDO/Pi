@@ -1,7 +1,9 @@
 // Erweiterungen (Phase 10/11): Vorlagen + Lesbarkeit, QR-Code, Feiertage/Sondertage, Zonen + Laufband, Inbetriebnahme-Test,
 // Medien-Massenimport, Datenschutz (Aufbewahrung), Wochenvorlagen/Duplizieren, Passwort-Rücksetzung per Wiederherstellungscode.
 import { randomUUID, createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync, readdirSync, lstatSync, realpathSync, openSync, readSync, closeSync, copyFileSync, createReadStream, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readdirSync, lstatSync, realpathSync, openSync, readSync, closeSync, copyFileSync, createReadStream, existsSync, renameSync, rmSync, statSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { join, relative, resolve, sep, basename, extname } from 'node:path';
 import sharp from 'sharp';
 import { BUILTIN, renderTemplate, readability, buildQrPayload, isInternalHost, renderQr, qrChecks } from './templates.js';
@@ -14,6 +16,7 @@ import { resolvePlaylist } from '../../shared/sequencer.js';
 import { schedulePayload, DAY } from './plan.js';
 import { signalQuality } from './health.js';
 
+const pexec = promisify(execFile);
 const DATE = '^\\d{4}-\\d{2}-\\d{2}$';
 const iso = (d) => d.toISOString().slice(0, 10);
 /** Ostersonntag (Gauß) → bewegliche Feiertage in NRW */
@@ -25,7 +28,7 @@ export function holidaysNRW(y) {
     [fixed(10, 3), 'Tag der Deutschen Einheit'], [fixed(11, 1), 'Allerheiligen'], [fixed(12, 25), '1. Weihnachtstag'], [fixed(12, 26), '2. Weihnachtstag']].sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-async function extras2Plugin(app, { db, audit, mediaDir, dataDir, variants, now = () => Date.now(), importRoots }) {
+async function extras2Plugin(app, { db, audit, mediaDir, dataDir, variants, now = () => Date.now(), importRoots, usbDir = process.env.DFM_USB_DIR ?? '/media/usb' }) {
   const A = (req, action, target, detail, security = false) => audit.log({ user: req.user, action, target, ip: req.ip, detail, security });
   const settings = () => Object.fromEntries(db.prepare('SELECT key,value FROM settings').all().map((r) => [r.key, r.value]));
   const dv = () => app.devices;
@@ -213,17 +216,19 @@ async function extras2Plugin(app, { db, audit, mediaDir, dataDir, variants, now 
   const nice = (f) => basename(f, extname(f)).replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^./, (c) => c.toUpperCase()).slice(0, 100) || 'Datei';
   async function walk(root, depth = 0, out = []) { if (depth > 4 || out.length >= 2000) return out; for (const e of readdirSync(root, { withFileTypes: true })) { const p = join(root, e.name); let st; try { st = lstatSync(p); } catch { continue; } if (st.isSymbolicLink()) continue; if (st.isDirectory()) await walk(p, depth + 1, out); else if (st.isFile() && out.length < 2000) out.push({ p, size: st.size }); } return out; }
   async function haveHashes() { const have = new Map(); for (const m of db.prepare("SELECT id,name,original_path,sha256 FROM media WHERE original_path IS NOT NULL").all()) { let h = m.sha256; if (!h && existsSync(join(mediaDir, 'original', m.original_path))) { h = await sha(join(mediaDir, 'original', m.original_path)); db.prepare('UPDATE media SET sha256=? WHERE id=?').run(h, m.id); } if (h) have.set(h, m.name); } return have; }
-  app.get('/api/v1/import/roots', { config: { perm: 'import.run' } }, async () => ({ roots: roots.filter((r) => { try { return existsSync(r); } catch { return false; } }), hint: 'USB-Sticks und Netzwerkfreigaben werden vom Techniker unter /media bzw. /mnt eingebunden. Der Hub liest dort nur.' }));
+  app.get('/api/v1/import/roots', { config: { perm: 'import.run' } }, async () => ({ roots: roots.filter((r) => { try { return existsSync(r); } catch { return false; } }), hint: 'Ein eingesteckter USB-Stick wird automatisch schreibgeschützt unter /media/usb eingebunden. Netzwerkfreigaben bindet der Techniker unter /mnt ein. Der Hub liest dort nur.' }));
+  /** Steckt ein USB-Stick mit Dateien? (Der Hub bindet ihn schreibgeschützt unter /media/usb ein.) */
+  app.get('/api/v1/import/usb', { config: { perm: 'import.run' } }, async () => { try { const real = realpathSync(usbDir); if (!roots.some((r) => { try { const rr = realpathSync(r); return real === rr || real.startsWith(rr + sep); } catch { return false; } })) return { present: false, path: usbDir }; const n = readdirSync(usbDir).filter((x) => !x.startsWith('.')).length; return { present: n > 0, path: real, entries: n }; } catch { return { present: false, path: usbDir }; } });
   app.post('/api/v1/import/scan', { config: { perm: 'import.run' }, schema: { body: { type: 'object', required: ['path'], additionalProperties: false, properties: { path: { type: 'string', maxLength: 300 } } } } }, async (req, reply) => {
     const dir = safeDir(req.body.path); if (!dir) return reply.code(400).send({ error: `Dieser Ordner ist nicht freigegeben. Erlaubt sind nur Ordner unter: ${roots.join(', ')}.` });
     const files = await walk(dir), have = await haveHashes(), items = [], seen = new Map();
     for (const f of files) {
       const fd = openSync(f.p, 'r'); const head = Buffer.alloc(16); readSync(fd, head, 0, 16, 0); closeSync(fd); const kind = detectKind(head); const rel = relative(dir, f.p);
-      if (!kind || kind === 'pdf') { items.push({ rel, kind: kind ?? null, size: f.size, supported: false, note: kind === 'pdf' ? 'PDFs bitte einzeln hochladen (sie werden seitenweise umgewandelt).' : 'Dieses Format wird nicht unterstützt.' }); continue; }
+      if (!kind) { items.push({ rel, kind: null, size: f.size, supported: false, note: 'Dieses Format wird nicht unterstützt.' }); continue; }
       if (f.size > LIMITS[kind]) { items.push({ rel, kind, size: f.size, supported: false, note: 'Die Datei ist zu groß.' }); continue; }
       const h = await sha(f.p); const dup = have.get(h) ?? (seen.has(h) ? seen.get(h) : null); seen.set(h, nice(f.p));
       let w = null, hh = null; if (kind === 'image') { try { const m = await sharp(f.p, SHARP_OPTS).metadata(); w = m.width; hh = m.height; } catch { items.push({ rel, kind, size: f.size, supported: false, note: 'Das Bild kann nicht gelesen werden.' }); continue; } }
-      items.push({ rel, kind, size: f.size, supported: true, name: nice(f.p), folder: relative(dir, join(f.p, '..')).split(sep).join('/').slice(0, 60), sha256: h, duplicateOf: dup, width: w, height: hh, hints: mediaHints(kind, w, hh), include: !dup });
+      items.push({ rel, kind, size: f.size, supported: true, ...(kind === 'pdf' ? { note: 'Wird seitenweise in Bilder umgewandelt (höchstens 60 Seiten).' } : {}), name: nice(f.p), folder: relative(dir, join(f.p, '..')).split(sep).join('/').slice(0, 60), sha256: h, duplicateOf: dup, width: w, height: hh, hints: mediaHints(kind, w, hh), include: !dup });
     }
     const id = randomUUID(); scans.set(id, { dir, items, user: req.user.id, ts: now() }); for (const [k, v] of scans) if (now() - v.ts > 3600000) scans.delete(k); // Vorschau: noch NICHTS übernommen
     A(req, 'import.vorschau', dir, { dateien: items.length }); return { scanId: id, dir, items, summary: { total: items.length, importable: items.filter((i) => i.supported && !i.duplicateOf).length, duplicates: items.filter((i) => i.duplicateOf).length, unsupported: items.filter((i) => !i.supported).length } };
@@ -233,7 +238,15 @@ async function extras2Plugin(app, { db, audit, mediaDir, dataDir, variants, now 
     if (!req.body.confirmed) return reply.code(400).send({ error: 'Bitte bestätige die Vorschau. Vorher wird nichts übernommen.' });
     const byRel = new Map(sc.items.filter((i) => i.supported).map((i) => [i.rel, i])); const todo = req.body.items.filter((i) => byRel.has(i.rel)); const jobId = randomUUID(), job = { id: jobId, total: todo.length, done: 0, failed: 0, errors: [], finished: false, ids: [] }; jobs.set(jobId, job);
     (async () => { for (const t of todo) { const it = byRel.get(t.rel); try {
-      const src = join(sc.dir, t.rel), real = realpathSync(src); if (!real.startsWith(sc.dir + sep)) throw new Error('Pfad nicht erlaubt'); const file = randomUUID(); copyFileSync(real, join(mediaDir, 'original', file));
+      const src = join(sc.dir, t.rel), real = realpathSync(src); if (!real.startsWith(sc.dir + sep)) throw new Error('Pfad nicht erlaubt');
+      if (it.kind === 'pdf') { // PDF → je Seite ein Bild (wie beim Hochladen)
+        const outdir = join(mediaDir, 'incoming', randomUUID()); mkdirSync(outdir, { recursive: true }); const base = (t.name || it.name).replace(/\.pdf$/i, '').slice(0, 80);
+        try { await pexec('pdftoppm', ['-scale-to', '1920', '-png', '-l', '60', real, join(outdir, 'p')], { timeout: 120000 }); } catch { rmSync(outdir, { recursive: true, force: true }); throw new Error('Das PDF konnte nicht umgewandelt werden (passwortgeschützt oder beschädigt?)'); }
+        for (const [n, pf] of readdirSync(outdir).sort().entries()) { const file = randomUUID(); renameSync(join(outdir, pf), join(mediaDir, 'original', file)); const meta = await sharp(join(mediaDir, 'original', file), SHARP_OPTS).metadata(); const id = randomUUID();
+          db.prepare("INSERT INTO media(id,name,kind,original_path,sha256,size,width,height,folder,created_by,created_at) VALUES(?,?,'pdfpage',?,?,?,?,?,?,?,?)").run(id, `${base} – Seite ${n + 1}`, file, n === 0 ? it.sha256 : null, statSync(join(mediaDir, 'original', file)).size, meta.width ?? null, meta.height ?? null, (t.folder ?? it.folder ?? '').slice(0, 60), req.user.id, now()); job.ids.push(id); }
+        rmSync(outdir, { recursive: true, force: true }); job.done++; continue;
+      }
+      const file = randomUUID(); copyFileSync(real, join(mediaDir, 'original', file));
       let dur = null, w = it.width, h2 = it.height; if (it.kind === 'video') { const pr = await probeVideo(join(mediaDir, 'original', file)); dur = pr.duration; w = pr.width; h2 = pr.height; }
       const id = randomUUID(); db.prepare('INSERT INTO media(id,name,kind,original_path,sha256,size,duration_s,width,height,folder,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id, (t.name || it.name).slice(0, 100), it.kind, file, it.sha256, it.size, dur, w ?? null, h2 ?? null, (t.folder ?? it.folder ?? '').slice(0, 60), req.user.id, now()); job.ids.push(id); job.done++;
     } catch (e) { job.failed++; job.errors.push(`${t.rel}: ${e.message}`); } } job.finished = true; variants.ensureAll(); audit.log({ user: req.user, action: 'import.abgeschlossen', target: sc.dir, detail: { uebernommen: job.done, fehler: job.failed } }); scans.delete(req.body.scanId); })();

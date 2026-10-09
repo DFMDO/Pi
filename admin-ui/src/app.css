@@ -80,3 +80,9 @@ dialog.wide{max-width:min(900px,96vw);width:96vw}.wallwrap{padding:12px;backgrou
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .apppreview{white-space:pre-wrap;background:var(--dfm-secondary);color:#fff;border-left:8px solid var(--dfm-primary);padding:12px 14px;border-radius:8px;line-height:1.45}
 .appcard textarea{width:100%;font:inherit;min-height:88px}
+.quizrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.quizprev{min-height:96px;padding:12px 14px;border-radius:10px;color:#fff;display:flex;flex-direction:column;justify-content:center;gap:4px;border-left:8px solid #fff;overflow-wrap:anywhere}.quizprev small{font-size:1rem;opacity:.85}
+.quizprev.frage{background:#0b3d91;border-color:#f2a900}.quizprev.antwort{background:#1b7f3b}
+.photoprev img{display:block;max-width:100%;max-height:260px;margin:8px 0;border-radius:8px}
+.cleanlist{list-style:none;padding:0;margin:8px 0;max-height:46vh;overflow:auto}.cleanlist li{padding:8px 0;border-bottom:1px solid var(--dfm-line)}.cleanlist label{display:inline-flex;gap:6px;align-items:center;min-height:44px}
+@media (max-width:560px){.quizrow{grid-template-columns:1fr}}

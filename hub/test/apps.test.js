@@ -160,3 +160,21 @@ test('Routen: nur Admin ändert, Redakteur sieht (ohne geheime Adresse), Anzeige
   assert.equal((await a('PUT', '/api/v1/apps/rss', { enabled: true, config: { url: '(gesetzt)', title: 'Neu' } })).statusCode, 200, 'maskierte Adresse bleibt erhalten');
   assert.equal((await a('PUT', '/api/v1/apps/ufo', { enabled: true })).statusCode, 400); await h.cleanup();
 });
+
+// ---------------------------------------------------------------- An diesem Tag
+import { buildOnThisDay, parseOnThisDay } from '../lib/apps/builders.js';
+test('An diesem Tag: Zeilen lesen (mit/ohne Jahr, Kommentare), heutiger Eintrag, sonst der nächste, Jahreswechsel', () => {
+  const txt = '# Kommentar\n04.07.1954 Wunder von Bern\n24.12. Heiligabend: Museum geschlossen\n24.12.2000 Noch ein Eintrag\n31.02.2000 ungültiges Datum\nkaputt\n';
+  assert.deepEqual(parseOnThisDay(txt).map((e) => [e.d, e.m, e.year]), [[4, 7, 1954], [24, 12, null], [24, 12, 2000]]);
+  const heute = buildOnThisDay(at('2026-07-04', '10:00:00'), { entries: txt }); assert.equal(heute.title, 'An diesem Tag · 4. Juli'); assert.equal(heute.body, '1954: Wunder von Bern');
+  const zwei = buildOnThisDay(at('2026-12-24', '10:00:00'), { entries: txt }); assert.match(zwei.body, /Heiligabend: Museum geschlossen/); assert.match(zwei.body, /2000: Noch ein Eintrag/);
+  const next = buildOnThisDay(at('2026-10-09', '10:00:00'), { entries: txt }); assert.equal(next.title, 'Am 24. Dezember', 'heute nichts → nächster Eintrag');
+  const wrap = buildOnThisDay(at('2026-12-30', '10:00:00'), { entries: txt }); assert.equal(wrap.title, 'Am 4. Juli', 'nach dem Jahreswechsel');
+  assert.throws(() => buildOnThisDay(at('2026-10-09', '10:00:00'), { entries: 'nur Text ohne Datum' }), /gültiger Eintrag/);
+});
+test('An diesem Tag: App speichern prüft die Liste und die Voreinstellung enthält gültige Beispiele ohne Internet', async () => {
+  const h = await makeHub({}); const apps = createApps({ db: h.db, variants: h.app.variants, now: () => at('2026-07-04', '09:00:00') });
+  assert.throws(() => apps.save('tagdaten', { enabled: true, config: { entries: 'Quatsch' } }), /Keine gültige Zeile/);
+  apps.save('tagdaten', { enabled: true, config: {} }); const r = await apps.run('tagdaten'); assert.equal(r.ok, true); assert.match(r.text.body, /Wunder von Bern/); assert.deepEqual(apps.list().find((x) => x.type === 'tagdaten').hosts, []);
+  await h.cleanup();
+});
