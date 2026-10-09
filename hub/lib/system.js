@@ -6,6 +6,7 @@ import { setupBackupKey, encryptBackup, decryptBackup, createArchive, runSchedul
 import { stage, activate, rollback } from './update.js';
 import { request as privRequest } from '../../player/agent/lib/privd.js';
 import { formatFingerprint } from './tls.js';
+import { memInfo } from './metrics.js';
 
 const DAY = 86400000;
 const dirSize = (d) => { let n = 0; try { for (const f of readdirSync(d, { withFileTypes: true })) n += f.isDirectory() ? dirSize(join(d, f.name)) : statSync(join(d, f.name)).size; } catch {} return n; };
@@ -21,11 +22,6 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
     return { total, free, mediaBytes: media, usedPercent: pct, warn: pct >= 80, text: pct >= 80 ? `Der Speicher ist zu ${pct} % voll. Lösche nicht mehr benötigte Medien, bevor er voll läuft.` : null };
   });
   // Arbeitsspeicher-Wächter: Warnung nur, wenn der freie Speicher DAUERHAFT knapp ist (5 Messungen im Abstand von 1 Minute), nicht beim kurzen Start-Peak.
-  const memInfo = () => {
-    try { const t = readFileSync('/proc/meminfo', 'utf8'), g = (k) => Number((new RegExp(`^${k}:\\s+(\\d+)`, 'm').exec(t) ?? [])[1] ?? NaN) / 1024;
-      const avail = g('MemAvailable'); if (Number.isFinite(avail)) return { totalMB: g('MemTotal'), availMB: avail, swapTotalMB: g('SwapTotal') || 0, swapUsedMB: (g('SwapTotal') || 0) - (g('SwapFree') || 0) }; } catch {}
-    return { totalMB: totalmem() / 1048576, availMB: freemem() / 1048576, swapTotalMB: 0, swapUsedMB: 0 };
-  };
   const MEM_WARN_MB = 100, memSamples = [];
   const sampleMem = () => { memSamples.push(memInfo().availMB); if (memSamples.length > 5) memSamples.shift(); };
   sampleMem(); const memTimer = setInterval(sampleMem, 60000); memTimer.unref(); app.addHook('onClose', async () => clearInterval(memTimer));

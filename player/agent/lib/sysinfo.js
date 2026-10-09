@@ -1,7 +1,7 @@
 // Geräte-Zustand für den Heartbeat (Temperatur, RAM, WLAN-Signal, Zeitsync …).
 import { readFileSync, statfsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { uptime } from 'node:os';
+import { uptime, loadavg } from 'node:os';
 
 export const MIN_EPOCH = Date.UTC(2026, 0, 1);
 const read = (f) => { try { return readFileSync(f, 'utf8'); } catch { return null; } };
@@ -39,7 +39,7 @@ async function sdErrors() {
 export async function collect({ version, extra = {}, authority = false }) {
   const t = read('/sys/class/thermal/thermal_zone0/temp'); const link = await run('iw', ['dev', 'wlan0', 'link']);
   let diskFreeMB = null; try { const s = statfsSync(process.env.DFM_DATA ?? '/data'); diskFreeMB = Math.round((s.bavail * s.bsize) / 1048576); } catch {}
-  return { version, epoch: Date.now(), uptimeS: Math.round(uptime()), cpuTemp: t ? Math.round(parseInt(t, 10) / 100) / 10 : null, ...parseMeminfo(read('/proc/meminfo')),
+  return { version, epoch: Date.now(), uptimeS: Math.round(uptime()), cpuTemp: t ? Math.round(parseInt(t, 10) / 100) / 10 : null, load1: Math.round(loadavg()[0] * 100) / 100, ...parseMeminfo(read('/proc/meminfo')),
     signalDbm: parseSignal(link), wifi: parseLink(link), throttled: parseThrottled(await run('vcgencmd', ['get_throttled'])), diskFreeMB, sdErrors: await sdErrors(), timeSynced: await timeSynced({ authority }), ...extra };
 }
 

@@ -70,3 +70,11 @@ dialog.wide{max-width:min(900px,96vw);width:96vw}.wallwrap{padding:12px;backgrou
 @media print{.side,.toast,dialog:not([open]){display:none!important}.shell{display:block}}
 @media (max-width:700px){.livegrid{grid-template-columns:1fr!important}}
 .wall .chip,.wall select{color:#1a1a1a;background:#fff}.wall .hint{color:#ccc}
+
+/* Verlauf, Verbindungstest, Grundriss */
+.chartbox{margin:0 0 20px;padding:12px 14px;background:var(--dfm-card);border:1px solid var(--dfm-line);border-radius:10px}.chartbox figcaption{margin-bottom:6px}
+.chart{width:100%;height:auto;display:block}.chart .grid{stroke:var(--dfm-line);stroke-width:1}.chart .line{fill:none;stroke:var(--dfm-primary);stroke-width:2.5;stroke-linejoin:round;vector-effect:non-scaling-stroke}.chart .warnline{stroke:var(--dfm-warn);stroke-width:1.5;stroke-dasharray:6 5;vector-effect:non-scaling-stroke}.chartfoot{font-size:1rem}.chartnums{margin:6px 0 0}
+.checks{display:grid;gap:10px;margin-top:12px}.check{border-left:6px solid var(--dfm-line)}.check.ok{border-left-color:var(--dfm-ok)}.check.warn{border-left-color:var(--dfm-warn)}.check.bad{border-left-color:var(--dfm-bad)}.itbox{white-space:pre-wrap;background:var(--dfm-card);border:1px solid var(--dfm-line);padding:12px;border-radius:8px}
+.plan{position:relative;display:inline-block;max-width:100%;border:1px solid var(--dfm-line);border-radius:8px;overflow:hidden;background:var(--dfm-card)}.plan img{display:block;max-width:100%;height:auto;user-select:none}.plan.empty{display:block;min-height:240px;padding:24px;border-style:dashed}
+.pin{position:absolute;transform:translate(-50%,-100%);min-height:44px;min-width:44px;padding:0 12px;border:2px solid #fff;border-radius:22px;font:inherit;font-weight:600;cursor:pointer;color:#fff;background:#1b7f3b;box-shadow:0 1px 4px rgba(0,0,0,.45)}.pin.warn{background:#8a5a00}.pin.bad{background:#b00020}.pin.pending{background:#555}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

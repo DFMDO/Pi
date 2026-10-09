@@ -2,6 +2,7 @@
 import { h, dialog, confirmDlg, toast, field, statusEl, fmtDate, empty } from '../ui.js';
 import { get, post, put, can } from '../api.js';
 import { layoutPanel } from './tools.js';
+import { lineChart } from './charts.js';
 
 const dur = (s) => (s < 90 ? `${s} Sekunden` : s < 5400 ? `${Math.round(s / 60)} Minuten` : s < 172800 ? `${Math.round(s / 3600)} Stunden` : `${Math.round(s / 86400)} Tage`);
 const bars = (n) => h('span', { class: 'sigbars', 'aria-hidden': 'true' }, [1, 2, 3, 4].map((i) => h('i', { class: i <= n ? 'on' : '' })));
@@ -10,9 +11,9 @@ const spark = (series) => { const pts = series.map((p) => p.dbm).filter((x) => x
 
 export async function betriebPage({ route }) {
   let tab = 'gesundheit'; const root = h('div', {}, h('h1', {}, 'Betrieb'), h('p', { class: 'lead' }, 'Geht es den Bildschirmen gut? Hier siehst du Warnungen, Empfang und den Wochenbericht.')), tabs = h('div', { class: 'row', role: 'tablist' }), view = h('div', {});
-  const TABS = [['gesundheit', '🩺 Gesundheit'], ['empfang', '📶 WLAN-Empfang'], ['bericht', '📄 Wochenbericht'], ['layout', '🧱 Laufband & Zonen']];
+  const TABS = [['gesundheit', '🩺 Gesundheit'], ['verlauf', '📈 Verlauf'], ['verbindung', '🔌 Verbindung'], ['empfang', '📶 WLAN-Empfang'], ['bericht', '📄 Wochenbericht'], ['layout', '🧱 Laufband & Zonen']];
   const show = async () => { tabs.replaceChildren(...TABS.map(([k, t]) => h('button', { class: 'chip', role: 'tab', 'aria-pressed': tab === k, onclick: () => { tab = k; show(); } }, t)));
-    view.replaceChildren(h('p', {}, 'Wird geladen …')); try { view.replaceChildren(await { gesundheit: health, empfang: reception, bericht: report, layout: layoutPanel }[tab](route)); } catch (e) { view.replaceChildren(h('div', { class: 'notice bad' }, e.message)); } };
+    view.replaceChildren(h('p', {}, 'Wird geladen …')); try { view.replaceChildren(await { gesundheit: health, verlauf: history, verbindung: connection, empfang: reception, bericht: report, layout: layoutPanel }[tab](route)); } catch (e) { view.replaceChildren(h('div', { class: 'notice bad' }, e.message)); } };
   root.append(tabs, view); await show(); return root;
 }
 
@@ -22,6 +23,41 @@ async function health(route) {
     d.warnings.length ? d.warnings.map((w) => h('p', { class: 'notice' + (w.level === 'bad' ? ' bad' : '') }, (w.level === 'bad' ? '✖ ' : '▲ ') + w.text)) : h('p', {}, d.maintenance ? 'Im Wartungsmodus sind Warnungen stumm.' : '✔ Alles in Ordnung.'),
     d.metrics ? h('p', { class: 'hint' }, `${d.metrics.tempC ?? '–'} °C · frei ${d.metrics.diskFreeMB ?? '–'} MB · Signal ${d.metrics.signalDbm ?? '–'} dBm · Version ${d.metrics.version ?? '–'}`) : null,
     h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => deviceDlg(d.id, route) }, 'Profil & Verlauf'), can('devices.manage') ? h('button', { class: 'btn sec', onclick: () => commissioning(d.id, d.name, route) }, 'Bildschirm prüfen') : null))));
+}
+
+/** Verlauf: freier Speicher, Temperatur und Last von Hub und Bildschirmen (Lecks und Hitze sieht man als Kurve) */
+async function history() {
+  let src = 'hub', hours = '24'; const devices = (await get('/devices')).filter((d) => d.status.level !== 'pending');
+  const sel = h('select', { 'aria-label': 'Gerät wählen', onchange: () => { src = sel.value; draw(); } }, h('option', { value: 'hub' }, 'Hub'), devices.map((d) => h('option', { value: d.id }, d.name)));
+  const bar = h('div', { class: 'row', style: 'margin:8px 0' }), box = h('div', {});
+  async function draw() {
+    bar.replaceChildren(h('label', { class: 'hint' }, 'Gerät: '), sel, h('span', { class: 'sp' }), ...[['6', '6 Stunden'], ['24', '24 Stunden'], ['168', '7 Tage']].map(([k, t]) => h('button', { class: 'chip', 'aria-pressed': hours === k, onclick: () => { hours = k; draw(); } }, t)));
+    box.replaceChildren(h('p', {}, 'Wird geladen …'));
+    try {
+      const r = await get(`/metrics?src=${encodeURIComponent(src)}&hours=${hours}`), hr = Number(hours);
+      box.replaceChildren(...r.hints.map((t) => h('div', { class: 'notice' }, '▲ ', t)),
+        lineChart({ points: r.points, key: 'memAvailMB', title: 'Freier Arbeitsspeicher', unit: 'MB', warn: 100, hours: hr }),
+        lineChart({ points: r.points, key: 'tempC', title: 'Temperatur', unit: '°C', decimals: 1, warn: 80, hours: hr }),
+        lineChart({ points: r.points, key: 'load1', title: 'Prozessorlast (1 Minute, 4 = voll ausgelastet)', unit: '', decimals: 2, hours: hr }),
+        h('p', { class: 'hint' }, 'Gemessen wird etwa einmal pro Minute, die Werte bleiben 14 Tage gespeichert. Ein dauerhaft sinkender freier Speicher spricht für ein Speicherleck; ein Wert dauerhaft unter der gestrichelten Linie ist knapp.'));
+    } catch (e) { box.replaceChildren(h('div', { class: 'notice bad' }, e.message)); }
+  }
+  await draw(); return h('div', {}, bar, box);
+}
+
+/** Verbindungstest: Was funktioniert, was nicht – und was tun? (z. B. Firewall zwischen Netzen) */
+async function connection(route) {
+  const r = await get('/system/connectivity'); const skew = Math.abs(r.now - Date.now());
+  const ICON = { ok: '✔', warn: '▲', bad: '✖', info: 'ℹ' }, checks = [...r.checks];
+  checks.splice(2, 0, { id: 'browser', level: 'ok', title: 'Dieser Computer', text: `Du bist über ${location.host} mit dem Hub verbunden.`, hint: null });
+  if (skew > 120000) checks.push({ id: 'browseruhr', level: 'warn', title: 'Uhr dieses Computers', text: 'Die Uhr des Hubs weicht um mehr als 2 Minuten von der Uhr dieses Computers ab.', hint: 'Auf der Startseite „Uhr mit diesem Computer abgleichen“ wählen (wenn diese Uhr stimmt).' });
+  const itText = `Wir testen ein lokales Beschilderungssystem auf einem Raspberry Pi (Hostname dfm-signage${r.addresses.length ? ', Adresse ' + r.addresses.join(' / ') : ''}).\nBitte erlauben Sie von den Verwaltungs-PCs und den Bildschirm-Pis TCP 443 und 80 zu dieser Adresse, gern mit fester IP-Reservierung.\nEs wird keine Verbindung ins Internet benötigt.`;
+  const head = r.worst === 'ok' ? h('div', { class: 'notice' }, '✔ Alles in Ordnung.') : h('div', { class: 'notice' + (r.worst === 'bad' ? ' bad' : '') }, (r.worst === 'bad' ? '✖ ' : '▲ ') + 'Es gibt Punkte, die du dir ansehen solltest.');
+  return h('div', {}, head,
+    h('div', { class: 'checks' }, checks.map((c) => h('article', { class: 'card check ' + c.level }, h('div', { class: 'row' }, h('span', { class: 'status ' + (c.level === 'info' ? '' : c.level), 'aria-hidden': 'true' }, ICON[c.level]), h('h3', { style: 'margin:0' }, c.title)), h('p', { style: 'margin:6px 0 0' }, c.text), c.hint ? h('p', { class: 'hint', style: 'margin:4px 0 0' }, c.hint) : null))),
+    h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'btn', onclick: () => route() }, '🔄 Erneut prüfen')),
+    h('details', { style: 'margin-top:16px' }, h('summary', {}, 'Text für die IT (zum Kopieren)'), h('pre', { class: 'itbox' }, itText),
+      h('button', { class: 'btn sec', onclick: async () => { try { await navigator.clipboard.writeText(itText); toast('Kopiert.'); } catch { toast('Bitte den Text markieren und mit Strg+C kopieren.', 'err'); } } }, 'Text kopieren')));
 }
 
 async function reception(route) {

@@ -14,6 +14,8 @@ import contentPlugin from './lib/content.js';
 import extrasPlugin from './lib/extras.js';
 import extras2Plugin from './lib/extras2.js';
 import extras3Plugin from './lib/extras3.js';
+import extras4Plugin from './lib/extras4.js';
+import { createMetrics } from './lib/metrics.js';
 import systemPlugin from './lib/system.js';
 import { createVariantQueue } from './lib/variants.js';
 import { createLimiter } from './lib/ratelimit.js';
@@ -60,11 +62,13 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   await app.register(authPlugin, { db, key, audit, now });
   const variants = createVariantQueue({ db, mediaDir, onChange: () => app.pushAll?.() });
   app.decorate('variants', variants);
-  await app.register(devicesPlugin, { db, key, audit, tls, dataDir, mediaDir, hubInfo: hubInfo ?? (() => ({ host: 'dfm-signage.local' })), now });
+  const metrics = createMetrics({ db, now });
+  await app.register(devicesPlugin, { db, key, audit, tls, dataDir, mediaDir, hubInfo: hubInfo ?? (() => ({ host: 'dfm-signage.local' })), metrics, now });
   await app.register(contentPlugin, { db, audit, mediaDir, variants, now });
   await app.register(extrasPlugin, { db, audit, now });
   await app.register(extras2Plugin, { db, audit, mediaDir, dataDir, variants, now });
   await app.register(extras3Plugin, { db, audit, mediaDir, now });
+  await app.register(extras4Plugin, { db, audit, mediaDir, metrics, now });
   await app.register(systemPlugin, { db, audit, dataDir, mediaDir, tls, updateKeyPem, appDir: appDir ?? join(dataDir, 'app'), baseDir, onRestart });
 
   // ---------- Ersteinrichtung des Hubs ----------

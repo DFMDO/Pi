@@ -34,7 +34,7 @@ function summary(d, st) {
   return `${d.name}: ${s.label.toLowerCase()}`;
 }
 
-async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubInfo, now = () => Date.now() }) {
+async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubInfo, metrics = null, now = () => Date.now() }) {
   const sockets = new Map(); // deviceId -> ws
   const challenges = new Map(); // nonce -> expires
   const pairLim = createLimiter({ max: 20, baseMs: 60000, now });
@@ -292,6 +292,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
       } else if (m.type === 'heartbeat') {
         let keep = {}; if (m.state.playerStatus === undefined) { try { keep = { playerStatus: JSON.parse(getDevice(d.id).state_json ?? '{}').playerStatus }; } catch {} } // „Ist“ aus der letzten status-Meldung bleibt erhalten
         db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...keep, ...m.state }).slice(0, 20000), d.id);
+        try { metrics?.recordDevice(d.id, m.state); } catch {} // Verlauf (Speicher/Temperatur/Last) – darf den Heartbeat nie stören
       } else if (m.type === 'status') {
         let st = {}; try { st = JSON.parse(getDevice(d.id).state_json ?? '{}'); } catch {}
         db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...st, playerStatus: { current: m.current, next: m.next ?? null, source: m.source ?? null, scheduleId: m.scheduleId ?? null, ts: now() } }).slice(0, 20000), d.id);
