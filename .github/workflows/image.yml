@@ -32,6 +32,7 @@ jobs:
           if [ -n "$SECRET_KEY" ]; then
             printf '%s\n' "$SECRET_KEY" > "$RUNNER_TEMP/key.pem"; openssl pkey -in "$RUNNER_TEMP/key.pem" -pubout -out build/keys/update-key.pub
             echo "Eigener Schlüssel aus dem Geheimnis DFM_SIGN_KEY wird verwendet."
+            echo "HAS_PERMANENT_KEY=true" >> "$GITHUB_ENV"
           else
             build/gen-release-key.sh "$RUNNER_TEMP/key.pem"
             echo "::warning::Kein Geheimnis DFM_SIGN_KEY gesetzt: Es wird ein einmaliger Schlüssel erzeugt. Das Image funktioniert, aber spätere Updates lassen sich nicht mit demselben Schlüssel signieren."
@@ -39,6 +40,11 @@ jobs:
           echo "DFM_SIGN_KEY=$RUNNER_TEMP/key.pem" >> "$GITHUB_ENV"
       - name: Image bauen
         run: build/build-image.sh --skip-tests   # Tests laufen separat (npm test); der Bau braucht sie nicht
+      - name: Update-Paket erzeugen (nur mit festem Schlüssel)
+        # Ein .dfmpkg (z. B. per USB-Stick einspielbar) ist nur dann für schon eingerichtete Geräte nützlich, wenn der Schlüssel immer derselbe ist.
+        # Mit dem Einmal-Schlüssel (kein Geheimnis DFM_SIGN_KEY) würde es nur zu genau diesem Image passen – dann wird keins erzeugt.
+        if: env.HAS_PERMANENT_KEY == 'true'
+        run: build/make-update.sh "$(node -p "require('./package.json').version")"
       - name: Download veröffentlichen
         uses: softprops/action-gh-release@v2
         with:
@@ -51,6 +57,7 @@ jobs:
             build/out/dfm-signage-arm64-*.img.xz
             build/out/dfm-signage-arm64-*.img.xz.sha256
             build/out/dfm-signage-arm64-*.img.xz.sig
+            build/out/dfm-signage-update-*.dfmpkg
             build/out/check-*.txt
             build/out/build-info-*.txt
             build/keys/update-key.pub

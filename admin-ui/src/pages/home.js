@@ -4,6 +4,7 @@ import { pairDialog } from './devices.js';
 import { quickActions } from './quick.js';
 import { photoDialog } from './alltag.js';
 import { importDlg } from './tools.js';
+import { usbUpdateBox } from './usbupdate.js';
 
 /** Vorschaubild (Screenshot) eines Bildschirms; wenn keins da ist, ein ruhiger Platzhalter */
 export const shot = (d) => { const box = h('div', { class: 'shot' }, 'Noch keine Vorschau'); if (d.status.level === 'ok') { const i = h('img', { alt: `Vorschau von ${d.name}`, src: `/api/v1/devices/${d.id}/screenshot?t=${Date.now() >> 14}` }); i.onload = () => box.replaceChildren(i); } return box; };
@@ -21,7 +22,7 @@ export async function homePage({ route }) {
       can('devices.manage') ? h('button', { class: 'quick main', 'data-tour': 'pair', onclick: () => pairDialog(route) }, h('b', {}, '➕ Neuen Bildschirm verbinden'), h('span', {}, 'Zeigt einen Code für den neuen Bildschirm')) : null),
     pending.length ? h('div', { class: 'notice' }, h('b', {}, '⏳ Ein neuer Bildschirm wartet auf dich. '), pending.map((d) => `„${d.name}“ (${d.model ?? 'unbekanntes Gerät'})`).join(', '), ' – ', h('a', { href: '#/bildschirme' }, 'Jetzt bestätigen')) : null,
     drafts.schedules + drafts.playlists ? h('div', { class: 'notice' }, `✎ ${drafts.schedules + drafts.playlists} Entwürfe warten auf Veröffentlichung. `, h('a', { href: '#/kalender' }, 'Zum Kalender'), ' · ', h('a', { href: '#/listen' }, 'Zu den Abspiellisten')) : null,
-    await clockNotice(), await usbNotice(route),
+    await clockNotice(), await usbNotice(route), await usbUpdateBox({ onlyNewer: true }),
     ...issues.map((t) => h('div', { class: 'notice', role: 'status' }, '⚠ ', t)),
     h('h2', {}, 'Meine Bildschirme'),
     active.length ? h('div', { class: 'grid' }, active.map((d) => h('article', { class: 'card' }, h('h3', { style: 'margin:0 0 4px' }, d.name), statusEl(d.status), h('p', {}, d.summary), shot(d), h('p', { class: 'hint' }, d.lastSeen ? `Letzte Meldung: ${fmtDate(d.lastSeen)}` : 'Noch keine Meldung')))) : empty('Noch kein Bildschirm verbunden', 'Verbinde deinen ersten Bildschirm. Das dauert nur wenige Minuten.', can('devices.manage') ? h('button', { class: 'btn big', onclick: () => pairDialog(route) }, 'Neuen Bildschirm verbinden') : null),

@@ -1,9 +1,10 @@
 // System: Speicher, Diagnose, Backup, Update, Hub-Info.
-import { statfsSync, readFileSync, existsSync, mkdirSync, writeFileSync, createReadStream, statSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { statfsSync, readFileSync, existsSync, mkdirSync, writeFileSync, createReadStream, statSync, readdirSync, realpathSync, readlinkSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { loadavg, totalmem, freemem, uptime, networkInterfaces } from 'node:os';
 import { setupBackupKey, encryptBackup, decryptBackup, createArchive, runScheduledBackup } from './backup.js';
-import { stage, activate, rollback } from './update.js';
+import { stage, activate, rollback, readPackage } from './update.js';
+import { verifyPackage } from '../../shared/update.js';
 import { request as privRequest } from '../../player/agent/lib/privd.js';
 import { formatFingerprint } from './tls.js';
 import { memInfo } from './metrics.js';
@@ -11,7 +12,12 @@ import { memInfo } from './metrics.js';
 const DAY = 86400000;
 const dirSize = (d) => { let n = 0; try { for (const f of readdirSync(d, { withFileTypes: true })) n += f.isDirectory() ? dirSize(join(d, f.name)) : statSync(join(d, f.name)).size; } catch {} return n; };
 
-async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyPem, appDir, baseDir, onRestart = () => {} }) {
+const MAX_PKG = 96 * 1024 * 1024, PKG_NAME = /^[\w .\-()]{1,100}\.dfmpkg$/i, SEMVER = /^\d+\.\d+\.\d+$/;
+/** Eigene Meldungen (beginnen mit „Das“/„Die“) bleiben, rohe Fehler von tar & Co. werden zu einem verständlichen Satz */
+const friendly = (e) => (/^(Das|Die) /.test(e?.message ?? '') ? e.message : 'Das ist kein gültiges Update-Paket.');
+const cmpVer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0) ? 1 : -1; return 0; };
+
+async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyPem, appDir, baseDir, onRestart = () => {}, usbDir = process.env.DFM_USB_DIR ?? '/media/usb' }) {
   const keyFile = join(dataDir, 'keys', 'backup.json');
   const keyInfo = () => (existsSync(keyFile) ? JSON.parse(readFileSync(keyFile, 'utf8')) : null);
   app.decorate('backupKey', keyInfo);
@@ -69,22 +75,62 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
     audit.log({ user: req.user, action: 'backup.erstellt', ip: req.ip });
     return reply.header('Content-Type', 'application/octet-stream').header('Content-Disposition', 'attachment; filename="dfm-backup.dfmbak"').send(encryptBackup(createArchive(dataDir, db), k));
   });
+  /** Vorsorge-Übersicht für den Hub-Ersatz-Assistenten: Gibt es ein frisches Backup, wurde es auf einen anderen Rechner geladen, wie viel liegt NICHT im Backup (Mediendateien)? */
+  app.get('/api/v1/backup/overview', { config: { perm: 'backup.manage' } }, async () => {
+    const dir = join(dataDir, 'backups'); let files = [];
+    try { files = readdirSync(dir).filter((n) => n.endsWith('.dfmbak')).map((n) => { const s = statSync(join(dir, n)); return { name: n, size: s.size, ts: Math.round(s.mtimeMs) }; }).sort((x, y) => y.ts - x.ts); } catch {}
+    const med = db.prepare('SELECT COUNT(*) n, COALESCE(SUM(size),0) b FROM media').get();
+    return { configured: !!keyInfo(), last: files[0] ?? null, count: files.length, lastDownload: db.prepare("SELECT MAX(ts) t FROM audit_log WHERE action='backup.erstellt'").get().t ?? null, media: { count: med.n, bytes: med.b },
+      devices: db.prepare("SELECT COUNT(*) n FROM devices WHERE status='active'").get().n, users: db.prepare('SELECT COUNT(*) n FROM users').get().n, hubVersion: currentVersion() };
+  });
   app.decorate('runBackup', (extraDir) => runScheduledBackup({ dataDir, db, keyInfo: keyInfo(), extraDir }));
 
   // Update (Paket hochladen → Signatur prüfen → einspielen → verteilen)
-  app.post('/api/v1/update/upload', { config: { perm: 'update.manage' }, bodyLimit: 96 * 1024 * 1024 }, async (req, reply) => {
-    const body = req.body; if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: 'Bitte lade eine Update-Datei hoch.' });
+  /** Version, die gerade läuft: nach einem Update die aktive Version im Anwendungsordner, sonst die des Images bzw. des Quellcodes */
+  const currentVersion = () => {
+    try { const v = readlinkSync(join(appDir, 'current')).split(/[\\/]/).pop(); if (SEMVER.test(v)) return v; } catch {}
+    for (const f of [process.env.DFM_VERSION_FILE ?? '/etc/dfm/version', join(baseDir ?? '.', 'package.json')]) { try { const s = readFileSync(f, 'utf8'); const v = f.endsWith('.json') ? JSON.parse(s).version : s.trim(); if (SEMVER.test(v)) return v; } catch {} }
+    return null;
+  };
+  /** Paket prüfen (Signatur Pflicht), einspielen und den Hub neu starten. Wirft verständliche Fehler. */
+  function installPackage(req, body, via) {
     mkdirSync(join(dataDir, 'updates'), { recursive: true });
     const tmp = join(dataDir, 'updates', 'incoming.dfmpkg'); writeFileSync(tmp, body);
     try {
       const m = stage(tmp, appDir, updateKeyPem, baseDir);
       writeFileSync(join(dataDir, 'updates', 'current.dfmpkg'), body); // Verteilung an Player über den Hub
-      activate(appDir, m.version); audit.log({ user: req.user, action: 'update.eingespielt', ip: req.ip, security: true, detail: { version: m.version } });
+      activate(appDir, m.version); audit.log({ user: req.user, action: 'update.eingespielt', ip: req.ip, security: true, detail: { version: m.version, quelle: via } });
       setTimeout(onRestart, 1500); return { ok: true, version: m.version, text: 'Das Update wurde installiert. Der Hub startet in wenigen Sekunden neu.' };
-    } catch (e) {
-      audit.log({ user: req.user, action: 'update.abgelehnt', ip: req.ip, security: true, detail: { grund: e.message } });
-      return reply.code(400).send({ error: e.message });
-    }
+    } catch (e) { audit.log({ user: req.user, action: 'update.abgelehnt', ip: req.ip, security: true, detail: { grund: e.message, quelle: via } }); throw new Error(friendly(e)); }
+  }
+  app.post('/api/v1/update/upload', { config: { perm: 'update.manage' }, bodyLimit: MAX_PKG }, async (req, reply) => {
+    const body = req.body; if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: 'Bitte lade eine Update-Datei hoch.' });
+    try { return installPackage(req, body, 'hochgeladen'); } catch (e) { return reply.code(400).send({ error: e.message }); }
+  });
+
+  // Update vom USB-Stick (nur lesend eingebunden): Pakete im Hauptordner des Sticks werden vorab geprüft, installiert wird erst nach Bestätigung
+  const usbReal = () => { try { return realpathSync(usbDir); } catch { return null; } };
+  function usbPackages() {
+    const dir = usbReal(); if (!dir) return [];
+    // Namen mit Punkt am Anfang („._Name“) sind Reste von Mac-Rechnern auf Sticks
+    let names = []; try { names = readdirSync(dir).filter((n) => !n.startsWith('.') && PKG_NAME.test(n)).sort().slice(0, 10); } catch { return []; }
+    const cur = currentVersion();
+    return names.map((name) => {
+      const f = join(dir, name); let st; try { st = statSync(f); } catch { return null; }
+      if (!st.isFile()) return null; if (st.size > MAX_PKG) return { name, size: st.size, valid: false, error: 'Die Datei ist zu groß für ein Update.' };
+      try { const m = verifyPackage(readPackage(f), updateKeyPem); return { name, size: st.size, valid: true, version: m.version, created: m.created ?? null, notes: m.notes ? String(m.notes).slice(0, 300) : null, newer: cur ? cmpVer(m.version, cur) : 1 }; }
+      catch (e) { return { name, size: st.size, valid: false, error: friendly(e) }; }
+    }).filter(Boolean);
+  }
+  app.get('/api/v1/update/usb', { config: { perm: 'update.manage' } }, async () => ({ current: currentVersion(), packages: usbPackages() }));
+  app.post('/api/v1/update/usb/install', { config: { perm: 'update.manage' }, schema: { body: { type: 'object', required: ['name', 'confirmed'], additionalProperties: false, properties: { name: { type: 'string', maxLength: 100 }, confirmed: { type: 'boolean' } } } } }, async (req, reply) => {
+    if (!req.body.confirmed) return reply.code(400).send({ error: 'Bitte bestätige die Installation.' });
+    const dir = usbReal(); if (!dir) return reply.code(404).send({ error: 'Es ist kein USB-Stick eingesteckt.' });
+    if (!PKG_NAME.test(req.body.name)) return reply.code(400).send({ error: 'Das ist kein gültiger Dateiname für ein Update.' });
+    let f; try { f = realpathSync(join(dir, req.body.name)); } catch { return reply.code(404).send({ error: 'Diese Datei liegt nicht (mehr) auf dem Stick.' }); }
+    if (!f.startsWith(dir + sep)) return reply.code(400).send({ error: 'Pfad nicht erlaubt.' });
+    const st = statSync(f); if (!st.isFile() || st.size > MAX_PKG) return reply.code(400).send({ error: 'Die Datei ist kein gültiges Update-Paket.' });
+    try { return installPackage(req, readFileSync(f), 'USB-Stick'); } catch (e) { return reply.code(400).send({ error: e.message }); }
   });
   app.post('/api/v1/update/rollback', { config: { perm: 'update.manage' } }, async (req, reply) => {
     if (!rollback(appDir)) return reply.code(400).send({ error: 'Es gibt keine ältere Version, zu der zurückgegangen werden kann.' });

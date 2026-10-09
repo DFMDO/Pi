@@ -89,7 +89,7 @@ function wrap(text, max) { const out = []; for (const para of text.split('\n')) 
 /** Text-Ankündigung als Bild (für Lite-Player ohne Browser). */
 export async function renderTextImage(t, spec, dst) {
   const W = spec.maxImg, H = Math.round(W * 9 / 16), pad = Math.round(W * 0.06);
-  const colors = { standard: ['#1a1a1a', '#ffffff', '#c8102e'], hinweis: ['#f2a900', '#1a1a1a', '#1a1a1a'], highlight: ['#c8102e', '#ffffff', '#ffffff'], frage: ['#0b3d91', '#ffffff', '#f2a900'], antwort: ['#1b7f3b', '#ffffff', '#ffffff'] }[t.template] ?? ['#1a1a1a', '#ffffff', '#c8102e'];
+  const colors = { standard: ['#1a1a1a', '#ffffff', '#c8102e'], hinweis: ['#f2a900', '#1a1a1a', '#1a1a1a'], highlight: ['#c8102e', '#ffffff', '#ffffff'], frage: ['#0b3d91', '#ffffff', '#f2a900'], antwort: ['#1b7f3b', '#ffffff', '#ffffff'], notfall: ['#b00020', '#ffffff', '#ffffff'] }[t.template] ?? ['#1a1a1a', '#ffffff', '#c8102e'];
   const tf = Math.round(W * (t.compact ? 0.05 : 0.06)), bf = Math.round(W * (t.compact ? 0.024 : 0.032)); // compact: längere Listen (Apps) passen aufs Bild
   const body = wrap(t.body ?? '', Math.floor((W - 2 * pad) / (bf * 0.55)));
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect width="100%" height="100%" fill="${colors[0]}"/><rect x="0" y="0" width="${Math.round(W * 0.02)}" height="${H}" fill="${colors[2]}"/>

@@ -18,7 +18,7 @@ async function extras6Plugin(app, { db, audit, variants, now = () => Date.now() 
   app.get('/api/v1/media/unused', { config: { perm: 'media.write' } }, async () => {
     const { used, blobs } = usedIds(), t = now(), today = new Date(t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
     const items = db.prepare('SELECT id,name,kind,size,folder,created_at,valid_until FROM media ORDER BY created_at').all()
-      .filter((m) => !used.has(m.id) && !blobs.includes(m.id))
+      .filter((m) => m.folder !== 'Notfall' && !used.has(m.id) && !blobs.includes(m.id)) // Notfall-Texte bleiben immer bereit
       .map((m) => ({ id: m.id, name: m.name, kind: m.kind, size: m.size ?? 0, folder: m.folder, createdAt: m.created_at, ageDays: Math.floor((t - m.created_at) / 86400000), recent: t - m.created_at < 86400000, expired: !!m.valid_until && m.valid_until < today }));
     return { items, totalBytes: items.reduce((s, m) => s + m.size, 0), hint: 'Das sind Bilder, Videos und Folien, die in keiner Abspielliste, keinem Termin, keiner Szene und keiner App mehr vorkommen. Gelöschtes liegt 30 Tage im Papierkorb.' };
   });

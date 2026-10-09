@@ -17,6 +17,8 @@ import extras3Plugin from './lib/extras3.js';
 import extras4Plugin from './lib/extras4.js';
 import extras5Plugin from './lib/extras5.js';
 import extras6Plugin from './lib/extras6.js';
+import notfallPlugin from './lib/notfall.js';
+import alertsPlugin from './lib/alerts.js';
 import { createMetrics } from './lib/metrics.js';
 import systemPlugin from './lib/system.js';
 import { createVariantQueue } from './lib/variants.js';
@@ -41,7 +43,7 @@ function indexStatic(root) {
   walk(root); return map;
 }
 
-export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-ui', 'dist'), updateKeyPem = '', appDir, baseDir, now = () => Date.now(), hubInfo, onRestart, logger = false, useTls = false, fetchText, importRoots, usbDir }) {
+export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-ui', 'dist'), updateKeyPem = '', appDir, baseDir, now = () => Date.now(), hubInfo, onRestart, logger = false, useTls = false, fetchText, importRoots, usbDir, mailer }) {
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const mediaDir = join(dataDir, 'media'); mkdirSync(mediaDir, { recursive: true });
   const db = openDb(join(dataDir, 'hub.db'));
@@ -73,7 +75,9 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   await app.register(extras4Plugin, { db, audit, mediaDir, metrics, now });
   await app.register(extras5Plugin, { db, audit, variants, now, fetchText });
   await app.register(extras6Plugin, { db, audit, variants, now });
-  await app.register(systemPlugin, { db, audit, dataDir, mediaDir, tls, updateKeyPem, appDir: appDir ?? join(dataDir, 'app'), baseDir, onRestart });
+  await app.register(notfallPlugin, { db, audit, variants, now });
+  await app.register(alertsPlugin, { db, key, audit, now, ...(mailer ? { mailer } : {}) });
+  await app.register(systemPlugin, { db, audit, dataDir, mediaDir, tls, updateKeyPem, appDir: appDir ?? join(dataDir, 'app'), baseDir, onRestart, ...(usbDir ? { usbDir } : {}) });
 
   // ---------- Ersteinrichtung des Hubs ----------
   const codeFile = join(dataDir, 'keys', 'setup-code.txt'), setupLim = createLimiter({ max: 5, baseMs: 60000, now });

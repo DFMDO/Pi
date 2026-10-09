@@ -86,3 +86,9 @@ dialog.wide{max-width:min(900px,96vw);width:96vw}.wallwrap{padding:12px;backgrou
 .photoprev img{display:block;max-width:100%;max-height:260px;margin:8px 0;border-radius:8px}
 .cleanlist{list-style:none;padding:0;margin:8px 0;max-height:46vh;overflow:auto}.cleanlist li{padding:8px 0;border-bottom:1px solid var(--dfm-line)}.cleanlist label{display:inline-flex;gap:6px;align-items:center;min-height:44px}
 @media (max-width:560px){.quizrow{grid-template-columns:1fr}}
+.preset-list{display:grid;gap:8px;margin:8px 0}
+.preset{display:flex;flex-direction:column;gap:2px;text-align:left;min-height:56px;padding:10px 14px;font:inherit;color:inherit;background:var(--dfm-card);border:2px solid var(--dfm-line);border-radius:12px;cursor:pointer}
+.preset[aria-pressed=true]{border-color:#b00020;box-shadow:0 0 0 2px #b00020}
+.checklist{list-style:none;padding:0;margin:0 0 12px}.checkrow{padding:8px 0;border-bottom:1px solid var(--dfm-line)}
+.printcard th{text-align:left;width:34%;vertical-align:top}.printcard ol{padding-left:1.3em}.printcard li{margin-bottom:6px}
+@media print{nav.side,.noprint,#toasts{display:none!important}.shell{display:block!important}main{padding:0!important}.card{box-shadow:none!important;border:1px solid #999!important;break-inside:avoid}body{background:#fff!important;color:#000!important}}

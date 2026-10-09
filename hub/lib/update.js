@@ -9,7 +9,7 @@ import { verifyPackage } from '../../shared/update.js';
 export function readPackage(file) {
   const tmp = mkdtempSync(join(tmpdir(), 'dfm-up-'));
   try {
-    const names = execFileSync('tar', ['-tf', file]).toString().split('\n').filter(Boolean);
+    const names = execFileSync('tar', ['-tf', file]).toString().split(/\r?\n/).filter(Boolean); // \r?: auch das tar von Windows liefert Zeilen mit \r\n
     const ok = new Set(['manifest.json', 'manifest.sig', 'payload.tar']);
     if (names.length !== 3 || names.some((n) => !ok.has(n))) throw new Error('Das ist kein gültiges Update-Paket.');
     execFileSync('tar', ['-C', tmp, '--no-same-owner', '-xf', file]);
@@ -20,7 +20,7 @@ export function readPackage(file) {
 /** Prüft Signatur und legt die neue Version unter <appDir>/<version> ab (noch nicht aktiv). */
 export function stage(file, appDir, pubKeyPem, baseDir) {
   const pkg = readPackage(file), manifest = verifyPackage(pkg, pubKeyPem);
-  const names = execFileSync('tar', ['-tf', '-'], { input: pkg.payload }).toString().split('\n').filter(Boolean);
+  const names = execFileSync('tar', ['-tf', '-'], { input: pkg.payload }).toString().split(/\r?\n/).filter(Boolean);
   if (names.some((n) => n.startsWith('/') || n.split('/').includes('..'))) throw new Error('Das Update enthält ungültige Pfade.');
   mkdirSync(appDir, { recursive: true });
   const dir = join(appDir, manifest.version), tmp = dir + '.tmp';

@@ -42,7 +42,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
   }
   const targetName = (o) => o.scope === 'all' ? 'alle Bildschirme' : o.scope === 'group' ? `Gruppe „${db.prepare('SELECT name FROM device_groups WHERE id=?').get(o.target_id)?.name ?? '?'}“` : `„${db.prepare('SELECT name FROM devices WHERE id=?').get(o.target_id)?.name ?? '?'}“`;
   const overrideView = (o) => ({ id: o.id, scope: o.scope, targetId: o.target_id, targetName: targetName(o), content: { type: o.content_type, id: o.content_id }, contentName: nameOf(o.content_type, o.content_id), sceneId: o.scene_id, label: o.label, by: o.created_by_name, createdAt: o.created_at, until: o.until,
-    text: `${o.scene_id ? `Szene „${o.label}“` : 'Schnellaktion'} von ${o.created_by_name} auf ${targetName(o)}, bis ${hhmm(o.until)} Uhr` });
+    text: `${o.label === 'NOTFALL' ? 'NOTFALL-MELDUNG' : o.scene_id ? `Szene „${o.label}“` : 'Schnellaktion'} von ${o.created_by_name} auf ${targetName(o)}, bis ${hhmm(o.until)} Uhr` });
   const activeOverrides = () => db.prepare('SELECT * FROM overrides WHERE ended_at IS NULL AND until>? ORDER BY created_at DESC').all(now());
 
   app.get('/api/v1/overrides', { config: { perm: 'live.read' } }, async (req) => activeOverrides().filter((o) => o.scope === 'all' || !req.user.groups || req.user.role === 'admin'
