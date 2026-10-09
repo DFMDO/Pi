@@ -28,7 +28,7 @@ function standby() {
   return el('div', 'standby', logo);
 }
 function build(item) {
-  if (item.kind === 'text') { const t = item.text ?? {}; return el('div', 'text ' + (t.template ?? 'standard'), el('h1', '', t.title ?? ''), el('p', '', t.body ?? '')); }
+  if (item.kind === 'text') { const t = item.text ?? {}; return el('div', 'text ' + (t.template ?? 'standard') + (t.compact ? ' compact' : ''), el('h1', '', t.title ?? ''), el('p', '', t.body ?? '')); }
   const src = '/media/' + item.mediaId;
   if (item.kind === 'video') { const v = el('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.disableRemotePlayback = true; v.src = src; return v; }
   const i = el('img'); i.src = src; i.alt = item.name ?? ''; return i;

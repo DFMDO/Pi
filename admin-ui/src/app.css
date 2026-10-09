@@ -78,3 +78,5 @@ dialog.wide{max-width:min(900px,96vw);width:96vw}.wallwrap{padding:12px;backgrou
 .plan{position:relative;display:inline-block;max-width:100%;border:1px solid var(--dfm-line);border-radius:8px;overflow:hidden;background:var(--dfm-card)}.plan img{display:block;max-width:100%;height:auto;user-select:none}.plan.empty{display:block;min-height:240px;padding:24px;border-style:dashed}
 .pin{position:absolute;transform:translate(-50%,-100%);min-height:44px;min-width:44px;padding:0 12px;border:2px solid #fff;border-radius:22px;font:inherit;font-weight:600;cursor:pointer;color:#fff;background:#1b7f3b;box-shadow:0 1px 4px rgba(0,0,0,.45)}.pin.warn{background:#8a5a00}.pin.bad{background:#b00020}.pin.pending{background:#555}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.apppreview{white-space:pre-wrap;background:var(--dfm-secondary);color:#fff;border-left:8px solid var(--dfm-primary);padding:12px 14px;border-radius:8px;line-height:1.45}
+.appcard textarea{width:100%;font:inherit;min-height:88px}

@@ -15,10 +15,11 @@ import { scenesPage } from './pages/quick.js';
 import { betriebPage } from './pages/betrieb.js';
 import { wizardPage } from './pages/wizard.js';
 import { grundrissPage } from './pages/grundriss.js';
+import { appsPage } from './pages/apps.js';
 
 const app = document.getElementById('app');
 const NAV = [['#/', 'Startseite', '🏠', homePage], ['#/live', 'Live', '📺', livePage], ['#/bildschirme', 'Bildschirme', '🖥️', devicesPage], ['#/grundriss', 'Grundriss', '🗺️', grundrissPage], ['#/medien', 'Bilder & Videos', '🖼️', mediaPage], ['#/listen', 'Abspiellisten', '▶️', playlistsPage],
-  ['#/kalender', 'Kalender', '📅', calendarPage], ['#/szenen', 'Szenen', '🎬', scenesPage], ['#/betrieb', 'Betrieb', '🩺', betriebPage], ['#/hilfe', 'Hilfe', '❓', helpPage]];
+  ['#/kalender', 'Kalender', '📅', calendarPage], ['#/szenen', 'Szenen', '🎬', scenesPage], ['#/apps', 'Apps', '🧩', appsPage], ['#/betrieb', 'Betrieb', '🩺', betriebPage], ['#/hilfe', 'Hilfe', '❓', helpPage]];
 const ADMIN = [['#/benutzer', 'Benutzer', '👥', usersPage, 'users.manage'], ['#/protokoll', 'Protokoll', '📜', auditPage, 'audit.read'], ['#/einstellungen', 'Erweitert', '⚙️', settingsPage, 'settings.manage']];
 
 async function boot() {

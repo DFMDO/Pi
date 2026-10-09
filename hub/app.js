@@ -15,6 +15,7 @@ import extrasPlugin from './lib/extras.js';
 import extras2Plugin from './lib/extras2.js';
 import extras3Plugin from './lib/extras3.js';
 import extras4Plugin from './lib/extras4.js';
+import extras5Plugin from './lib/extras5.js';
 import { createMetrics } from './lib/metrics.js';
 import systemPlugin from './lib/system.js';
 import { createVariantQueue } from './lib/variants.js';
@@ -39,7 +40,7 @@ function indexStatic(root) {
   walk(root); return map;
 }
 
-export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-ui', 'dist'), updateKeyPem = '', appDir, baseDir, now = () => Date.now(), hubInfo, onRestart, logger = false, useTls = false }) {
+export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-ui', 'dist'), updateKeyPem = '', appDir, baseDir, now = () => Date.now(), hubInfo, onRestart, logger = false, useTls = false, fetchText }) {
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const mediaDir = join(dataDir, 'media'); mkdirSync(mediaDir, { recursive: true });
   const db = openDb(join(dataDir, 'hub.db'));
@@ -69,6 +70,7 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   await app.register(extras2Plugin, { db, audit, mediaDir, dataDir, variants, now });
   await app.register(extras3Plugin, { db, audit, mediaDir, now });
   await app.register(extras4Plugin, { db, audit, mediaDir, metrics, now });
+  await app.register(extras5Plugin, { db, audit, variants, now, fetchText });
   await app.register(systemPlugin, { db, audit, dataDir, mediaDir, tls, updateKeyPem, appDir: appDir ?? join(dataDir, 'app'), baseDir, onRestart });
 
   // ---------- Ersteinrichtung des Hubs ----------
