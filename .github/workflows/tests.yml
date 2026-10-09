@@ -22,4 +22,6 @@ jobs:
         run: |
           npx playwright-core install --with-deps chromium
           echo "DFM_CHROMIUM=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome | head -1)" >> "$GITHUB_ENV"
+      - name: Oberfläche bauen (die Browser-Tests brauchen admin-ui/dist)
+        run: npm run build:ui
       - run: npm test
