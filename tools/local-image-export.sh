@@ -4,6 +4,7 @@
 #   sudo tools/local-image-export.sh <basis.img> <ausgabe.img>
 # GRENZEN: Gilt für Code (hub, player, setup, shared, assets, admin-ui/dist), Systemdateien (build/rootfs), Dienste (enable/mask) und config.txt.
 #          NICHT für neue Pakete, geänderte Partitionsgrößen oder cmdline.txt – dafür bleibt der Bau auf GitHub nötig.
+# Dateirechte: Die Dateien kommen vom Windows-Laufwerk (dort wirken alle als 777). Deshalb setzt der Bau Ordner 755 / Dateien 644 und Besitzer root; ausführbar wird nur /usr/lib/dfm/*.
 set -uo pipefail
 [ "$(id -u)" = 0 ] || { echo "Bitte als root starten (sudo)."; exit 1; }
 REPO=${DFM_REPO:-$(cd "$(dirname "$0")/.." && pwd)}; BASE=${1:?Aufruf: sudo tools/local-image-export.sh <basis.img> <ausgabe.img>}; OUT=${2:?Ausgabedatei fehlt}
@@ -18,9 +19,9 @@ mount "${LOOP}p2" "$M" && mount "${LOOP}p1" "$M/boot/firmware" || { echo "FEHLER
 cp /usr/bin/qemu-aarch64-static "$M/usr/bin/"
 VERSION=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' "$REPO/package.json" | head -1)
 echo "== Code und Systemdateien (Version $VERSION) darüberlegen =="
-rsync -a --exclude=/etc/fstab "$REPO/build/rootfs/" "$M/"                       # fstab nicht überschreiben: im fertigen Image stehen dort die echten Partitions-IDs
-for d in hub shared player setup assets; do rsync -a --exclude node_modules --exclude '*.test.js' --exclude test "$REPO/$d/" "$M/opt/dfm/$d/"; done
-[ -d "$REPO/admin-ui/dist" ] && rsync -a --delete "$REPO/admin-ui/dist/" "$M/opt/dfm/admin-ui/dist/" || echo "HINWEIS: admin-ui/dist fehlt (vorher 'npm run build:ui')"
+rsync -a --chmod=D755,F644 --chown=0:0 --exclude=/etc/fstab "$REPO/build/rootfs/" "$M/"                       # fstab nicht überschreiben: im fertigen Image stehen dort die echten Partitions-IDs
+for d in hub shared player setup assets; do rsync -a --chmod=D755,F644 --chown=0:0 --exclude node_modules --exclude '*.test.js' --exclude test "$REPO/$d/" "$M/opt/dfm/$d/"; done
+[ -d "$REPO/admin-ui/dist" ] && rsync -a --chmod=D755,F644 --chown=0:0 --delete "$REPO/admin-ui/dist/" "$M/opt/dfm/admin-ui/dist/" || echo "HINWEIS: admin-ui/dist fehlt (vorher 'npm run build:ui')"
 cp "$REPO/package.json" "$M/opt/dfm/package.json"; echo "$VERSION" > "$M/etc/dfm/version"
 find "$M/usr/lib/dfm" "$M/etc/systemd/system" "$M/etc/chromium" "$M/etc/NetworkManager" "$M/etc/udev/rules.d" -type f -exec sed -i 's/\r$//' {} + 2>/dev/null
 chmod +x "$M"/usr/lib/dfm/*
