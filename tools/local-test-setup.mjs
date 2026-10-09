@@ -15,7 +15,7 @@ await writeFinalConfig(
   { v: 1, role: 'kombi', name, createdAt: new Date().toISOString() },
   {
     hubBootstrap: { admin: { name: 'Test', pwHash: '$argon2id$v=19$m=65536,t=3,p=4$dGVzdA$dGVzdGhhc2g' }, site: 'Test' },
-    agent: { deviceId, hubUrl: 'https://127.0.0.1', hubSpki: c.spki, token, name, profile, model: 'Lokaltest', local: true },
+    agent: { deviceId, hubUrl: 'https://127.0.0.1', hubSpki: c.spki, token, name, profile, model: 'Lokaltest', local: true, renderer: 'mpv' },
     localPlayer: { deviceId, tokenHash: createHash('sha256').update(token).digest('hex'), name, profile, model: 'Lokaltest' },
   },
   '/data');

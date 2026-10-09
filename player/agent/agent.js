@@ -29,7 +29,7 @@ export function ownAddresses() {
 }
 
 export class Agent {
-  constructor({ dataDir, version = '0.2.17', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.18', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });
@@ -172,7 +172,7 @@ export class Agent {
   /** Wiedergabe-Art (Browser oder Video-optimiert mit mpv) kommt vom Hub. Ändert sie sich, startet der Agent neu und wählt den passenden Renderer. */
   rendererWanted() { return this.cfg?.profile === 'lite' || this.cfg?.renderer === 'mpv' ? 'mpv' : 'browser'; }
   applyHubSettings(plan) {
-    if (plan.renderer && plan.renderer !== this.rendererWanted()) { this.cfg.renderer = plan.renderer; writeJson(this.cfgFile, this.cfg); this.log('Wiedergabe-Art geändert:', plan.renderer, '– Anzeige startet neu'); setTimeout(() => this.exit(0), 300); }
+    if (plan.renderer && plan.renderer !== this.rendererWanted()) { this.cfg.renderer = plan.renderer; writeJson(this.cfgFile, this.cfg); this.log('Wiedergabe-Art geändert:', plan.renderer, '– Anzeige startet neu'); setTimeout(() => this.exit(75), 300); } // 75 (nicht 0): Der Dienst startet nur nach einem "Fehler" neu (Restart=on-failure) – mit 0 bliebe der Bildschirm bis zum nächsten Neustart des Geräts aus
     if (plan.sync) { this.cfg.syncWindow = plan.sync.window ?? ''; this.cfg.bandwidthKbps = plan.sync.bandwidthKbps ?? 0; }
     this.displayRule = plan.display?.off ?? null; this.checkDisplay();
   }

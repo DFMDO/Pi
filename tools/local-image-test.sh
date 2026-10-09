@@ -12,14 +12,14 @@
 # NICHT getestet werden kann: Anzeige (cage/Chromium), WLAN, GPU, Hardware.
 set -uo pipefail
 [ "$(id -u)" = 0 ] || { echo "Bitte mit sudo starten."; exit 1; }
-REPO=$(cd "$(dirname "$0")/.." && pwd); IN=${1:?Aufruf: sudo tools/local-image-test.sh <image.img|image.img.xz> [--fresh]}; FRESH=${2:-}
+REPO=${DFM_REPO:-$(cd "$(dirname "$0")/.." && pwd)}; IN=${1:?Aufruf: sudo tools/local-image-test.sh <image.img|image.img.xz> [--fresh]}; FRESH=${2:-}
 W=${DFM_WORK:-/var/tmp/dfm-local-test}; M=$W/root; D=$W/data; IMG=$W/work.img; LOG=$W/console.log; FAIL=0
 ok() { echo "OK       $*"; }; bad() { echo "FEHLER   $*"; FAIL=1; }
 for c in systemd-nspawn qemu-aarch64-static rsync losetup setpriv curl nsenter; do command -v "$c" >/dev/null || { echo "Es fehlt: $c"; echo "Installieren:  sudo apt-get install -y qemu-user-static binfmt-support systemd-container xz-utils util-linux rsync curl"; exit 1; }; done
 LOOP=""; NSP=""
 INIT() { pgrep -P "$NSP" 2>/dev/null | head -1; }
 IN_CT() { nsenter -t "$(INIT)" -a "$@"; }
-cleanup() { [ -n "$NSP" ] && { kill "$NSP" 2>/dev/null; sleep 3; kill -9 "$NSP" 2>/dev/null; }; umount -R "$M" 2>/dev/null || umount -R -l "$M" 2>/dev/null; [ -n "$LOOP" ] && losetup -d "$LOOP" 2>/dev/null; }
+cleanup() { [ -n "$NSP" ] && { kill "$NSP" 2>/dev/null; sleep 2; kill -9 "$NSP" 2>/dev/null; }; systemctl stop dfmtest.scope 2>/dev/null; sleep 1; umount -R "$M" 2>/dev/null || umount -R -l "$M" 2>/dev/null; [ -n "$LOOP" ] && losetup -d "$LOOP" 2>/dev/null; }
 trap cleanup EXIT
 
 mkdir -p "$W" "$M"; rm -rf "$D"; mkdir -p "$D"
@@ -44,6 +44,7 @@ echo "== Test-Anpassungen (nur Hardware-Teile, nicht die Dienste) =="
 printf 'proc /proc proc defaults 0 0\n' > "$M/etc/fstab"                                # keine SD-Karten-Einbindungen im Container
 sed -i '/^DEV=/,/^resize2fs/d' "$M/usr/lib/dfm/datamount.sh"                              # Partition erweitern/einbinden entfällt (/data kommt als Ordner), chown-Zeilen bleiben
 for u in NetworkManager avahi-daemon chrony nftables fake-hwclock dfm-zram dfm-netwatch systemd-timesyncd getty@tty1; do ln -sf /dev/null "$M/etc/systemd/system/$u.service"; done
+mkdir -p "$M/etc/tmpfiles.d"; printf 'd /run/user 0755 root root -\n' > "$M/etc/tmpfiles.d/dfm-test.conf"   # im Container fehlt logind: /run/user (ReadWritePaths des Agents) selbst anlegen
 mkdir -p "$M/etc/systemd/system/dfm-agent.service.d"
 printf '[Service]\nPAMName=\nTTYPath=\nStandardInput=null\nUtmpIdentifier=\nEnvironment=DFM_NO_RENDERER=1\n' > "$M/etc/systemd/system/dfm-agent.service.d/test.conf"   # kein Bildschirm im Container
 
@@ -55,7 +56,7 @@ umount "$M/data"
 echo "Besitzer direkt nach der Einrichtung: $(stat -c '%U:%G' "$D/hub/tls" "$D/hub/hub-bootstrap.json" 2>/dev/null | tr '\n' ' ')"
 
 echo "== System starten (kann unter Emulation 2-4 Minuten dauern) =="
-systemd-nspawn -q -D "$M" --register=no --bind="$D:/data" --capability=all --hostname=dfm-signage --boot > "$LOG" 2>&1 &
+systemctl stop dfmtest.scope 2>/dev/null; systemd-nspawn -q -M dfmtest -D "$M" --register=no --bind="$D:/data" --capability=all --hostname=dfm-signage --boot > "$LOG" 2>&1 &
 NSP=$!
 CODE=000; for i in $(seq 1 240); do kill -0 "$NSP" 2>/dev/null || { bad "Container beendet sich (siehe $LOG)"; tail -20 "$LOG"; exit 1; }; CODE=$(curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1:443/ 2>/dev/null); [ "$CODE" = 200 ] && break; sleep 1; done
 [ "$CODE" = 200 ] && ok "Hub antwortet über HTTPS (nach ${i}s)" || bad "Hub antwortet nicht (HTTP $CODE) nach ${i}s"

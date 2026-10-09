@@ -83,3 +83,11 @@ test('Jede im Image-Skript aktivierte oder maskierte dfm-Einheit existiert als D
     assert.ok(existsSync(new URL(`../build/rootfs/etc/systemd/system/${t}`, import.meta.url)), `${t} existiert in build/rootfs/etc/systemd/system`);
   }
 });
+
+// Lokaler Start-Test (WSL, 0.2.17): Nach "Wiedergabe-Art geändert" beendete sich der Agent mit Code 0 und blieb aus (Restart=on-failure startet nur bei Fehlern neu).
+test('Absichtliche Neustarts (Wiedergabe-Art, Hub-Update) beenden den Prozess mit Code 75, damit Restart=on-failure greift', () => {
+  const a = readFileSync(new URL('../player/agent/agent.js', import.meta.url), 'utf8'), s = readFileSync(new URL('../hub/server.js', import.meta.url), 'utf8');
+  assert.match(a, /Wiedergabe-Art geändert[^\n]*this\.exit\(75\)/);
+  assert.match(s, /onRestart: \(\) => process\.exit\(75\)/);
+  assert.match(unit('dfm-agent.service'), /^Restart=on-failure/m); assert.match(unit('dfm-hub.service'), /^Restart=on-failure/m);
+});

@@ -22,3 +22,12 @@ Nach einer Code-Änderung einfach erneut starten – ein neuer Image-Bau ist nic
 - Geprüft: Start der Dienste mit den **echten Dienst-Einheiten** (gleiche Sandbox-Regeln und Benutzer wie auf dem Pi), Rechte auf `/data/hub`, Hub-Antwort über HTTPS, Agent-Seite, Neustart-Schleifen.
 - Nicht prüfbar: Bildschirm (cage/Chromium), WLAN, GPU, Hardware, Temperatur. Das bleibt der Test am Pi (Diagnosedatei `dfm-diagnose.txt` auf der SD-Karte).
 - Stand: Das Skript wurde noch nicht ausgeführt (WSL fehlte auf dem Entwicklungs-PC); erste Läufe können Anpassungen am Skript nötig machen.
+## Einfacher Start unter Windows (seit 0.2.18, getestet)
+In PowerShell im Projektordner:
+```
+powershell -ExecutionPolicy Bypass -File tools\lokaler-test.ps1
+```
+Das Skript nimmt das neueste entpackte Image aus dem Downloads-Ordner (oder `-Image C:\Pfad\datei.img`), entfernt Windows-Zeilenenden und startet den Test in WSL. Erster Lauf: etwa 5 Minuten (Image kopieren, Code darüberlegen, System in ca. 70 s starten); weitere Läufe sind schneller.
+
+**Erfahrung aus dem ersten echten Lauf:** Der Test hat in Minuten zwei Fehler gefunden, die der Cloud-Test nicht sieht – einen Agent, der sich nach „Wiedergabe-Art ändern“ mit Code 0 beendete und nie neu startete, und (vorher schon auf dem Pi gefunden) Rechte auf dem Schlüsselordner. Meldungen wie `Failed to set up credentials`, `systemd-tmpfiles` oder fehlendes `/dev/vcio` im Container sind Eigenheiten der Emulation und kein Fehler im Image.
+Mehrere Läufe hintereinander sind möglich; der Container heißt `dfmtest` und wird am Ende beendet (`systemctl stop dfmtest.scope`).

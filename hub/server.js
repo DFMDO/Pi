@@ -20,7 +20,7 @@ const tls = ensureCertificate(join(dataDir, 'tls'), sans);
 const pubKeyFile = process.env.DFM_UPDATE_KEY ?? '/etc/dfm/update-key.pub';
 
 const app = await buildApp({ dataDir, tls, useTls: true, appDir, baseDir: process.env.DFM_BASE ?? '/opt/dfm', updateKeyPem: existsSync(pubKeyFile) ? readFileSync(pubKeyFile, 'utf8') : '',
-  hubInfo: () => ({ host: 'dfm-signage.local', ips }), onRestart: () => process.exit(0), logger: { level: 'warn', redact: ['req.headers.authorization', 'req.headers.cookie'] } });
+  hubInfo: () => ({ host: 'dfm-signage.local', ips }), onRestart: () => process.exit(75), /* 75 statt 0: dfm-hub.service startet nur nach einem "Fehler" neu (Restart=on-failure), sonst käme der Hub nach einem Update nicht zurück */ logger: { level: 'warn', redact: ['req.headers.authorization', 'req.headers.cookie'] } });
 
 await app.listen({ port: httpsPort, host: '0.0.0.0' });
 // Port 80: nur Weiterleitung auf HTTPS (Host wird nicht ungeprüft übernommen)
