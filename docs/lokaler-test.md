@@ -31,3 +31,10 @@ Das Skript nimmt das neueste entpackte Image aus dem Downloads-Ordner (oder `-Im
 
 **Erfahrung aus dem ersten echten Lauf:** Der Test hat in Minuten zwei Fehler gefunden, die der Cloud-Test nicht sieht – einen Agent, der sich nach „Wiedergabe-Art ändern“ mit Code 0 beendete und nie neu startete, und (vorher schon auf dem Pi gefunden) Rechte auf dem Schlüsselordner. Meldungen wie `Failed to set up credentials`, `systemd-tmpfiles` oder fehlendes `/dev/vcio` im Container sind Eigenheiten der Emulation und kein Fehler im Image.
 Mehrere Läufe hintereinander sind möglich; der Container heißt `dfmtest` und wird am Ende beendet (`systemctl stop dfmtest.scope`).
+
+## Lokaler Schnellbau eines flashbaren Images (statt 35 Minuten GitHub-Bau)
+```
+powershell -ExecutionPolicy Bypass -File tools\lokaler-bau.ps1
+```
+Das Skript nimmt das neueste entpackte Image aus Downloads als **Basis**, legt den **aktuellen Code und die Systemdateien** darüber und schreibt `dfm-signage-arm64-<Version>-lokal.img` in den Downloads-Ordner; danach startet es denselben Start-Test wie oben (mit `-OhneTest` übersprungen). Dauer: etwa 8 Minuten. Das Ergebnis schreibst du wie gewohnt mit dem Raspberry Pi Imager auf die SD-Karte.
+**Grenzen:** Neue Pakete, geänderte Partitionsgrößen und `cmdline.txt` brauchen weiterhin einen Bau auf GitHub (Workflow „Image bauen“). Die Basis sollte ein von GitHub gebautes Image sein, das Pakete und Partitionen schon enthält. Dies ist **kein Ersatz für die Prüfung am Pi**: Anzeige, WLAN und Hardware bleiben dort zu testen.
