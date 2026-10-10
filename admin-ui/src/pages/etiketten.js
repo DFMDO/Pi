@@ -19,7 +19,7 @@ export function labelsDlg(devices) {
       if (!c.checked) continue;
       const qr = h('div', { class: 'lab-qr', role: 'img', 'aria-label': `QR-Code für ${d.name}` });
       try { qr.innerHTML = await api('POST', '/qr', { text: `${origin}/#/live/${d.id}` }, { raw: true }).then((x) => x.text()); } catch { qr.textContent = '(QR nicht verfügbar)'; } // SVG vom eigenen Hub, kein Nutzertext
-      nodes.push(h('div', { class: 'lab' }, qr, h('div', { class: 'lab-txt' }, h('b', { class: 'lab-name' }, d.name), h('div', {}, [d.groupName, d.location].filter(Boolean).join(' · ') || ' '), h('div', { class: 'lab-nr' }, 'Nr. ' + d.id.slice(0, 4).toUpperCase()), h('div', { class: 'lab-small' }, d.model ?? ''), text.value ? h('div', { class: 'lab-small' }, text.value) : null)));
+      nodes.push(h('div', { class: 'lab' }, qr, h('div', { class: 'lab-txt' }, h('b', { class: 'lab-name' }, d.name), h('div', {}, [...new Set([d.groupName, d.location].filter(Boolean))].join(' · ') || ' '), h('div', { class: 'lab-nr' }, 'Nr. ' + d.id.slice(0, 4).toUpperCase()), h('div', { class: 'lab-small' }, d.model ?? ''), text.value ? h('div', { class: 'lab-small' }, text.value) : null)));
     }
     sheet.replaceChildren(...(nodes.length ? nodes : [h('p', { class: 'hint' }, 'Kein Bildschirm ausgewählt.')]));
   }

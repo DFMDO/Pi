@@ -143,7 +143,7 @@ Im **Kalender** (Tag / Woche / Monat) klickst du ein Feld an oder ziehst über e
 - **Werksreset:** Bildschirme → *Auf Werkseinstellungen zurücksetzen* (löscht alle Daten des Geräts, danach muss es neu eingerichtet werden).
 
 ## 11. Hilfe in der Oberfläche
-Überall gibt es **(?)-Hilfen**, die Rubrik **Hilfe** mit häufigen Fragen und den Rundgang **„Zeig mir, wie das geht“** (alles ohne Internet).
+Überall gibt es **(?)-Hilfen**, die **Anleitung** (Menü ❓ Hilfe, Kapitel 53) und den Rundgang **„Zeig mir, wie das geht“** (alles ohne Internet).
 
 ![Hilfe](bilder/10-hilfe.png)
 
@@ -388,3 +388,10 @@ Eine Folie erscheint regelmäßig zwischendurch, zum Beispiel **„alle 5 Minute
 - Du wählst die Bildschirme und die Größe (21 Etiketten je A4-Seite oder 8 große). Eine eigene Zeile, zum Beispiel „Störung? Haustechnik Tel. 123“, wird auf jedem Etikett gedruckt und in diesem Browser gemerkt. Gedruckt wird mit dem Druckknopf oder Strg+P.
 - Der QR-Code enthält die **Adresse, unter der du die Verwaltung gerade geöffnet hast**. Bekommt der Hub später eine andere Adresse, müssen die Etiketten neu gedruckt werden.
 - Auf Etikettenbögen müssen eventuell die Seitenränder im Druckdialog angepasst werden. Auf normalem Papier ausdrucken und ausschneiden geht immer.
+
+## 53. Neues Aussehen und die Anleitung im Programm (seit 0.2.27)
+- **Neues Aussehen:** Die Seitenleiste ist in Bereiche gegliedert (**Inhalte, Planen, Bildschirme, Betrieb, Verwaltung**), die Startseite zeigt Kacheln mit Symbolen und Bildschirm-Karten mit Vorschau, Zustände erscheinen als farbige Plaketten (immer mit Symbol **und** Text), Fenster und Knöpfe sind weicher gestaltet. Die Anmeldeseite hat eine Markenfläche. Alles funktioniert im hellen und im dunklen Design (Knopf „🌓 Hell / Dunkel“ unten links) und am Handy (die Navigation wird dort zu einer wischbaren Leiste). Viele Hinweise auf der Startseite werden zusammengeklappt („Weitere 3 Hinweise anzeigen“).
+- **Anleitung** (Menü ❓ **Hilfe**): über **40 Kapitel** in einfacher Sprache, sortiert nach *Erste Schritte, Inhalte, Abspielen planen, Automatik & Apps, Betrieb & Pflege, Verwaltung, Probleme lösen*. Jedes Kapitel hat nummerierte **Schritte**, 💡 Tipps, ⚠️ Warnungen und Knöpfe, die direkt zur passenden Seite führen. Oben suchst du nach einem **Stichwort** (Umlaute egal: „einschub“ findet „Einschübe“) oder filterst nach Thema.
+- **„Anleitung zu dieser Seite“:** Unter der Überschrift jeder Seite führt ein Link zum passenden Kapitel (Adresse zum Beispiel `https://dfm-signage.local/#/hilfe/regeln` – praktisch als Lesezeichen oder zum Weitergeben).
+- **Rundgang „Zeig mir, wie das geht“:** zehn Stationen durch die Seitenleiste; Bereiche, die es für dein Konto nicht gibt, werden übersprungen.
+- Die Anleitung steht im Programm selbst und braucht kein Internet. Texte und Zahlen darin werden bei jeder Programmänderung gegen den Programmcode geprüft (zum Beispiel die Pflege-Abstände).

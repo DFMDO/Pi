@@ -45,4 +45,4 @@ export function field(label, input, helpText) {
 export const fmtDate = (ms) => new Date(ms).toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'medium', timeStyle: 'short' });
 export const fmtBytes = (n) => (n > 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB');
 export const statusEl = (s) => h('span', { class: 'status ' + s.level }, h('span', { 'aria-hidden': 'true' }, s.icon), s.label); // Symbol + Text, nie nur Farbe
-export const empty = (title, text, action) => h('div', { class: 'empty' }, h('h2', {}, title), h('p', {}, text), action);
+export const empty = (title, text, action, icon = '📭') => h('div', { class: 'empty' }, h('div', { class: 'emptyicon', 'aria-hidden': 'true' }, icon), h('h2', {}, title), h('p', {}, text), action);

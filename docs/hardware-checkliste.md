@@ -118,3 +118,10 @@ RAM, CPU, WLAN-Durchsatz, Startzeit nach jeder größeren Änderung mit `tools/d
 | E35 | Einschub bei Notfall-Meldung, Tor-Jubel, Hand-Aktion | erscheint währenddessen nicht; danach normal | ☐ |
 | E36 | Etiketten auf Normalpapier und Etikettenbogen drucken, QR mit dem Handy scannen | Größe passt, QR öffnet nach Anmeldung die Live-Ansicht des richtigen Bildschirms | ☐ |
 | E37 | Pflege: Aufgabe abhaken, Hinweis auf der Startseite | Hinweis verschwindet, Datum und Name stehen in der Übersicht | ☐ |
+
+## Version 0.2.27 – Oberfläche auf echten Geräten ansehen
+| # | Prüfung | Soll | Prüfer |
+|---|---|---|---|
+| E38 | Verwaltung auf PC (Chrome/Edge), iPad und Handy (iPhone und Android), hell und dunkel | Lesbar, nichts abgeschnitten, Navigation am Handy wischbar, Knöpfe gut zu treffen | ☐ |
+| E39 | Anleitung: Suche, ein Kapitel öffnen, „Anleitung zu dieser Seite“ auf 3 Seiten, Rundgang | Findet Stichwörter, Knöpfe führen zur richtigen Seite, Texte verständlich (bitte jemanden **ohne** Technikwissen lesen lassen) | ☐ |
+| E40 | Etiketten drucken (Browser-Druck, Normalpapier) | Größe und QR passen, Navigation und Hintergrund erscheinen nicht auf dem Ausdruck | ☐ |
