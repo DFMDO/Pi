@@ -66,7 +66,7 @@ async function nachweisPlugin(app, { db, now = () => Date.now() }) {
     const r = range(req.query); if (r.error) return reply.code(400).send({ error: r.error });
     const names = Object.fromEntries(db.prepare('SELECT id,name FROM media').all().map((m) => [m.id, m.name]));
     const head = ['Datum', 'Bildschirm', 'Medium', 'Art', 'Einblendungen', 'Sekunden', 'Minuten'];
-    const body = rows(req, req.query, r).map((x) => [x.day, x.device ?? 'Gelöschter Bildschirm', names[x.media_id] ?? x.name, ({ image: 'Bild', video: 'Video', text: 'Text', pdfpage: 'PDF-Seite' })[x.kind] ?? x.kind, x.plays, x.seconds, (x.seconds / 60).toFixed(1).replace('.', ',')].map(csvCell).join(';'));
+    const body = rows(req, req.query, r).map((x) => [x.day, x.device ?? 'Gelöschter Bildschirm', names[x.media_id] ?? x.name, ({ image: 'Bild', video: 'Video', text: 'Text', pdfpage: 'PDF-Seite', stream: 'Live-Bild' })[x.kind] ?? x.kind, x.plays, x.seconds, (x.seconds / 60).toFixed(1).replace('.', ',')].map(csvCell).join(';'));
     return reply.header('Content-Type', 'text/csv; charset=utf-8').header('Content-Disposition', `attachment; filename="dfm-wiedergabe-${r.from}-bis-${r.to}.csv"`).send('﻿' + [head.join(';'), ...body].join('\r\n') + '\r\n');
   });
 }

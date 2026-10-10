@@ -96,12 +96,21 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
     const s = db.prepare('SELECT * FROM scenes WHERE id=?').get(req.params.id); if (!s) return reply.code(404).send({ error: 'Szene nicht gefunden.' }); if (s.state !== 'published') return reply.code(400).send({ error: 'Diese Szene ist noch ein Entwurf. Bitte veröffentliche sie zuerst.' });
     const items = JSON.parse(s.items_json); for (const i of items) { const bad = contentOk(i.content); if (bad) return reply.code(400).send({ error: `In der Szene „${s.name}“: ${bad}` }); }
     if (!req.body?.confirm) return reply.code(409).send({ error: `Die Szene „${s.name}“ übernimmt jetzt ${items.length} Bildschirm(e)/Gruppe(n). Bitte bestätige.`, needsConfirm: true });
-    const until = untilOf(req.body ?? {}, now()); db.prepare('UPDATE overrides SET ended_at=? WHERE scene_id=? AND ended_at IS NULL').run(now(), s.id);
-    for (const i of items) startOverride(req, { scope: i.scope, targetId: i.targetId, content: i.content, until, label: s.name, sceneId: s.id });
+    const until = runScene(req.user, s, req.body ?? {});
     A(req, 'szene.gestartet', s.name, { bis: new Date(until).toISOString() }); app.pushAll(); return { ok: true, until, text: `Szene „${s.name}“ läuft bis ${hhmm(until)} Uhr.` };
   });
+  /** Szene starten – von Hand oder per Auslöser-Link. actor = { id, name } (erscheint als „von …“). Gibt das Ende zurück. */
+  function runScene(actor, s, b = {}) {
+    const until = untilOf(b, now()); db.prepare('UPDATE overrides SET ended_at=? WHERE scene_id=? AND ended_at IS NULL').run(now(), s.id);
+    for (const i of JSON.parse(s.items_json)) startOverride({ user: actor }, { scope: i.scope, targetId: i.targetId, content: i.content, until, label: s.name, sceneId: s.id });
+    return until;
+  }
+  const stopScene = (sceneId) => db.prepare('UPDATE overrides SET ended_at=? WHERE scene_id=? AND ended_at IS NULL').run(now(), sceneId).changes;
+  /** Klartext, warum eine Szene gerade nicht gestartet werden kann (oder null) */
+  const sceneProblem = (s) => { if (s.state !== 'published') return 'Diese Szene ist noch ein Entwurf. Bitte veröffentliche sie zuerst.'; for (const i of JSON.parse(s.items_json)) { const bad = contentOk(i.content); if (bad) return `In der Szene „${s.name}“: ${bad}`; } return null; };
+  app.decorate('scenes', { run: runScene, stop: stopScene, problem: sceneProblem });
   app.post('/api/v1/scenes/:id/stop', { config: { perm: 'overrides.write' } }, async (req) => {
-    const n = db.prepare('UPDATE overrides SET ended_at=? WHERE scene_id=? AND ended_at IS NULL').run(now(), req.params.id).changes; A(req, 'szene.beendet', req.params.id); app.pushAll(); return { ok: true, ended: n };
+    const n = stopScene(req.params.id); A(req, 'szene.beendet', req.params.id); app.pushAll(); return { ok: true, ended: n };
   });
 
   // ======================= Live-Ansicht (Z.1) =======================

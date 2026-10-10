@@ -3,7 +3,7 @@
 // Browser-Bildschirme zeigen etwa 5 Bilder pro Sekunde, Bildschirme mit mpv („Video-optimiert“) höchstens eines pro Sekunde (einfache Darstellung).
 // Die Übertragung endet von Hand, nach der eingestellten Zeit, ohne Bilder (20 s) oder wenn eine Notfall-Meldung startet.
 import { randomUUID } from 'node:crypto';
-import { rendererOf } from './plan.js';
+import { effectiveRenderer } from './plan.js';
 import { safeInterval } from '../../shared/guard.js';
 
 const MAX_FRAME = 2.5 * 1024 * 1024, IDLE_MS = 20000, MPV_MIN_GAP_MS = 900;
@@ -25,7 +25,7 @@ async function teilenPlugin(app, { db, audit, now = () => Date.now() }) {
     const b64 = buf.toString('base64'), t = now(); let sent = 0;
     for (const id of s.devices) {
       const d = dv().getDevice(id); if (!d) continue;
-      if (rendererOf(d) === 'mpv' && t - (lastRelay.get(id) ?? 0) < MPV_MIN_GAP_MS) continue; // mpv lädt jedes Bild als Datei: höchstens ca. eins pro Sekunde
+      if (effectiveRenderer(db, d) === 'mpv' && t - (lastRelay.get(id) ?? 0) < MPV_MIN_GAP_MS) continue; // mpv lädt jedes Bild als Datei: höchstens ca. eins pro Sekunde
       if (dv().sendTo(id, 'share_frame', { id: s.id, jpg: b64 })) { lastRelay.set(id, t); sent++; }
     }
     return sent;
@@ -57,7 +57,7 @@ async function teilenPlugin(app, { db, audit, now = () => Date.now() }) {
     shares.set(s.id, s); for (const d of ok) dv().sendTo(d.id, 'share_start', { id: s.id });
     audit.log({ user: req.user, action: 'teilen.gestartet', target: s.id, ip: req.ip, detail: { bildschirme: s.names, bis: new Date(s.until).toISOString() } });
     return reply.code(201).send({ id: s.id, until: s.until, text: `Dein Bildschirm wird auf ${s.names.length === 1 ? `„${s.names[0]}“` : `${s.names.length} Bildschirme`} übertragen, höchstens bis ${hhmm(s.until)} Uhr.`,
-      devices: ok.map((d) => ({ id: d.id, name: d.name, mode: rendererOf(d) })), skipped, fps: { browser: 5, mpv: 1 }, maxWidth: 1920 });
+      devices: ok.map((d) => ({ id: d.id, name: d.name, mode: effectiveRenderer(db, d) })), skipped, fps: { browser: 5, mpv: 1 }, maxWidth: 1920 });
   });
 
   app.post('/api/v1/share/:id/frame', { config: { perm: 'overrides.write' }, bodyLimit: MAX_FRAME + 1024 }, async (req, reply) => {

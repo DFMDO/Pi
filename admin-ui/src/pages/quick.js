@@ -1,6 +1,6 @@
 // Schnellaktionen und Szenen (Z.2): sofortige Aktionen mit eigener Bestätigung, laufen nicht über den Entwurfsmodus.
 import { h, dialog, confirmDlg, toast, field } from '../ui.js';
-import { get, post, del, put, can } from '../api.js';
+import { get, post, del, put, patch, can } from '../api.js';
 import { presentationDialog } from './praesentation.js';
 import { notfallDlg } from './notfall.js';
 import { shareDlg, shareNotices } from './teilen.js';
@@ -12,6 +12,33 @@ async function contentSelect() {
   return h('select', { 'aria-label': 'Inhalt' }, pl.filter((x) => x.state === 'published' && !x.draftOf).map((p) => h('option', { value: 'playlist:' + p.id }, 'Abspielliste: ' + p.name)), md.map((m) => h('option', { value: 'media:' + m.id }, `${m.kind === 'video' ? 'Video' : m.kind === 'text' ? 'Text' : 'Bild'}: ${m.name}`)));
 }
 const parse = (v) => { const [type, ...id] = v.split(':'); return { type, id: id.join(':') }; };
+
+/** Auslöser-Links (nur Admin): ein geheimer Link startet oder beendet von außen eine Szene */
+async function triggersCard(scenes, route) {
+  const list = await get('/triggers').catch(() => []); const pub = scenes.filter((s) => s.state === 'published');
+  const when = (ts) => (ts ? new Date(ts).toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'short', timeStyle: 'short' }) : 'noch nie');
+  const showLink = (r, title) => {
+    const url = location.origin + r.path, f = h('input', { value: url, readonly: true, 'aria-label': 'Adresse des Auslösers', style: 'width:100%' });
+    dialog(title, h('div', {}, h('p', { class: 'notice' }, r.text), f, h('p', { class: 'hint' }, 'So wird er aufgerufen: ein POST auf diese Adresse, ohne Anmeldung. Der Hub hat ein selbst erstelltes Zertifikat – das aufrufende Gerät muss es einmalig bestätigen.')),
+      [{ text: 'Adresse kopieren', fn: async () => { try { await navigator.clipboard.writeText(url); toast('Kopiert.'); } catch { f.select(); toast('Bitte mit Strg+C kopieren.'); } return false; } }, { text: 'Fertig', cls: 'sec' }]);
+  };
+  const create = () => {
+    const name = h('input', { maxlength: 60 }), sc = h('select', { 'aria-label': 'Szene' }, pub.map((s) => h('option', { value: s.id }, s.name)));
+    const act = h('select', { 'aria-label': 'Was soll passieren?' }, h('option', { value: 'start' }, 'Szene starten'), h('option', { value: 'stop' }, 'Szene beenden'));
+    const dur = h('select', { 'aria-label': 'Dauer' }, DURS.map(([k, t]) => h('option', { value: k }, t))), viaGet = h('input', { type: 'checkbox' });
+    dialog('Neuer Auslöser-Link', h('div', {}, field('Name, z. B. „Taste 1 am Empfang“', name), field('Szene', sc), field('Was soll passieren?', act), field('Wie lange? (nur beim Starten)', dur),
+      h('label', {}, viaGet, ' Auch einfaches Aufrufen (GET) erlauben – nur für Geräte, die nichts anderes können'), h('p', { class: 'hint' }, 'Eine laufende Notfall-Meldung wird von einem Auslöser nie beendet.')),
+    [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Anlegen', fn: async () => { try { const r = await post('/triggers', { name: name.value, sceneId: sc.value, action: act.value, allowGet: viaGet.checked, ...durBody(dur.value) }); setTimeout(() => showLink(r, 'Dein neuer Link'), 0); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
+  };
+  return h('section', { class: 'card', style: 'margin-top:16px' }, h('h2', { style: 'margin-top:0' }, '🔗 Auslöser-Links'),
+    h('p', { class: 'hint' }, 'Ein geheimer Link startet oder beendet eine Szene von außen – zum Beispiel per Handy-Kurzbefehl, Taste oder aus der Haustechnik. Nur im Museumsnetz erreichbar, jeder Aufruf steht im Protokoll.'),
+    pub.length ? h('p', {}, h('button', { class: 'btn', onclick: create }, '➕ Neuer Auslöser-Link')) : h('p', { class: 'hint' }, 'Zuerst muss mindestens eine Szene veröffentlicht sein.'),
+    list.length ? h('div', {}, list.map((t) => h('div', { class: 'row', style: 'margin-bottom:8px' },
+      h('span', { class: 'sp' }, h('b', {}, t.name), ` – ${t.action === 'stop' ? 'beendet' : 'startet'} „${t.sceneName ?? '(gelöscht)'}“ · zuletzt ${when(t.lastUsed)} · ${t.useCount}× benutzt${t.allowGet ? ' · auch GET' : ''}`, t.problem ? h('span', { class: 'status warn', style: 'margin-left:8px' }, t.problem) : null),
+      h('button', { class: 'btn sec', onclick: async () => { await patch(`/triggers/${t.id}`, { enabled: !t.enabled }); route(); } }, t.enabled ? 'Ausschalten' : 'Einschalten'),
+      h('button', { class: 'btn sec', onclick: async () => { if (await confirmDlg('Neuen Link erzeugen?', `Der alte Link von „${t.name}“ gilt danach nicht mehr.`, 'Neuen Link erzeugen', false)) { const r = await post(`/triggers/${t.id}/regenerate`); showLink(r, 'Neuer Link'); } } }, 'Link erneuern'),
+      h('button', { class: 'btn sec', onclick: async () => { if (await confirmDlg('Auslöser löschen?', `„${t.name}“ funktioniert danach nicht mehr.`, 'Löschen')) { await del(`/triggers/${t.id}`); route(); } } }, 'Löschen')))) : h('p', { class: 'hint' }, 'Es gibt noch keinen Auslöser-Link.'));
+}
 
 export async function quickActions(route) {
   const [ov, scenes, devices, shares] = await Promise.all([get('/overrides'), get('/scenes'), get('/devices'), get('/share').catch(() => [])]);
@@ -55,5 +82,6 @@ export async function scenesPage({ route }) {
     async function save(publish) { try { const b = { name: name.value, items, publish }; if (s) await put(`/scenes/${s.id}`, b); else await post('/scenes', b); toast(publish ? 'Szene veröffentlicht.' : 'Als Entwurf gespeichert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } }
   }
   return h('div', {}, h('h1', {}, 'Szenen'), h('p', { class: 'lead' }, 'Eine Szene legt für mehrere Bildschirme fest, was läuft – zum Beispiel für die Eröffnung oder einen Schulklassen-Tag. Mit einem Klick starten, mit einem Klick beenden.'),
-    can('scenes.write') ? h('p', {}, h('button', { class: 'btn big', onclick: () => edit(null) }, '➕ Neue Szene')) : null, h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, cards.length ? cards : [h('p', {}, 'Es gibt noch keine Szenen.')]));
+    can('scenes.write') ? h('p', {}, h('button', { class: 'btn big', onclick: () => edit(null) }, '➕ Neue Szene')) : null, h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, cards.length ? cards : [h('p', {}, 'Es gibt noch keine Szenen.')]),
+    can('settings.manage') ? await triggersCard(scenes, route) : null);
 }

@@ -17,6 +17,7 @@ export async function notfallDlg(route) {
   const body = h('div', {},
     info.active ? h('div', { class: 'notice bad', role: 'alert' }, h('b', {}, `🚨 Es läuft schon eine Meldung: „${info.active.title}“ (von ${info.active.by}). `), h('button', { class: 'btn', onclick: async (e) => { e.target.disabled = true; try { const r = await post('/emergency/stop'); toast(r.text); d.close(); route(); } catch (x) { toast(x.message, 'err'); e.target.disabled = false; } } }, 'Meldung jetzt beenden')) : null,
     h('p', { class: 'notice' }, 'Die Meldung erscheint SOFORT auf ', h('b', {}, 'allen Bildschirmen'), ' und ersetzt alles andere. Das ist eine Durchsage am Bildschirm, ', h('b', {}, 'keine Alarmanlage'), ' und kein Ersatz für Lautsprecher oder Brandschutz.'),
+    info.escape?.total ? h('p', { class: 'hint' }, info.escape.withPlan + ' von ' + info.escape.total + ' Bildschirmen zeigen nach der Meldung ihren Fluchtweg-Plan.' + (info.escape.withPlan ? '' : ' (Einstellen unter Bildschirme → Bearbeiten.)')) : null,
     list, custom, field('Wie lange zeigen?', dur),
     can('settings.manage') ? h('p', {}, h('button', { class: 'btn link', type: 'button', onclick: () => { d.close(); editTexts(info, route); } }, 'Texte ändern (nur Admins)')) : null);
   const d = dialog('🚨 Notfall-Meldung', body, [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Auf ALLEN Bildschirmen zeigen', cls: 'danger', fn: async () => {

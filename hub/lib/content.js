@@ -10,10 +10,12 @@ import { promisify } from 'node:util';
 import { detectKind, LIMITS, probeVideo, mediaHints, SHARP_OPTS } from './variants.js';
 import { sendFile } from './devices.js';
 import { sha256hex } from './crypto.js';
-import { loadSchedules, rowToSchedule, warnings, summarizeSchedule, DAY } from './plan.js';
+import { loadSchedules, rowToSchedule, warnings, summarizeSchedule, playlistItems, DAY, MAX_NEST } from './plan.js';
 import { expand, buildTimeline, currentSegment, findConflicts } from '../../shared/schedule.js';
 import { can } from './permissions.js';
 import { localToEpoch } from '../../shared/time.js';
+import { parseStreamUrl, maskStreamUrl } from '../../shared/stream.js';
+import { parseJson } from '../../shared/guard.js';
 
 const pexec = promisify(execFile);
 const LOCAL_DT = '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$', DATE = '^\\d{4}-\\d{2}-\\d{2}$';
@@ -29,8 +31,10 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   const toTrash = (req, kind, ref, payload) => db.prepare('INSERT INTO trash VALUES(?,?,?,?,?,?)').run(randomUUID(), kind, ref, JSON.stringify(payload), now(), req.user.id);
 
   // ---------- Medien ----------
+  /** Text-Medium für die Oberfläche: Zugangsdaten in der Live-Bild-Adresse werden nie ausgegeben */
+  const publicText = (t) => (t?.stream ? { ...t, stream: { url: maskStreamUrl(t.stream.url) } } : t);
   const present = (m) => ({ id: m.id, name: m.name, kind: m.kind, size: m.size, durationS: m.duration_s, width: m.width, height: m.height,
-    tags: m.tags ? m.tags.split(',') : [], folder: m.folder, createdAt: m.created_at, text: m.text_json ? JSON.parse(m.text_json) : undefined,
+    tags: m.tags ? m.tags.split(',') : [], folder: m.folder, createdAt: m.created_at, text: m.text_json ? publicText(parseJson(m.text_json, {})) : undefined, stream: m.text_json && parseJson(m.text_json, {}).stream ? true : undefined,
     variants: db.prepare('SELECT profile,status,error FROM media_variants WHERE media_id=?').all(m.id),
     hints: mediaHints(m.kind, m.width, m.height, { bytes: m.size, codec: m.codec, fps: m.fps, durationS: m.duration_s }), author: m.author, license: m.license, validUntil: m.valid_until,
     expired: !!m.valid_until && m.valid_until < new Date(now()).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }) });
@@ -94,6 +98,23 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     variants.ensureAll(); A(req, 'text.angelegt', req.body.name); return reply.code(201).send({ id });
   });
 
+  // Live-Bild: Kamera oder Stream im EIGENEN Netz als Folie (nur auf Bildschirmen mit „Video-optimiert“). Technisch ein Text-Medium mit der Adresse in text_json.stream;
+  // das Textbild dient als Ersatzfolie, falls das Live-Bild nicht ankommt.
+  app.post('/api/v1/media/stream', { config: { perm: 'media.write' }, schema: { body: { type: 'object', required: ['name', 'url'], additionalProperties: false, properties: {
+    name: { type: 'string', minLength: 1, maxLength: 100 }, url: { type: 'string', maxLength: 300 }, title: { type: 'string', maxLength: 120 }, body: { type: 'string', maxLength: 300 } } } } }, async (req, reply) => {
+    const u = parseStreamUrl(req.body.url); if (!u.ok) return reply.code(400).send({ error: u.error });
+    const id = randomUUID(), t = { title: req.body.title?.trim() || req.body.name, body: req.body.body?.trim() || 'Das Live-Bild ist gerade nicht erreichbar.', template: 'hinweis', stream: { url: u.url } };
+    db.prepare("INSERT INTO media(id,name,kind,text_json,folder,tags,created_by,created_at) VALUES(?,?,'text',?,'Live-Bilder','livebild',?,?)").run(id, req.body.name, JSON.stringify(t), req.user.id, now());
+    variants.ensureAll(); A(req, 'livebild.angelegt', req.body.name, { adresse: maskStreamUrl(u.url) }); return reply.code(201).send({ id });
+  });
+  app.patch('/api/v1/media/:id/stream', { config: { perm: 'media.write' }, schema: { body: { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string', maxLength: 300 } } } } }, async (req, reply) => {
+    const m = db.prepare('SELECT * FROM media WHERE id=?').get(req.params.id), t = m ? parseJson(m.text_json, null) : null;
+    if (!m || !t?.stream) return reply.code(404).send({ error: 'Dieses Live-Bild gibt es nicht.' });
+    const u = parseStreamUrl(req.body.url); if (!u.ok) return reply.code(400).send({ error: u.error });
+    db.prepare('UPDATE media SET text_json=? WHERE id=?').run(JSON.stringify({ ...t, stream: { url: u.url } }), m.id);
+    A(req, 'livebild.adresse_geaendert', m.name, { adresse: maskStreamUrl(u.url) }); app.pushAll(); return { ok: true };
+  });
+
   app.patch('/api/v1/media/:id', { config: { perm: 'media.write' }, schema: { body: { type: 'object', additionalProperties: false, properties: {
     name: { type: 'string', minLength: 1, maxLength: 100 }, tags: { type: 'array', items: { type: 'string', maxLength: 30, pattern: '^[^,]+$' }, maxItems: 20 }, folder: { type: 'string', maxLength: 60 },
     author: { type: ['string', 'null'], maxLength: 120 }, license: { type: ['string', 'null'], maxLength: 200 }, validUntil: { type: ['string', 'null'], pattern: DATE } } } } }, async (req, reply) => {
@@ -115,10 +136,13 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     const m = db.prepare('SELECT * FROM media WHERE id=?').get(req.params.id); if (!m) return reply.code(404).send({ error: 'Medium nicht gefunden.' });
     const used = db.prepare('SELECT p.name FROM playlist_items i JOIN playlists p ON p.id=i.playlist_id WHERE i.media_id=? GROUP BY p.id').all(m.id);
     const direct = db.prepare("SELECT 1 FROM schedules WHERE content_type='media' AND content_id=?").get(m.id);
+    const escUsers = db.prepare('SELECT name FROM devices WHERE escape_media_id=?').all(m.id).map((r) => r.name);
+    if (escUsers.length && req.query.force !== '1') return reply.code(409).send({ error: `„${m.name}“ ist der Fluchtweg-Plan von ${escUsers.map((n) => `„${n}“`).join(', ')}. Wenn du es löschst, hat dieser Bildschirm bei einer Notfall-Meldung keinen Plan mehr. Du kannst es 30 Tage lang aus dem Papierkorb zurückholen.`, needsConfirm: true });
     if ((used.length || direct) && req.query.force !== '1') return reply.code(409).send({ error: `„${m.name}“ wird noch verwendet${used.length ? ` (Abspielliste: ${used.map((u) => u.name).join(', ')})` : ''}. Wenn du es löscht, verschwindet es dort ebenfalls. Du kannst es 30 Tage lang aus dem Papierkorb zurückholen.`, needsConfirm: true });
     const items = db.prepare('SELECT * FROM playlist_items WHERE media_id=?').all(m.id);
     toTrash(req, 'media', m.id, { media: m, items, variants: db.prepare('SELECT * FROM media_variants WHERE media_id=?').all(m.id) });
     db.prepare('DELETE FROM playlist_items WHERE media_id=?').run(m.id); db.prepare("DELETE FROM schedules WHERE content_type='media' AND content_id=?").run(m.id);
+    db.prepare('UPDATE devices SET escape_media_id=NULL WHERE escape_media_id=?').run(m.id);
     db.prepare('DELETE FROM media WHERE id=?').run(m.id); A(req, 'medium.geloescht', m.name); app.pushAll(); return { ok: true };
   });
 
@@ -132,24 +156,40 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   app.get('/api/v1/drafts', { config: { perm: 'schedules.read' } }, async (req) => ({ ...draftCount(), canPublish: mayPublish(req, 'schedules') }));
 
   // ---------- Abspiellisten ----------
-  const itemsOf = (id) => db.prepare('SELECT id,media_id AS mediaId,duration_s AS duration,transition,valid_from AS validFrom,valid_to AS validTo FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(id);
+  // Einträge einer Liste in Reihenfolge: Medien und eingefügte Listen (playlistId statt mediaId) teilen sich die Positionen
+  const itemsOf = (id) => [
+    ...db.prepare('SELECT id,media_id AS mediaId,duration_s AS duration,transition,valid_from AS validFrom,valid_to AS validTo,pos FROM playlist_items WHERE playlist_id=?').all(id),
+    ...db.prepare('SELECT i.id,i.sub_id AS playlistId,p.name AS listName,i.valid_from AS validFrom,i.valid_to AS validTo,i.pos FROM playlist_includes i LEFT JOIN playlists p ON p.id=i.sub_id WHERE i.playlist_id=?').all(id),
+  ].sort((a, b) => a.pos - b.pos).map(({ pos, ...r }) => r);
+  /** Enthält „from“ (auch über mehrere Stufen) die Liste „target“? */
+  const reaches = (from, target, d = 0) => from === target || (d < 8 && db.prepare('SELECT sub_id FROM playlist_includes WHERE playlist_id=?').all(from).some((r) => reaches(r.sub_id, target, d + 1)));
+  const listDepth = (id, d = 0) => (d > MAX_NEST + 1 ? d : 1 + Math.max(0, ...db.prepare('SELECT sub_id FROM playlist_includes WHERE playlist_id=?').all(id).map((r) => listDepth(r.sub_id, d + 1))));
+  /** Darf die Liste „self“ die Liste „sub“ enthalten? Klartext-Fehler oder null */
+  function checkInclude(self, sub) {
+    const s = db.prepare('SELECT * FROM playlists WHERE id=?').get(sub); if (!s) return 'Eine eingefügte Liste gibt es nicht mehr.';
+    if (s.state !== 'published' || s.draft_of) return `„${s.name}“ ist noch ein Entwurf. Es können nur veröffentlichte Listen eingefügt werden.`;
+    if (sub === self || reaches(sub, self)) return `Die Liste „${s.name}“ würde sich sonst selbst enthalten.`;
+    if (listDepth(sub) > MAX_NEST) return `Listen können höchstens ${MAX_NEST} Ebenen tief verschachtelt werden („${s.name}“ enthält schon zu viele).`;
+    return null;
+  }
   /** Dauer einer Runde in Sekunden: Bilder/Texte nach eingestellter Dauer, Videos nach ihrer Länge */
-  const roundS = (id) => itemsOf(id).reduce((sum, i) => { const m = db.prepare('SELECT kind,duration_s FROM media WHERE id=?').get(i.mediaId); return sum + (m?.kind === 'video' ? Math.round(m.duration_s ?? i.duration ?? 10) : (i.duration ?? 10)); }, 0);
+  const roundS = (id, d = 0) => itemsOf(id).reduce((sum, i) => { if (i.playlistId) return sum + (d < MAX_NEST ? roundS(i.playlistId, d + 1) : 0); const m = db.prepare('SELECT kind,duration_s FROM media WHERE id=?').get(i.mediaId); return sum + (m?.kind === 'video' ? Math.round(m.duration_s ?? i.duration ?? 10) : (i.duration ?? 10)); }, 0);
   app.get('/api/v1/playlists', { config: { perm: 'playlists.read' } }, async () =>
     db.prepare('SELECT * FROM playlists ORDER BY name').all().map((p) => ({ id: p.id, name: p.name, durationS: roundS(p.id), isDefault: !!p.is_default, state: p.state, draftOf: p.draft_of, note: p.note, hasDraft: p.state === 'published' && !!db.prepare('SELECT 1 FROM playlists WHERE draft_of=?').get(p.id), items: itemsOf(p.id) })));
   app.post('/api/v1/playlists', { config: { perm: 'playlists.write' }, schema: { body: { type: 'object', required: ['name'], additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 80 }, publish: { type: 'boolean' } } } } }, async (req, reply) => {
     if (req.body.publish && !mayPublish(req, 'playlists')) return noPublish(reply);
     const id = randomUUID(); db.prepare('INSERT INTO playlists(id,name,state,created_at) VALUES(?,?,?,?)').run(id, req.body.name, req.body.publish ? 'published' : 'draft', now()); A(req, 'liste.angelegt', req.body.name); return reply.code(201).send({ id });
   });
-  const itemSchema = { type: 'object', required: ['mediaId'], additionalProperties: false, properties: { mediaId: { type: 'string', maxLength: 40 }, duration: { type: 'integer', minimum: 1, maximum: 3600 },
+  const itemSchema = { type: 'object', additionalProperties: false, properties: { mediaId: { type: 'string', maxLength: 40 }, playlistId: { type: 'string', maxLength: 40 }, duration: { type: 'integer', minimum: 1, maximum: 3600 },
     transition: { enum: ['fade', 'cut'] }, validFrom: { type: ['string', 'null'], pattern: DATE }, validTo: { type: ['string', 'null'], pattern: DATE } } };
   function publishPlaylist(req, id) {
     const d = db.prepare('SELECT * FROM playlists WHERE id=?').get(id); const target = d.draft_of ?? d.id;
     db.transaction(() => {
       if (d.draft_of) {
         db.prepare('UPDATE playlists SET name=?, note=? WHERE id=?').run(d.name, d.note, target);
-        db.prepare('DELETE FROM playlist_items WHERE playlist_id=?').run(target);
+        db.prepare('DELETE FROM playlist_items WHERE playlist_id=?').run(target); db.prepare('DELETE FROM playlist_includes WHERE playlist_id=?').run(target);
         for (const i of db.prepare('SELECT * FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(d.id)) db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), target, i.media_id, i.pos, i.duration_s, i.transition, i.valid_from, i.valid_to);
+        for (const i of db.prepare('SELECT * FROM playlist_includes WHERE playlist_id=?').all(d.id)) db.prepare('INSERT INTO playlist_includes VALUES(?,?,?,?,?,?)').run(randomUUID(), target, i.sub_id, i.pos, i.valid_from, i.valid_to);
         db.prepare('DELETE FROM playlists WHERE id=?').run(d.id);
       } else db.prepare("UPDATE playlists SET state='published' WHERE id=?").run(d.id);
       if (d.is_default) { db.prepare('UPDATE playlists SET is_default=0').run(); db.prepare('UPDATE playlists SET is_default=1 WHERE id=?').run(target); }
@@ -161,20 +201,27 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     name: { type: 'string', minLength: 1, maxLength: 80 }, isDefault: { type: 'boolean' }, note: { type: 'string', maxLength: 300 }, publish: { type: 'boolean' }, items: { type: 'array', maxItems: 200, items: itemSchema } } } } }, async (req, reply) => {
     let p = db.prepare('SELECT * FROM playlists WHERE id=?').get(req.params.id); if (!p) return reply.code(404).send({ error: 'Abspielliste nicht gefunden.' });
     const b = req.body;
-    for (const it of b.items ?? []) if (!db.prepare('SELECT 1 FROM media WHERE id=?').get(it.mediaId)) return reply.code(400).send({ error: 'Ein Medium in der Liste gibt es nicht mehr.' });
+    const selfId = p.draft_of ?? p.id;
+    for (const it of b.items ?? []) {
+      if (it.playlistId) { const bad = checkInclude(selfId, it.playlistId); if (bad) return reply.code(400).send({ error: bad }); }
+      else if (!it.mediaId || !db.prepare('SELECT 1 FROM media WHERE id=?').get(it.mediaId)) return reply.code(400).send({ error: 'Ein Medium in der Liste gibt es nicht mehr.' });
+    }
     if (b.publish && !mayPublish(req, 'playlists')) return noPublish(reply);
     if (p.state === 'published') { // Änderung an Veröffentlichtem → Entwurfsversion; die veröffentlichte Liste läuft unverändert weiter
       let d = db.prepare('SELECT * FROM playlists WHERE draft_of=?').get(p.id);
       if (!d) { const id = randomUUID(); db.prepare("INSERT INTO playlists(id,name,is_default,state,draft_of,created_at) VALUES(?,?,?,'draft',?,?)").run(id, p.name, p.is_default, p.id, now());
-        for (const i of itemsOf(p.id).entries()) db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), id, i[1].mediaId, i[0], i[1].duration, i[1].transition, i[1].validFrom, i[1].validTo); d = db.prepare('SELECT * FROM playlists WHERE id=?').get(id); }
+        for (const [n, it] of itemsOf(p.id).entries()) { if (it.playlistId) db.prepare('INSERT INTO playlist_includes VALUES(?,?,?,?,?,?)').run(randomUUID(), id, it.playlistId, n, it.validFrom, it.validTo); else db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), id, it.mediaId, n, it.duration, it.transition, it.validFrom, it.validTo); }
+        d = db.prepare('SELECT * FROM playlists WHERE id=?').get(id); }
       p = d;
     }
     db.transaction(() => {
       if (b.name) db.prepare('UPDATE playlists SET name=? WHERE id=?').run(b.name, p.id);
       if (b.note !== undefined) db.prepare('UPDATE playlists SET note=? WHERE id=?').run(b.note, p.id);
       if (b.isDefault !== undefined) db.prepare('UPDATE playlists SET is_default=? WHERE id=?').run(b.isDefault ? 1 : 0, p.id);
-      if (b.items) { db.prepare('DELETE FROM playlist_items WHERE playlist_id=?').run(p.id);
-        b.items.forEach((it, i) => db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), p.id, it.mediaId, i, it.duration ?? 10, it.transition ?? 'fade', it.validFrom ?? null, it.validTo ?? null)); }
+      if (b.items) { db.prepare('DELETE FROM playlist_items WHERE playlist_id=?').run(p.id); db.prepare('DELETE FROM playlist_includes WHERE playlist_id=?').run(p.id);
+        b.items.forEach((it, i) => (it.playlistId
+          ? db.prepare('INSERT INTO playlist_includes VALUES(?,?,?,?,?,?)').run(randomUUID(), p.id, it.playlistId, i, it.validFrom ?? null, it.validTo ?? null)
+          : db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), p.id, it.mediaId, i, it.duration ?? 10, it.transition ?? 'fade', it.validFrom ?? null, it.validTo ?? null))); }
     })();
     A(req, 'liste.entwurf_gespeichert', p.id);
     if (b.publish) { const id = publishPlaylist(req, p.id); return { ok: true, id, published: true }; }
@@ -194,8 +241,9 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     const p = db.prepare('SELECT * FROM playlists WHERE id=?').get(req.params.id); if (!p) return reply.code(404).send({ error: 'Abspielliste nicht gefunden.' });
     if (p.is_default && p.state === 'published') return reply.code(400).send({ error: 'Die Standard-Abspielliste kann nicht gelöscht werden. Lege zuerst eine andere als Standard fest.' });
     const dep = db.prepare("SELECT COUNT(*) n FROM schedules WHERE content_type='playlist' AND content_id=?").get(p.id).n;
-    if (dep && req.query.force !== '1') return reply.code(409).send({ error: `Diese Abspielliste wird in ${dep} Termin(en) verwendet. Wenn du sie löschst, werden diese Termine ebenfalls entfernt.`, needsConfirm: true });
-    toTrash(req, 'playlist', p.id, { playlist: p, items: db.prepare('SELECT * FROM playlist_items WHERE playlist_id=?').all(p.id), schedules: db.prepare("SELECT * FROM schedules WHERE content_type='playlist' AND content_id=?").all(p.id) });
+    const inLists = db.prepare('SELECT DISTINCT q.name FROM playlist_includes i JOIN playlists q ON q.id=i.playlist_id WHERE i.sub_id=?').all(p.id).map((r) => r.name);
+    if ((dep || inLists.length) && req.query.force !== '1') return reply.code(409).send({ error: `${dep ? `Diese Abspielliste wird in ${dep} Termin(en) verwendet. Wenn du sie löschst, werden diese Termine ebenfalls entfernt. ` : ''}${inLists.length ? `Sie ist außerdem Teil der Liste(n) ${inLists.map((n) => `„${n}“`).join(', ')} und verschwindet dort.` : ''}`.trim(), needsConfirm: true });
+    toTrash(req, 'playlist', p.id, { playlist: p, items: db.prepare('SELECT * FROM playlist_items WHERE playlist_id=?').all(p.id), includes: db.prepare('SELECT * FROM playlist_includes WHERE playlist_id=? OR sub_id=?').all(p.id, p.id), schedules: db.prepare("SELECT * FROM schedules WHERE content_type='playlist' AND content_id=?").all(p.id) });
     db.prepare("DELETE FROM schedules WHERE content_type='playlist' AND content_id=?").run(p.id); db.prepare('DELETE FROM playlists WHERE draft_of=?').run(p.id); db.prepare('DELETE FROM playlists WHERE id=?').run(p.id);
     A(req, 'liste.geloescht', p.name); app.pushAll(); return { ok: true };
   });
@@ -294,7 +342,9 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
       db.prepare(INS).run(...schedRow(s, exists ? id : v.ref_id, req, 'draft', exists ? v.ref_id : null)); A(req, 'version.wiederhergestellt', v.ref_id); return { ok: true, draftId: exists ? id : v.ref_id }; }
     const exists = db.prepare('SELECT * FROM playlists WHERE id=?').get(v.ref_id); if (!exists) return reply.code(400).send({ error: 'Die Abspielliste gibt es nicht mehr.' });
     db.prepare('DELETE FROM playlists WHERE draft_of=?').run(v.ref_id); const id = randomUUID(); db.prepare("INSERT INTO playlists(id,name,is_default,state,draft_of,created_at) VALUES(?,?,?,'draft',?,?)").run(id, p.name, p.isDefault ? 1 : 0, v.ref_id, now());
-    p.items.filter((i) => db.prepare('SELECT 1 FROM media WHERE id=?').get(i.mediaId)).forEach((i, n) => db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), id, i.mediaId, n, i.duration, i.transition, i.validFrom, i.validTo));
+    p.items.filter((i) => (i.playlistId ? !checkInclude(v.ref_id, i.playlistId) : db.prepare('SELECT 1 FROM media WHERE id=?').get(i.mediaId))).forEach((i, n) => (i.playlistId
+      ? db.prepare('INSERT INTO playlist_includes VALUES(?,?,?,?,?,?)').run(randomUUID(), id, i.playlistId, n, i.validFrom ?? null, i.validTo ?? null)
+      : db.prepare('INSERT INTO playlist_items VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), id, i.mediaId, n, i.duration, i.transition, i.validFrom, i.validTo)));
     A(req, 'version.wiederhergestellt', v.ref_id); return { ok: true, draftId: id };
   });
   /** Termine als konkrete Fenster für den Kalender; Entwürfe nur auf Wunsch (gestrichelt dargestellt) */
@@ -315,7 +365,7 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
         if (sd?.rule === 'off') return { source: 'schliesstag', scheduleId: null, playlistId: null, mediaIds: [], text: `Am ${req.query.date.split('-').reverse().join('.')} ist „${sd.name}“. Der Bildschirm ist aus.` };
         if (sd) { source = 'sondertag'; text = `Am ${req.query.date.split('-').reverse().join('.')} ist „${sd.name}“. Dafür läuft eine besondere Anzeige statt der normalen.`; if (sd.content_type === 'media') mediaIds = [sd.content_id]; else playlistId = sd.content_id; }
       }
-      playlistId ??= db.prepare("SELECT id FROM playlists WHERE is_default=1 AND state='published'").get()?.id; if (playlistId && !mediaIds.length) mediaIds = db.prepare('SELECT media_id FROM playlist_items WHERE playlist_id=? ORDER BY pos').all(playlistId).map((r) => r.media_id);
+      playlistId ??= db.prepare("SELECT id FROM playlists WHERE is_default=1 AND state='published'").get()?.id; if (playlistId && !mediaIds.length) mediaIds = playlistItems(db, playlistId, Date.parse(req.query.date + 'T12:00:00Z') || now()).map((r) => r.mediaId);
     }
     return { source: source ?? (mediaIds.length ? 'standard' : 'standby'), scheduleId: seg?.source?.scheduleId ?? null, playlistId, mediaIds,
       text: text ?? (seg?.source ? 'Ein Termin legt fest, was gezeigt wird.' : mediaIds.length ? 'Es läuft die Standard-Abspielliste.' : 'Es gibt nichts zu zeigen. Der Bildschirm zeigt das DFM-Standby-Bild.') };
@@ -335,7 +385,8 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
     const ins = (table, row) => { const cols = Object.keys(row); db.prepare(`INSERT OR IGNORE INTO ${table}(${cols.join(',')}) VALUES(${cols.map(() => '?').join(',')})`).run(...Object.values(row)); };
     db.transaction(() => {
       if (t.kind === 'media') { ins('media', p.media); p.variants.forEach((v) => ins('media_variants', v)); p.items.forEach((i) => db.prepare('SELECT 1 FROM playlists WHERE id=?').get(i.playlist_id) && ins('playlist_items', i)); }
-      else if (t.kind === 'playlist') { ins('playlists', p.playlist); p.items.forEach((i) => db.prepare('SELECT 1 FROM media WHERE id=?').get(i.media_id) && ins('playlist_items', i)); p.schedules.forEach((s) => ins('schedules', s)); }
+      else if (t.kind === 'playlist') { ins('playlists', p.playlist); p.items.forEach((i) => db.prepare('SELECT 1 FROM media WHERE id=?').get(i.media_id) && ins('playlist_items', i)); p.schedules.forEach((s) => ins('schedules', s));
+        (p.includes ?? []).forEach((r) => db.prepare('SELECT 1 FROM playlists WHERE id=?').get(r.playlist_id) && db.prepare('SELECT 1 FROM playlists WHERE id=?').get(r.sub_id) && ins('playlist_includes', r)); }
       else if (t.kind === 'schedule') ins('schedules', p.schedule);
       db.prepare('DELETE FROM trash WHERE id=?').run(t.id);
     })();

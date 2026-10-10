@@ -7,6 +7,7 @@ import { formatFingerprint } from './tls.js';
 import { schedulePayload, manifestPayload, PROFILES } from './plan.js';
 import { validateMessage, msg, COMMANDS } from '../../shared/protocol.js';
 import { parseJson, safeInterval } from '../../shared/guard.js';
+import { MAX_WALL } from '../../shared/wall.js';
 
 /** Geräte-Zustand für die Datenbank: Ist er zu groß, werden die größten Einträge weggelassen (abgeschnittenes JSON wäre unlesbar und würde Listen und Warnungen stören) */
 export function fitState(o, max = 20000) {
@@ -78,7 +79,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const st = parseJson(d.state_json, null);
     const g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id) : null;
     return { id: d.id, display: parseJson(d.display_json, null), name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, renderer: d.renderer ?? 'auto', orientation: d.orientation,
-      status: deviceStatus(d), summary: summary(d, st), location: d.location ?? null, lastSeen: d.last_seen, state: st, hw: parseJson(d.hw_json, null),
+      status: deviceStatus(d), summary: summary(d, st), location: d.location ?? null, escapeMediaId: d.escape_media_id ?? null, wallCol: d.wall_col ?? null, wallRow: d.wall_row ?? null, lastSeen: d.last_seen, state: st, hw: parseJson(d.hw_json, null),
       spki: d.spki_seen ? formatFingerprint(d.spki_seen) : null, online: sockets.has(d.id), isHub: isHubDevice(d.id) };
   };
 
@@ -91,13 +92,17 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const d = getDevice(req.params.id); return d ? present(d) : reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
   });
   app.patch('/api/v1/devices/:id', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', additionalProperties: false,
-    properties: { name: { type: 'string', minLength: 1, maxLength: 60 }, groupId: { type: ['string', 'null'] }, profile: { enum: PROFILES }, orientation: { enum: [0, 90, 180, 270] },
+    properties: { name: { type: 'string', minLength: 1, maxLength: 60 }, groupId: { type: ['string', 'null'] }, profile: { enum: PROFILES }, orientation: { enum: [0, 90, 180, 270] }, escapeMediaId: { type: ['string', 'null'], maxLength: 40 }, wallCol: { type: ['integer', 'null'], minimum: 0, maximum: MAX_WALL - 1 }, wallRow: { type: ['integer', 'null'], minimum: 0, maximum: MAX_WALL - 1 },
       display: { type: ['object', 'null'], additionalProperties: false, properties: { off: { type: 'object', required: ['from', 'to'], additionalProperties: false, properties: { from: { type: 'string', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }, to: { type: 'string', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' } } } } } } } } }, async (req, reply) => {
     const d = getDevice(req.params.id); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
     const b = req.body;
     if (b.groupId && !db.prepare('SELECT 1 FROM device_groups WHERE id=?').get(b.groupId)) return reply.code(400).send({ error: 'Diese Gruppe gibt es nicht.' });
+    if (b.escapeMediaId) { const m = db.prepare('SELECT kind FROM media WHERE id=?').get(b.escapeMediaId); if (!m) return reply.code(400).send({ error: 'Dieses Bild gibt es nicht.' }); if (m.kind !== 'image' && m.kind !== 'pdfpage') return reply.code(400).send({ error: 'Als Fluchtweg-Plan geht nur ein Bild (oder eine PDF-Seite).' }); }
     db.prepare('UPDATE devices SET name=?, group_id=?, profile=?, orientation=?, display_json=? WHERE id=?').run(b.name ?? d.name,
       'groupId' in b ? b.groupId : d.group_id, b.profile ?? d.profile, b.orientation ?? d.orientation, 'display' in b ? (b.display ? JSON.stringify(b.display) : null) : d.display_json, d.id);
+    if ('escapeMediaId' in b) db.prepare('UPDATE devices SET escape_media_id=? WHERE id=?').run(b.escapeMediaId || null, d.id);
+    if ('wallCol' in b || 'wallRow' in b) db.prepare('UPDATE devices SET wall_col=?, wall_row=? WHERE id=?').run('wallCol' in b ? b.wallCol : d.wall_col, 'wallRow' in b ? b.wallRow : d.wall_row, d.id);
+    else if ('groupId' in b && b.groupId !== d.group_id) { db.prepare('UPDATE devices SET wall_col=NULL, wall_row=NULL WHERE id=?').run(d.id); autoAssignWall(b.groupId); } // neue Gruppe: alter Platz gilt nicht mehr
     if (b.profile && b.profile !== d.profile) app.variants?.ensureAll(); // neues Profil → fehlende Medienvarianten erzeugen
     audit.log({ user: req.user, action: 'bildschirm.geaendert', target: d.id, ip: req.ip, detail: b });
     pushPlan(getDevice(d.id)); return { ok: true };
@@ -121,7 +126,36 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     audit.log({ user: req.user, action: 'bildschirm.entfernt', target: req.params.id, ip: req.ip, security: true });
     return { ok: true };
   });
-  app.get('/api/v1/groups', { config: { perm: 'devices.read' } }, async () => db.prepare('SELECT * FROM device_groups ORDER BY name').all());
+  /** Videowand: Bildschirme ohne gültigen Platz bekommen der Reihe nach (zeilenweise) einen freien Platz */
+  function autoAssignWall(groupId) {
+    const g = groupId && db.prepare("SELECT * FROM device_groups WHERE id=? AND sync_mode='videowand'").get(groupId); if (!g) return;
+    const members = db.prepare("SELECT * FROM devices WHERE group_id=? AND status='active' ORDER BY name").all(g.id), taken = new Set();
+    const valid = (d) => Number.isInteger(d.wall_col) && Number.isInteger(d.wall_row) && d.wall_col < g.wall_cols && d.wall_row < g.wall_rows;
+    for (const d of members) if (valid(d)) taken.add(d.wall_col + ',' + d.wall_row);
+    for (const d of members.filter((x) => !valid(x))) {
+      for (let r = 0; r < g.wall_rows; r++) for (let c = 0; c < g.wall_cols; c++) {
+        if (taken.has(c + ',' + r) || valid(getDevice(d.id))) continue;
+        db.prepare('UPDATE devices SET wall_col=?, wall_row=? WHERE id=?').run(c, r, d.id); taken.add(c + ',' + r);
+      }
+    }
+  }
+  const groupView = (g) => ({ ...g, syncMode: g.sync_mode, cols: g.wall_cols, rows: g.wall_rows, members: db.prepare("SELECT COUNT(*) n FROM devices WHERE group_id=? AND status='active'").get(g.id).n });
+  app.get('/api/v1/groups', { config: { perm: 'devices.read' } }, async () => db.prepare('SELECT * FROM device_groups ORDER BY name').all().map(groupView));
+  // Gleichtakt: alle Bildschirme der Gruppe zeigen zur selben Zeit dasselbe. Videowand: ein Bild verteilt sich auf ein Raster (Spalten × Zeilen).
+  app.patch('/api/v1/groups/:id', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', additionalProperties: false, properties: {
+    name: { type: 'string', minLength: 1, maxLength: 60 }, location: { type: ['string', 'null'], maxLength: 100 }, syncMode: { enum: ['off', 'gleichtakt', 'videowand'] },
+    cols: { type: 'integer', minimum: 1, maximum: MAX_WALL }, rows: { type: 'integer', minimum: 1, maximum: MAX_WALL } } } } }, async (req, reply) => {
+    const g = db.prepare('SELECT * FROM device_groups WHERE id=?').get(req.params.id); if (!g) return reply.code(404).send({ error: 'Diese Gruppe gibt es nicht.' });
+    const b = req.body, mode = b.syncMode ?? g.sync_mode, cols = b.cols ?? g.wall_cols, rows = b.rows ?? g.wall_rows;
+    if (mode === 'videowand' && cols * rows < 2) return reply.code(400).send({ error: 'Eine Videowand braucht mindestens zwei Kacheln (Spalten × Zeilen).' });
+    const epoch = mode === 'off' ? null : (g.sync_epoch ?? Math.floor(now() / 86400000) * 86400000);
+    db.prepare('UPDATE device_groups SET name=?, location=?, sync_mode=?, wall_cols=?, wall_rows=?, sync_epoch=? WHERE id=?').run(b.name ?? g.name, 'location' in b ? b.location : g.location, mode, cols, rows, epoch, g.id);
+    if (mode === 'videowand') autoAssignWall(g.id);
+    audit.log({ user: req.user, action: 'gruppe.geaendert', target: g.name, ip: req.ip, detail: b });
+    for (const d of db.prepare("SELECT id FROM devices WHERE group_id=? AND status='active'").all(g.id)) { const dd = getDevice(d.id); if (dd) pushPlan(dd); }
+    app.variants?.ensureAll(); // mpv braucht für Text-Folien die Bildfassung
+    return { ok: true };
+  });
   app.post('/api/v1/groups', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', required: ['name'], additionalProperties: false,
     properties: { name: { type: 'string', minLength: 1, maxLength: 60 }, location: { type: 'string', maxLength: 100 }, color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' } } } } }, async (req, reply) => {
     const id = randomUUID(); db.prepare('INSERT INTO device_groups(id,name,location,color) VALUES(?,?,?,?)').run(id, req.body.name, req.body.location ?? null, req.body.color ?? '#c8102e');
@@ -157,6 +191,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     if (old) { // Austausch (Z.4): Name, Gruppe, Zeitplan und Einstellungen wandern zum neuen Gerät; der alte Token wird gesperrt
       db.transaction(() => {
         db.prepare('UPDATE devices SET orientation=?, display_json=?, layout_json=?, location=?, floor=?, notes=?, doc_url=?, installed_at=?, serial=NULL, mac=NULL WHERE id=?').run(old.orientation, old.display_json, old.layout_json, old.location, old.floor, old.notes, old.doc_url, new Date(now()).toISOString().slice(0, 10), d.id);
+        db.prepare('UPDATE devices SET escape_media_id=?, wall_col=?, wall_row=? WHERE id=?').run(old.escape_media_id, old.wall_col, old.wall_row, d.id); // Fluchtweg-Plan und Platz in der Videowand wandern mit
         db.prepare("UPDATE schedules SET target_id=? WHERE target_type='device' AND target_id=?").run(d.id, old.id);
         db.prepare("UPDATE overrides SET target_id=? WHERE scope='device' AND target_id=?").run(d.id, old.id);
         db.prepare("UPDATE rules SET target_id=? WHERE scope='device' AND target_id=?").run(d.id, old.id);

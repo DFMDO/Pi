@@ -12,6 +12,7 @@ async function extras6Plugin(app, { db, audit, variants, now = () => Date.now() 
     for (const r of db.prepare("SELECT content_id FROM overrides WHERE content_type='media' AND ended_at IS NULL AND until > ?").all(now())) used.add(r.content_id);
     for (const r of db.prepare("SELECT content_id FROM special_days WHERE content_type='media' AND content_id IS NOT NULL").all()) used.add(r.content_id);
     for (const r of db.prepare('SELECT media_id FROM apps WHERE media_id IS NOT NULL').all()) used.add(r.media_id);
+    for (const r of db.prepare('SELECT escape_media_id AS m FROM devices WHERE escape_media_id IS NOT NULL').all()) used.add(r.m); // Fluchtweg-Pläne
     for (const r of db.prepare('SELECT media_id FROM app_slides').all()) used.add(r.media_id);
     for (const r of db.prepare('SELECT media_id FROM inserts').all()) used.add(r.media_id);
     const tor = db.prepare("SELECT value FROM settings WHERE key='live.torMediaId'").get()?.value; if (tor) used.add(tor);

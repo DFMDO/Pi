@@ -53,7 +53,7 @@ export function insertItem(ins, manifest, opts) {
 }
 
 /** Kinds, die ein Renderer darstellen kann. Lite (mpv) hat keinen Browser. */
-const RENDERABLE = { lite: new Set(['image', 'video', 'pdfpage', 'text-image']), standard: new Set(['image', 'video', 'pdfpage', 'text']), pro: new Set(['image', 'video', 'pdfpage', 'text']) };
+const RENDERABLE = { lite: new Set(['image', 'video', 'pdfpage', 'text-image', 'stream']), standard: new Set(['image', 'video', 'pdfpage', 'text']), pro: new Set(['image', 'video', 'pdfpage', 'text']) };
 
 /**
  * Abspielbare Elemente: Gültigkeit, geladene Medien, darstellbare Typen.
@@ -70,10 +70,11 @@ export function playableItems(plan, playlistId, manifest, { profile = 'standard'
     if (!m) { skipped.push({ mediaId: it.mediaId, reason: 'nicht im Manifest' }); continue; }
     if (m.validUntil && today > m.validUntil) { skipped.push({ mediaId: it.mediaId, reason: 'Lizenz abgelaufen' }); continue; } // Ablaufdatum gilt auch offline
     if (m.pending) { skipped.push({ mediaId: it.mediaId, reason: 'wird noch vorbereitet' }); continue; }
-    const kind = m.kind === 'text' && !m.text ? 'text-image' : m.kind; // Lite: Text kommt als Bild
+    const isStream = !!m.stream?.url; // Live-Bild: ein Text-Medium mit Adresse; nur mpv kann es zeigen, der Text ist die Ersatzfolie
+    const kind = isStream ? 'stream' : m.kind === 'text' && !m.text ? 'text-image' : m.kind; // Lite: Text kommt als Bild
     if (!RENDERABLE[profile]?.has(kind)) { skipped.push({ mediaId: it.mediaId, reason: 'für dieses Gerät nicht darstellbar' }); continue; }
     if (m.kind !== 'text' || !m.text) { if (!have(m)) { skipped.push({ mediaId: it.mediaId, reason: 'noch nicht geladen' }); continue; } }
-    items.push({ ...it, kind: m.kind, name: m.name, text: m.text, sha256: m.sha256, durationS: m.durationS, transition: profile === 'lite' ? 'cut' : it.transition });
+    items.push({ ...it, kind: isStream ? 'stream' : m.kind, ...(isStream ? { stream: { url: m.stream.url } } : {}), name: m.name, text: m.text, ...(m.aspect ? { aspect: m.aspect } : {}), sha256: m.sha256, durationS: m.durationS, transition: profile === 'lite' ? 'cut' : it.transition });
   }
   return { items, skipped };
 }

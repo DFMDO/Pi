@@ -3,12 +3,27 @@ import { buildTimeline, findConflicts } from '../../shared/schedule.js';
 import { deviceWarnings } from './health.js';
 import { careWarnings } from './pflege.js';
 import { parseJson } from '../../shared/guard.js';
+import { WALL_MIN_VERSION } from '../../shared/wall.js';
 
 export const DAY = 86400000;
 export const PROFILES = ['lite', 'standard', 'pro'];
 /** Bildschirme ab dieser Version verstehen das Planfeld „inserts“ (Einschübe); ältere würden den Plan wegen des unbekannten Feldes ablehnen */
 export const INSERTS_MIN_VERSION = '0.2.26';
 export const verGte = (v, min) => { const a = String(v ?? '').split('.').map(Number), b = String(min).split('.').map(Number); if (a.length < 3 || a.some((x) => !Number.isInteger(x))) return false; for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] > b[i]; } return true; };
+/** Gleichtakt/Videowand-Angaben für diesen Bildschirm (null, wenn seine Gruppe nicht im Gleichtakt läuft oder der Bildschirm zu alt ist) */
+export function wallFor(db, device, version) {
+  if (!device.group_id || !verGte(version, WALL_MIN_VERSION)) return null;
+  const g = db.prepare('SELECT * FROM device_groups WHERE id=?').get(device.group_id);
+  if (!g || g.sync_mode === 'off' || !g.sync_epoch) return null;
+  if (g.sync_mode !== 'videowand') return { mode: 'gleichtakt', epoch: g.sync_epoch };
+  const c = device.wall_col, r = device.wall_row;
+  if (!Number.isInteger(c) || !Number.isInteger(r) || c < 0 || r < 0 || c >= g.wall_cols || r >= g.wall_rows) return { mode: 'gleichtakt', epoch: g.sync_epoch }; // ohne gültige Kachel: gleicher Takt, ganzes Bild
+  return { mode: 'videowand', epoch: g.sync_epoch, cols: g.wall_cols, rows: g.wall_rows, col: c, row: r };
+}
+const versionOf = (device) => { try { return JSON.parse(device.state_json ?? '{}').version ?? ''; } catch { return ''; } };
+/** Wiedergabe-Art, die der Bildschirm WIRKLICH bekommt: im Gleichtakt/Videowand immer mpv (nur dort gibt es Zuschnitt und genaue Zeit) */
+export const effectiveRenderer = (db, device) => (wallFor(db, device, versionOf(device)) ? 'mpv' : rendererOf(device));
+
 /** Aktive Einschübe, die diesen Bildschirm betreffen */
 export function insertsFor(db, device) {
   return db.prepare('SELECT * FROM inserts WHERE enabled=1 ORDER BY created_at, id').all()
@@ -28,8 +43,24 @@ export const loadSchedules = (db, { drafts = false } = {}) => db.prepare(drafts 
 const todayBerlin = (t = Date.now()) => new Date(t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
 /** Medien mit abgelaufenem „gültig bis“ (Lizenz) werden automatisch aus der Wiedergabe genommen */
 export const isExpired = (validUntil, t = Date.now()) => !!validUntil && validUntil < todayBerlin(t);
-function playlistItems(db, id, t = Date.now()) {
-  return db.prepare('SELECT i.media_id AS mediaId, i.duration_s AS duration, i.transition, i.valid_from AS validFrom, i.valid_to AS validTo FROM playlist_items i JOIN media m ON m.id=i.media_id WHERE i.playlist_id=? AND (m.valid_until IS NULL OR m.valid_until >= ?) ORDER BY i.pos').all(id, todayBerlin(t));
+export const MAX_NEST = 3, MAX_FLAT_ITEMS = 500;
+/** Notfall mit Fluchtweg-Plan: so lange steht erst die Meldung, dann der Plan des Bildschirms (Sekunden) */
+export const ESCAPE_TEXT_S = 10, ESCAPE_PLAN_S = 15;
+const later = (a, b) => (a && b ? (a > b ? a : b) : a ?? b), earlier = (a, b) => (a && b ? (a < b ? a : b) : a ?? b);
+/**
+ * Die Einträge einer Abspielliste als FLACHE Liste. Verschachtelte Listen (Tabelle playlist_includes) werden an ihrer Stelle aufgelöst; das „gültig von/bis“ der
+ * Einfügung wirkt auf alle Einträge der eingefügten Liste. Schleifen und zu tiefe Verschachtelung werden übersprungen (der Player bekommt nie etwas davon zu sehen).
+ */
+export function playlistItems(db, id, t = Date.now(), depth = 0, ancestors = new Set()) {
+  const media = db.prepare('SELECT i.pos AS pos, i.media_id AS mediaId, i.duration_s AS duration, i.transition, i.valid_from AS validFrom, i.valid_to AS validTo FROM playlist_items i JOIN media m ON m.id=i.media_id WHERE i.playlist_id=? AND (m.valid_until IS NULL OR m.valid_until >= ?)').all(id, todayBerlin(t));
+  const subs = depth < MAX_NEST ? db.prepare("SELECT i.pos AS pos, i.sub_id AS subId, i.valid_from AS validFrom, i.valid_to AS validTo FROM playlist_includes i JOIN playlists p ON p.id=i.sub_id AND p.state='published' WHERE i.playlist_id=?").all(id) : [];
+  const out = [], here = new Set([...ancestors, id]);
+  for (const e of [...media, ...subs].sort((a, b) => a.pos - b.pos)) {
+    if (e.subId === undefined) { const { pos, ...it } = e; out.push(it); continue; }
+    if (here.has(e.subId)) continue; // Schleife
+    for (const it of playlistItems(db, e.subId, t, depth + 1, here)) out.push({ ...it, validFrom: later(it.validFrom, e.validFrom) ?? null, validTo: earlier(it.validTo, e.validTo) ?? null });
+  }
+  return out.slice(0, MAX_FLAT_ITEMS);
 }
 
 /** Paket für einen Player: Zeitplan der nächsten 14 Tage + benötigte Abspiellisten. */
@@ -52,9 +83,18 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   if (def) playlists[def] = { name: db.prepare('SELECT name FROM playlists WHERE id=?').get(def).name, items: playlistItems(db, def, now) };
   // Übersteuerungen/Schnellaktionen (Z.2): nur aktive, die dieses Gerät betreffen. Wirken auch offline bis zu ihrem Ablauf (der Player prüft „until“ selbst).
   const kinds = new Map(db.prepare('SELECT id,kind,prio FROM override_kind').all().map((r) => [r.id, r]));
+  /** Liste einer Übersteuerung. Notfall-Meldung + Fluchtweg-Plan dieses Bildschirms ergeben eine eigene Liste „Meldung, dann Plan“ (nur in diesem Plan) */
+  const overrideList = (o) => {
+    if (kinds.get(o.id)?.kind === 'notfall' && o.content_type === 'media' && device.escape_media_id && db.prepare('SELECT 1 FROM media WHERE id=?').get(device.escape_media_id)) {
+      const id = `notfall:${o.content_id}:${device.escape_media_id}`;
+      playlists[id] ??= { name: 'Notfall-Meldung mit Fluchtweg-Plan', items: [{ mediaId: o.content_id, duration: ESCAPE_TEXT_S, transition: 'cut' }, { mediaId: device.escape_media_id, duration: ESCAPE_PLAN_S, transition: 'cut' }] };
+      return id;
+    }
+    return use({ type: o.content_type, id: o.content_id }).id;
+  };
   const overrides = db.prepare('SELECT * FROM overrides WHERE ended_at IS NULL AND until > ?').all(now)
     .filter((o) => o.scope === 'all' || (o.scope === 'device' && o.target_id === device.id) || (o.scope === 'group' && o.target_id && o.target_id === device.group_id))
-    .map((o) => ({ id: o.id, scope: o.scope, playlistId: use({ type: o.content_type, id: o.content_id }).id, until: o.until, createdAt: o.created_at, label: o.label, by: o.created_by_name, kind: kinds.get(o.id)?.kind ?? 'manual', ...(kinds.get(o.id)?.prio ? { prio: kinds.get(o.id).prio } : {}) }));
+    .map((o) => ({ id: o.id, scope: o.scope, playlistId: overrideList(o), until: o.until, createdAt: o.created_at, label: o.label, by: o.created_by_name, kind: kinds.get(o.id)?.kind ?? 'manual', ...(kinds.get(o.id)?.prio ? { prio: kinds.get(o.id).prio } : {}) }));
   // Sondertage (Z.6): Feiertage/Schließtage/Betriebsferien der nächsten 14 Tage
   const d0 = new Date(from + 2 * 3600000).toISOString().slice(0, 10), d1 = new Date(to + 2 * 3600000).toISOString().slice(0, 10);
   const specialDays = db.prepare('SELECT * FROM special_days WHERE date <= ? AND COALESCE(date_to, date) >= ? ORDER BY CASE source WHEN \'custom\' THEN 0 ELSE 1 END, date').all(d1, d0)
@@ -63,11 +103,13 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   const tickers = db.prepare("SELECT text,valid_from AS validFrom,valid_to AS validTo FROM tickers WHERE state='published' AND (target_type='all' OR (target_type='device' AND target_id=?) OR (target_type='group' AND target_id=?))").all(device.id, device.group_id ?? '');
   const stg = Object.fromEntries(db.prepare("SELECT key,value FROM settings WHERE key LIKE 'maintenance.%'").all().map((r) => [r.key, r.value]));
   let version = ''; try { version = JSON.parse(device.state_json ?? '{}').version ?? ''; } catch {}
-  const inserts = verGte(version, INSERTS_MIN_VERSION) ? insertsFor(db, device) : [];
-  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation, renderer: rendererOf(device), fit: device.fit_json ? JSON.parse(device.fit_json) : null, overrides, specialDays, hold, tickers,
+  const wall = wallFor(db, device, version);
+  const inserts = !wall && verGte(version, INSERTS_MIN_VERSION) ? insertsFor(db, device) : []; // im Gleichtakt keine Einschübe (sie würden sich unterscheiden)
+  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation, renderer: wall ? 'mpv' : rendererOf(device), fit: device.fit_json ? JSON.parse(device.fit_json) : null, overrides, specialDays, hold, tickers,
     layout: device.profile === 'lite' ? null : device.layout_json ? JSON.parse(device.layout_json) : null,
     maintenance: { nightlyReboot: (stg['maintenance.nightlyReboot'] ?? 'true') === 'true' ? (stg['maintenance.rebootAt'] ?? '03:30') : null },
     ...(inserts.length ? { inserts } : {}),
+    ...(wall ? { wall } : {}),
     display: parseJson(device.display_json, null), sync: { window: st['sync.window'] ?? '', bandwidthKbps: Number(st['sync.bandwidthKbps'] ?? 0) } };
 }
 
@@ -76,7 +118,7 @@ export const rendererOf = (d) => (d.profile === 'lite' || d.renderer === 'mpv' ?
 
 /** Alle Medien, die dieser Player braucht (nur Variante seines Profils). */
 export function manifestPayload(db, device, now = Date.now()) {
-  const ids = new Set();
+  const ids = new Set(); const renderer = effectiveRenderer(db, device);
   for (const r of db.prepare("SELECT DISTINCT media_id FROM playlist_items i JOIN playlists p ON p.id=i.playlist_id WHERE p.state='published'").all()) ids.add(r.media_id);
   for (const r of db.prepare("SELECT content_id FROM schedules WHERE content_type='media' AND state='published'").all()) ids.add(r.content_id);
   for (const r of db.prepare("SELECT content_id FROM overrides WHERE content_type='media' AND ended_at IS NULL AND until > ?").all(now)) ids.add(r.content_id);
@@ -89,13 +131,15 @@ export function manifestPayload(db, device, now = Date.now()) {
     else for (const i of db.prepare('SELECT media_id FROM playlist_items WHERE playlist_id=?').all(r.content_id)) ids.add(i.media_id);
   }
   for (const r of db.prepare('SELECT media_id FROM inserts WHERE enabled=1').all()) ids.add(r.media_id); // Einschübe: Medium vorab laden
+  if (device.escape_media_id) ids.add(device.escape_media_id); // Fluchtweg-Plan dieses Bildschirms: immer vorab laden (die Notfall-Meldung darf nie auf einen Download warten)
   const items = [];
   for (const id of ids) {
     const m = db.prepare('SELECT * FROM media WHERE id=?').get(id);
     if (!m || isExpired(m.valid_until, now)) continue;
-    if (m.kind === 'text' && rendererOf(device) === 'browser') { /* mpv kann keinen Text setzen → dort vorgerendertes Bild */ items.push({ id, kind: 'text', name: m.name, text: JSON.parse(m.text_json || '{}'), validUntil: m.valid_until ?? null }); continue; }
+    const tj = m.kind === 'text' ? parseJson(m.text_json, {}) : null, { stream: st, ...tText } = tj ?? {}, stream = st?.url ? { url: st.url } : null; // Live-Bild: Adresse als eigenes Feld, nicht im Text
+    if (m.kind === 'text' && renderer === 'browser') { /* mpv kann keinen Text setzen → dort vorgerendertes Bild */ items.push({ id, kind: 'text', name: m.name, text: tText, ...(stream ? { stream } : {}), validUntil: m.valid_until ?? null }); continue; }
     const v = db.prepare("SELECT * FROM media_variants WHERE media_id=? AND profile=? AND status='ready'").get(id, device.profile);
-    items.push(v ? { id, kind: m.kind, name: m.name, sha256: v.sha256, size: v.size, durationS: m.duration_s, url: `/api/v1/device/media/${id}`, validUntil: m.valid_until ?? null }
+    items.push(v ? { id, kind: m.kind, name: m.name, sha256: v.sha256, size: v.size, durationS: m.duration_s, url: `/api/v1/device/media/${id}`, ...(stream ? { stream } : {}), ...(m.width > 0 && m.height > 0 ? { aspect: Math.round((m.width / m.height) * 10000) / 10000 } : {}), validUntil: m.valid_until ?? null }
       : { id, kind: m.kind, name: m.name, pending: true });
   }
   return { generatedAt: now, items };
@@ -111,7 +155,7 @@ export function warnings(db, now = Date.now()) {
   for (const s of scheds) {
     const t = s.content.type === 'playlist' ? 'playlists' : 'media';
     if (!db.prepare(`SELECT 1 FROM ${t} WHERE id=?`).get(s.content.id)) out.push({ kind: 'inhalt_fehlt', ids: [s.id], text: 'Ein Termin zeigt einen Inhalt, den es nicht mehr gibt.' });
-    else if (s.content.type === 'playlist' && !db.prepare('SELECT 1 FROM playlist_items WHERE playlist_id=?').get(s.content.id)) out.push({ kind: 'liste_leer', ids: [s.id], text: 'Ein Termin zeigt eine leere Abspielliste.' });
+    else if (s.content.type === 'playlist' && !db.prepare('SELECT 1 FROM playlist_items WHERE playlist_id=? UNION SELECT 1 FROM playlist_includes WHERE playlist_id=?').get(s.content.id, s.content.id)) out.push({ kind: 'liste_leer', ids: [s.id], text: 'Ein Termin zeigt eine leere Abspielliste.' });
   }
   for (const m of db.prepare('SELECT name,valid_until,license FROM media WHERE valid_until IS NOT NULL').all()) {
     const days = Math.round((Date.parse(m.valid_until + 'T00:00:00Z') - Date.parse(todayBerlin(now) + 'T00:00:00Z')) / DAY);
@@ -124,6 +168,20 @@ export function warnings(db, now = Date.now()) {
     if (st?.syncState && st.syncState.done < st.syncState.total) out.push({ kind: 'medien_laden', ids: [d.id], text: `„${d.name}“ lädt noch Medien (${st.syncState.done} von ${st.syncState.total}).` });
   }
   for (const c of careWarnings(db, now)) out.push(c);
+  for (const g of db.prepare("SELECT * FROM device_groups WHERE sync_mode != 'off'").all()) { // Gleichtakt / Videowand
+    const members = db.prepare("SELECT * FROM devices WHERE group_id=? AND status='active' ORDER BY name").all(g.id);
+    const label = g.sync_mode === 'videowand' ? 'Videowand' : 'Gleichtakt';
+    for (const d of members) if (!verGte(versionOf(d), WALL_MIN_VERSION)) out.push({ kind: 'gleichtakt_alt', ids: [d.id], text: `„${d.name}“ hat noch eine ältere Version und läuft deshalb nicht mit (${label} der Gruppe „${g.name}“). Bitte erst das Update einspielen.` });
+    if (g.sync_mode !== 'videowand') continue;
+    const tiles = g.wall_cols * g.wall_rows, seen = new Map();
+    for (const d of members) {
+      const ok = Number.isInteger(d.wall_col) && Number.isInteger(d.wall_row) && d.wall_col < g.wall_cols && d.wall_row < g.wall_rows;
+      if (!ok) { out.push({ kind: 'videowand_position', ids: [d.id], text: `„${d.name}“ hat in der Videowand „${g.name}“ keinen Platz. Es zeigt das ganze Bild. Bitte unter „Bearbeiten“ Spalte und Zeile eintragen.` }); continue; }
+      const key = d.wall_col + ',' + d.wall_row; if (seen.has(key)) out.push({ kind: 'videowand_doppelt', ids: [d.id, seen.get(key)], text: `In der Videowand „${g.name}“ haben zwei Bildschirme denselben Platz (Spalte ${d.wall_col + 1}, Zeile ${d.wall_row + 1}).` }); else seen.set(key, d.id);
+      if (d.orientation) out.push({ kind: 'videowand_gedreht', ids: [d.id], text: `„${d.name}“ ist gedreht. Eine Videowand funktioniert nur mit nicht gedrehten Bildschirmen.` });
+    }
+    if (members.length < tiles) out.push({ kind: 'videowand_luecke', ids: [], text: `Die Videowand „${g.name}“ hat ${tiles} Kacheln (${g.wall_cols} × ${g.wall_rows}), aber nur ${members.length} aktive Bildschirme. Es bleiben Teile des Bildes dunkel.` });
+  }
   if (db.integrity && db.integrity !== 'ok') out.push({ kind: 'datenbank', ids: [], text: `Die Prüfung der Datenbank beim Start hat Fehler gemeldet (${String(db.integrity).slice(0, 120)}). Bitte jetzt ein Backup herunterladen (Erweitert → Sicherung) und die IT informieren.` });
   return out;
 }

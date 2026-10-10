@@ -31,6 +31,7 @@ import systemPlugin from './lib/system.js';
 import { createVariantQueue } from './lib/variants.js';
 import { createLimiter } from './lib/ratelimit.js';
 import { safeInterval } from '../shared/guard.js';
+import ausloeserPlugin from './lib/ausloeser.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -90,6 +91,7 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   await app.register(einschuebePlugin, { db, audit, now });
   await app.register(extras6Plugin, { db, audit, variants, now });
   await app.register(notfallPlugin, { db, audit, variants, now });
+  await app.register(ausloeserPlugin, { db, audit, now }); // nach extras.js (nutzt app.scenes) und notfall.js
   await app.register(nachweisPlugin, { db, now });
   await app.register(teilenPlugin, { db, audit, now });
   await app.register(alertsPlugin, { db, key, audit, now, ...(mailer ? { mailer } : {}) });

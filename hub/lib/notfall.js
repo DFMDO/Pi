@@ -22,7 +22,9 @@ async function notfallPlugin(app, { db, audit, variants, now = () => Date.now() 
   const active = () => db.prepare("SELECT * FROM overrides WHERE label=? AND ended_at IS NULL AND until>? ORDER BY created_at DESC").get(NOTFALL_LABEL, now());
   const view = (o) => !o ? null : { id: o.id, by: o.created_by_name, since: o.created_at, until: o.until, title: JSON.parse(db.prepare('SELECT text_json FROM media WHERE id=?').get(o.content_id)?.text_json ?? '{}').title ?? '' };
 
-  app.get('/api/v1/emergency', { config: { perm: 'overrides.write' } }, async () => ({ presets: presets(), active: view(active()), isDefault: presets() === DEFAULT_PRESETS }));
+  /** Wie viele Bildschirme haben einen eigenen Fluchtweg-Plan (folgt der Meldung auf genau diesem Bildschirm)? */
+  const escapeCount = () => ({ withPlan: db.prepare("SELECT COUNT(*) n FROM devices WHERE status='active' AND escape_media_id IS NOT NULL").get().n, total: db.prepare("SELECT COUNT(*) n FROM devices WHERE status='active'").get().n });
+  app.get('/api/v1/emergency', { config: { perm: 'overrides.write' } }, async () => ({ presets: presets(), active: view(active()), isDefault: presets() === DEFAULT_PRESETS, escape: escapeCount() }));
 
   app.put('/api/v1/emergency/presets', { config: { perm: 'settings.manage' }, schema: { body: { type: 'object', required: ['presets'], additionalProperties: false, properties: { presets: { type: 'array', minItems: 1, maxItems: 6, items: { type: 'object', required: ['title', 'text'], additionalProperties: false, properties: { title: { type: 'string', minLength: 1, maxLength: 60 }, text: bodyText } } } } } } }, async (req, reply) => {
     const list = req.body.presets.map((p, i) => ({ id: `p${i + 1}`, title: p.title.trim(), text: p.text.trim() })).filter((p) => p.title && p.text);

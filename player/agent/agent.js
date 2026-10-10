@@ -31,7 +31,7 @@ export function ownAddresses() {
 }
 
 export class Agent {
-  constructor({ dataDir, version = '0.2.28', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.29', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });
@@ -323,7 +323,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const cfg = readJson(join(dataDir, 'agent.json'));
   const { chromiumRenderer, liteRenderer } = await import('./lib/renderers.js');
   const a = new Agent({ dataDir, log: (...x) => console.error(...x), port: Number(process.env.DFM_PORT ?? 8080) });
-  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' || cfg?.renderer === 'mpv' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getRotation: () => a.cfg?.orientation ?? 0, onShow: (s) => { try { a.onPlayerStatus(s); } catch (e) { console.error('Statusmeldung:', e.message); } }, haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
+  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' || cfg?.renderer === 'mpv' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getWall: () => a.plan?.wall ?? null, getRotation: () => a.cfg?.orientation ?? 0, onShow: (s) => { try { a.onPlayerStatus(s); } catch (e) { console.error('Statusmeldung:', e.message); } }, haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
     : chromiumRenderer({ url: 'http://127.0.0.1:8080/player/', profileDir: join(dataDir, 'chromium-profile'), log: (...x) => console.error(...x) });
   await a.start();
   // Sauber beenden, aber nie länger als 5 Sekunden warten

@@ -10,15 +10,15 @@ export async function mediaPage({ route }) {
   const search = h('input', { type: 'search', placeholder: 'Suchen …', 'aria-label': 'Medien suchen', oninput: () => draw() });
   const grid = h('div', { class: 'mediaGrid' });
   const draw = () => { const q = search.value.toLowerCase(); grid.replaceChildren(...items.filter((m) => !q || m.name.toLowerCase().includes(q) || m.folder.toLowerCase().includes(q) || m.tags.join(' ').includes(q)).map(card)); };
-  const card = (m) => h('div', { class: 'card mediaCard' }, h('div', { class: 'shot' }, thumb(m)), h('b', {}, m.name), h('div', { class: 'hint' }, `${KIND[m.kind]}${m.size ? ' · ' + fmtBytes(m.size) : ''}${m.folder ? ' · ' + m.folder : ''}`),
+  const card = (m) => h('div', { class: 'card mediaCard' }, h('div', { class: 'shot' }, thumb(m)), h('b', {}, m.name), h('div', { class: 'hint' }, `${m.stream ? '📹 Live-Bild' : KIND[m.kind]}${m.size ? ' · ' + fmtBytes(m.size) : ''}${m.folder ? ' · ' + m.folder : ''}`), m.stream ? h('div', { class: 'hint' }, m.text?.stream?.url ?? '') : null,
     m.expired ? h('div', { class: 'notice bad' }, '⛔ Abgelaufen – wird nicht mehr gezeigt') : m.validUntil ? h('div', { class: 'hint' }, `Gültig bis ${m.validUntil.split('-').reverse().join('.')}${m.license ? ' · ' + m.license : ''}`) : null,
     ...m.hints.map((t) => h('div', { class: 'hint warn' }, 'ℹ ' + t)), ...m.variants.filter((v) => v.status === 'failed').map((v) => h('div', { class: 'hint bad' }, '⚠ Dieses Medium konnte nicht für alle Bildschirme vorbereitet werden.')),
     m.variants.some((v) => v.status === 'pending' || v.status === 'running') ? h('div', { class: 'hint' }, '⏳ Wird für die Bildschirme vorbereitet …') : null,
-    can('media.write') ? h('div', { class: 'row' }, h('button', { class: 'btn link', onclick: () => rename(m, route) }, 'Umbenennen & Lizenz'), h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: () => remove(m, route) }, 'Löschen')) : null);
+    can('media.write') ? h('div', { class: 'row' }, h('button', { class: 'btn link', onclick: () => rename(m, route) }, 'Umbenennen & Lizenz'), m.stream ? h('button', { class: 'btn link', onclick: () => streamAddr(m, route) }, 'Adresse ändern') : null, h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: () => remove(m, route) }, 'Löschen')) : null);
   draw();
   return h('div', {}, h('h1', {}, 'Bilder & Videos'), h('p', { class: 'lead' }, 'Lade Bilder, Videos oder PDFs hoch und lege Text-Ankündigungen an. Danach kannst du sie in Abspiellisten und Termine einbauen.'),
     storage?.warn ? h('div', { class: 'notice' }, '⚠ ' + storage.text) : null,
-    can('media.write') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', 'data-tour': 'upload', onclick: () => uploadDlg(route) }, '⬆️ Bild oder Video hochladen'), h('button', { class: 'btn sec', onclick: () => templateDlg(route) }, '🧩 Vorlage verwenden'), h('button', { class: 'btn sec', onclick: () => qrDlg(route) }, '🔳 QR-Code erstellen'), can('import.run') ? h('button', { class: 'btn sec', onclick: () => importDlg(route) }, '📁 Ordner / USB-Stick importieren') : null, h('button', { class: 'btn sec', onclick: () => textDlg(route) }, '📝 Text-Ankündigung erstellen'), h('button', { class: 'btn sec', onclick: () => quizDlg(route) }, '❓ Frage & Antwort'), h('button', { class: 'btn sec', onclick: () => cleanupDlg(route) }, '🧹 Aufräumen'), h('span', { class: 'sp' }), search) : search,
+    can('media.write') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', 'data-tour': 'upload', onclick: () => uploadDlg(route) }, '⬆️ Bild oder Video hochladen'), h('button', { class: 'btn sec', onclick: () => templateDlg(route) }, '🧩 Vorlage verwenden'), h('button', { class: 'btn sec', onclick: () => qrDlg(route) }, '🔳 QR-Code erstellen'), h('button', { class: 'btn sec', onclick: () => streamDlg(route) }, '📹 Live-Bild (Kamera)'), can('import.run') ? h('button', { class: 'btn sec', onclick: () => importDlg(route) }, '📁 Ordner / USB-Stick importieren') : null, h('button', { class: 'btn sec', onclick: () => textDlg(route) }, '📝 Text-Ankündigung erstellen'), h('button', { class: 'btn sec', onclick: () => quizDlg(route) }, '❓ Frage & Antwort'), h('button', { class: 'btn sec', onclick: () => cleanupDlg(route) }, '🧹 Aufräumen'), h('span', { class: 'sp' }), search) : search,
     items.length ? grid : empty('Noch nichts hochgeladen', 'Lade dein erstes Bild hoch. Erlaubt sind Bilder (JPG, PNG, WebP), Videos (MP4, MOV, MKV) und PDF.', can('media.write') ? h('button', { class: 'btn big', onclick: () => uploadDlg(route) }, 'Bild oder Video hochladen') : null),
     trashSection(route));
 }
@@ -32,6 +32,19 @@ function uploadDlg(route) {
     catch (e) { row.textContent = `✖ ${file.name}: ${e.message}`; row.className = 'bad'; }
   };
   f.onchange = () => [...f.files].forEach(send); d.addEventListener('dragover', (e) => e.preventDefault()); d.addEventListener('drop', (e) => { e.preventDefault(); [...e.dataTransfer.files].forEach(send); });
+}
+/** Live-Bild: Kamera oder Stream im eigenen Netz als Folie – nur auf Bildschirmen mit „Video-optimiert“ */
+function streamDlg(route) {
+  const name = h('input', { maxlength: 100, placeholder: 'z. B. Kamera Eingang' }), url = h('input', { maxlength: 300, placeholder: 'rtsp://192.168.1.50/stream1', 'aria-label': 'Adresse des Live-Bilds', autocomplete: 'off' }), title = h('input', { maxlength: 120 }), body = h('textarea', { maxlength: 300, rows: 2 });
+  dialog('📹 Live-Bild anlegen', h('div', {}, h('p', { class: 'notice' }, 'Das Live-Bild läuft nur auf Bildschirmen mit der Wiedergabe „Video-optimiert“ (Bildschirm bearbeiten → Wiedergabe). Andere Bildschirme überspringen es. Erlaubt sind nur Geräte im Museumsnetz.'),
+    field('Name (nur für dich)', name), field('Adresse der Kamera oder des Streams', url, 'Sie steht in der Anleitung der Kamera. Am sichersten ist die IP-Adresse der Kamera (zum Beispiel 192.168.1.50). Wenn Benutzer und Passwort nötig sind, stehen sie vor dem @ in der Adresse; sie werden nie angezeigt, aber an die Bildschirme gesendet – bitte ein Konto nur mit Leserechten verwenden.'),
+    field('Ersatzfolie: Überschrift', title, 'Wird gezeigt, wenn das Live-Bild nicht ankommt. Leer lassen = der Name.'), field('Ersatzfolie: Text', body)),
+    [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await post('/media/stream', { name: name.value, url: url.value, ...(title.value ? { title: title.value } : {}), ...(body.value ? { body: body.value } : {}) }); toast('Das Live-Bild wurde gespeichert. Du findest es unter „Bilder & Videos“ und kannst es in Abspiellisten einbauen.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
+}
+function streamAddr(m, route) {
+  const url = h('input', { maxlength: 300, placeholder: 'rtsp://192.168.1.50/stream1', 'aria-label': 'Neue Adresse', autocomplete: 'off' });
+  dialog('Adresse des Live-Bilds ändern', h('div', {}, h('p', { class: 'hint' }, `Bisher: ${m.text?.stream?.url ?? '–'}`), field('Neue Adresse', url)),
+    [{ text: 'Abbrechen', cls: 'sec' }, { text: 'Speichern', fn: async () => { try { await patch(`/media/${m.id}/stream`, { url: url.value }); toast('Die Adresse wurde geändert.'); route(); } catch (e) { toast(e.message, 'err'); return false; } } }]);
 }
 function textDlg(route) {
   const name = h('input', { maxlength: 100 }), title = h('input', { maxlength: 120 }), body = h('textarea', { maxlength: 1000 }), tpl = h('select', {}, h('option', { value: 'standard' }, 'Dunkel mit rotem Streifen'), h('option', { value: 'hinweis' }, 'Hinweis (gelb)'), h('option', { value: 'highlight' }, 'Highlight (rot)'));

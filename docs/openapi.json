@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DFM Signage Hub API",
-    "version": "0.2.28",
+    "version": "0.2.29",
     "description": "Alle Routen liegen unter /api/v1. Anmeldung per Cookie (__Host-dfm_sid) mit CSRF-Header X-CSRF-Token bei schreibenden Aufrufen; Player nutzen ein Bearer-Token. WebSocket: siehe docs/websocket.md."
   },
   "servers": [
@@ -1107,6 +1107,29 @@
                       180,
                       270
                     ]
+                  },
+                  "escapeMediaId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 40
+                  },
+                  "wallCol": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 3
+                  },
+                  "wallRow": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 3
                   },
                   "display": {
                     "type": [
@@ -2568,6 +2591,78 @@
         }
       }
     },
+    "/api/v1/groups/{id}": {
+      "patch": {
+        "summary": "Sitzung + Recht „devices.manage“",
+        "x-berechtigung": "devices.manage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "location": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 100
+                  },
+                  "syncMode": {
+                    "enum": [
+                      "off",
+                      "gleichtakt",
+                      "videowand"
+                    ]
+                  },
+                  "cols": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
+                  },
+                  "rows": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "summary": "Sitzung + Recht „devices.read“",
@@ -3339,6 +3434,61 @@
         }
       }
     },
+    "/api/v1/media/stream": {
+      "post": {
+        "summary": "Sitzung + Recht „media.write“",
+        "x-berechtigung": "media.write",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "url"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "body": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
     "/api/v1/media/text": {
       "post": {
         "summary": "Sitzung + Recht „media.write“",
@@ -3575,6 +3725,56 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/media/{id}/stream": {
+      "patch": {
+        "summary": "Sitzung + Recht „media.write“",
+        "x-berechtigung": "media.write",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "url"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Erfolg"
@@ -4048,12 +4248,13 @@
                     "maxItems": 200,
                     "items": {
                       "type": "object",
-                      "required": [
-                        "mediaId"
-                      ],
                       "additionalProperties": false,
                       "properties": {
                         "mediaId": {
+                          "type": "string",
+                          "maxLength": 40
+                        },
+                        "playlistId": {
                           "type": "string",
                           "maxLength": 40
                         },
@@ -7279,6 +7480,268 @@
       "post": {
         "summary": "Sitzung + Recht „media.write“",
         "x-berechtigung": "media.write",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/trigger/{token}": {
+      "post": {
+        "summary": "öffentlich (nur im Einrichtungs-/Pairing-Ablauf)",
+        "x-berechtigung": null,
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          }
+        }
+      },
+      "get": {
+        "summary": "öffentlich (nur im Einrichtungs-/Pairing-Ablauf)",
+        "x-berechtigung": null,
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          }
+        }
+      }
+    },
+    "/api/v1/triggers": {
+      "get": {
+        "summary": "Sitzung + Recht „settings.manage“",
+        "x-berechtigung": "settings.manage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      },
+      "post": {
+        "summary": "Sitzung + Recht „settings.manage“",
+        "x-berechtigung": "settings.manage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "sceneId": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "action": {
+                    "enum": [
+                      "start",
+                      "stop"
+                    ]
+                  },
+                  "minutes": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 1440
+                  },
+                  "endOfDay": {
+                    "type": "boolean"
+                  },
+                  "allowGet": {
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sceneId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/triggers/{id}": {
+      "patch": {
+        "summary": "Sitzung + Recht „settings.manage“",
+        "x-berechtigung": "settings.manage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "sceneId": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "action": {
+                    "enum": [
+                      "start",
+                      "stop"
+                    ]
+                  },
+                  "minutes": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 1440
+                  },
+                  "endOfDay": {
+                    "type": "boolean"
+                  },
+                  "allowGet": {
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Sitzung + Recht „settings.manage“",
+        "x-berechtigung": "settings.manage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolg"
+          },
+          "400": {
+            "description": "Eingabe ungültig (verständlicher Text im Feld \"error\")"
+          },
+          "401": {
+            "description": "Nicht angemeldet"
+          },
+          "403": {
+            "description": "Berechtigung fehlt"
+          }
+        }
+      }
+    },
+    "/api/v1/triggers/{id}/regenerate": {
+      "post": {
+        "summary": "Sitzung + Recht „settings.manage“",
+        "x-berechtigung": "settings.manage",
         "parameters": [
           {
             "name": "id",

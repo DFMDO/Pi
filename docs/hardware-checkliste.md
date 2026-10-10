@@ -134,3 +134,14 @@ RAM, CPU, WLAN-Durchsatz, Startzeit nach jeder größeren Änderung mit `tools/d
 | E43 | Selbstheilung: Renderer einfrieren (`kill -STOP` auf mpv bzw. Chromium) | Nach Ablauf der Frist (mind. 20 Min.) startet die Anzeige neu, Hub zeigt gelbe Meldung; nicht öfter als einmal pro Stunde | ☐ |
 | E44 | Hub-Stromausfall mitten im Betrieb (Stecker ziehen) mehrfach, danach Start | Hub startet, keine Warnung „Datenbank“; Datenbank-Kopie `hub.db.vor-v…` nur nach einem Update vorhanden | ☐ |
 | E45 | Video-Upload mit absichtlich kaputter Datei, dann normale Datei | Fehlermeldung bei der kaputten, Verarbeitung der nächsten läuft weiter (kein „hängt“) | ☐ |
+
+## Version 0.2.29 – Listen, Auslöser, Fluchtweg, Live-Bild, Gleichtakt/Videowand
+| # | Prüfung | Soll | Prüfer |
+|---|---|---|---|
+| E46 | Auslöser-Link vom Handy (iOS-Kurzbefehl / Android) und von einem Tastenfeld aufrufen; Zertifikat des Hubs bestätigen | Szene startet innerhalb von 2 s auf allen Bildschirmen; im Protokoll ein Eintrag; zweiter Aufruf nach 1 s wird gebremst | ☐ |
+| E47 | Gleichtakt mit 3 Bildschirmen (WLAN) und Wechsel Bild/Video; Handy-Video von der Seite aufnehmen und Abweichung zählen | Bildwechsel auf allen Bildschirmen innerhalb von ca. 0,2 s, Videostart ebenso; nach Neustart eines Bildschirms springt er in ≤ 3 s an die richtige Stelle | ☐ |
+| E48 | Videowand 2 × 1 und 2 × 2 mit einem Full-HD-Video (4 Min.) auf Pi 3 B+ (mpv, `--vo=drm`) | Läuft ohne Ruckeln und ohne Speicher-/Temperaturanstieg; Ausschnitte passen (Rahmen-Versatz erwartbar); sonst Ergebnis melden – dann kommt eine Lösung mit vorab berechneten Kacheln | ☐ |
+| E49 | Fluchtweg-Plan: Notfall-Meldung auslösen, danach Hub-Verbindung trennen und erneut auslösen (nur mit Plan im Cache) | Meldung und Plan wechseln sich ab, Plan lesbar auf allen Entfernungen; auch ohne Hub-Verbindung | ☐ |
+| E50 | Live-Bild einer echten IP-Kamera (RTSP) auf einem mpv-Bildschirm; Kamera vom Netz nehmen und wieder anstecken | Bild flüssig; bei Ausfall Ersatzfolie, danach kommt das Bild von selbst zurück; Speicher steigt nicht an (E41-Beobachtung) | ☐ |
+| E51 | Live-Bild auf einem Browser-Bildschirm | wird übersprungen, kein Fehlerbild | ☐ |
+| E52 | Verschachtelte Liste im Betrieb: Teilliste ändern | Hauptliste folgt nach wenigen Sekunden, auch auf Bildschirmen im Cache-Betrieb nach Wiederverbindung | ☐ |

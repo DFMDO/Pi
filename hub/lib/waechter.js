@@ -28,7 +28,7 @@ const durOf = (i) => (i.kind === 'video' ? (i.durationS ?? 30) : i.duration ?? 1
  */
 export function freezeWindow(items) {
   const total = items.reduce((s, i) => s + durOf(i), 0); if (!total) return null;
-  const share = new Map(); for (const i of items) if (i.kind !== 'video') share.set(i.mediaId, (share.get(i.mediaId) ?? 0) + durOf(i)); // Video: jede Probe sieht ein anderes Bild
+  const share = new Map(); for (const i of items) if (i.kind !== 'video' && i.kind !== 'stream') share.set(i.mediaId, (share.get(i.mediaId) ?? 0) + durOf(i)); // Video: jede Probe sieht ein anderes Bild
   const pSame = [...share.values()].reduce((s, x) => s + (x / total) ** 2, 0); if (pSame >= 0.999) return null;
   const n = Math.max(4, Math.ceil(Math.log(FALSE_ALARM) / Math.log(pSame)) + 1); return n <= MAX_SAMPLES ? n : null;
 }
