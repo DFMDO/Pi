@@ -4,6 +4,7 @@
 // Die Übertragung endet von Hand, nach der eingestellten Zeit, ohne Bilder (20 s) oder wenn eine Notfall-Meldung startet.
 import { randomUUID } from 'node:crypto';
 import { rendererOf } from './plan.js';
+import { safeInterval } from '../../shared/guard.js';
 
 const MAX_FRAME = 2.5 * 1024 * 1024, IDLE_MS = 20000, MPV_MIN_GAP_MS = 900;
 
@@ -32,7 +33,7 @@ async function teilenPlugin(app, { db, audit, now = () => Date.now() }) {
   /** Abgelaufene (Höchstzeit) oder verwaiste (keine Bilder mehr) Übertragungen beenden */
   const expire = () => { const t = now(); for (const s of [...shares.values()]) { if (t > s.until) stop(s, 'Zeit abgelaufen'); else if (t - s.lastFrame > IDLE_MS) stop(s, 'keine Bilder mehr (Browser geschlossen?)'); } };
   app.decorate('share', { stopAll: (reason) => { for (const s of [...shares.values()]) stop(s, reason); }, active: () => [...shares.values()], expire });
-  const timer = setInterval(expire, 5000); timer.unref(); app.addHook('onClose', async () => clearInterval(timer));
+  const timer = safeInterval(expire, 5000, console.error, 'Teilen'); app.addHook('onClose', async () => clearInterval(timer));
 
   const view = (s, user) => ({ id: s.id, by: s.userName, mine: s.userId === user.id, since: s.startedAt, until: s.until, devices: s.names });
 

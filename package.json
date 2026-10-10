@@ -1,6 +1,6 @@
 {
   "name": "dfm-signage",
-  "version": "0.2.27",
+  "version": "0.2.28",
   "private": true,
   "description": "DFM Signage – lokales Digital-Signage-System für Raspberry Pi",
   "type": "module",

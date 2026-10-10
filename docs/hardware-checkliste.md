@@ -125,3 +125,12 @@ RAM, CPU, WLAN-Durchsatz, Startzeit nach jeder größeren Änderung mit `tools/d
 | E38 | Verwaltung auf PC (Chrome/Edge), iPad und Handy (iPhone und Android), hell und dunkel | Lesbar, nichts abgeschnitten, Navigation am Handy wischbar, Knöpfe gut zu treffen | ☐ |
 | E39 | Anleitung: Suche, ein Kapitel öffnen, „Anleitung zu dieser Seite“ auf 3 Seiten, Rundgang | Findet Stichwörter, Knöpfe führen zur richtigen Seite, Texte verständlich (bitte jemanden **ohne** Technikwissen lesen lassen) | ☐ |
 | E40 | Etiketten drucken (Browser-Druck, Normalpapier) | Größe und QR passen, Navigation und Hintergrund erscheinen nicht auf dem Ausdruck | ☐ |
+
+## Version 0.2.28 – Stabilität im Dauerbetrieb
+| # | Prüfung | Soll | Prüfer |
+|---|---|---|---|
+| E41 | Dauerlauf ≥ 24 h (Hub+Bildschirm und ein reiner Player), Speicher/Temperatur im Verlauf beobachten | Kein ungeplanter Neustart (Hub und Agent im Journal: kein „Sauberer Neustart“), Arbeitsspeicher steigt nicht stetig | ☐ |
+| E42 | Datenträger-voll-Test am Player: Karte bis auf wenige MB füllen (`fallocate` in `/data/agent`), dann neue Medien zuweisen | Anzeige läuft weiter; Hub zeigt „Speicherkarte voll“; nach Löschen der Füllung lädt der Bildschirm das Fehlende nach | ☐ |
+| E43 | Selbstheilung: Renderer einfrieren (`kill -STOP` auf mpv bzw. Chromium) | Nach Ablauf der Frist (mind. 20 Min.) startet die Anzeige neu, Hub zeigt gelbe Meldung; nicht öfter als einmal pro Stunde | ☐ |
+| E44 | Hub-Stromausfall mitten im Betrieb (Stecker ziehen) mehrfach, danach Start | Hub startet, keine Warnung „Datenbank“; Datenbank-Kopie `hub.db.vor-v…` nur nach einem Update vorhanden | ☐ |
+| E45 | Video-Upload mit absichtlich kaputter Datei, dann normale Datei | Fehlermeldung bei der kaputten, Verarbeitung der nächsten läuft weiter (kein „hängt“) | ☐ |

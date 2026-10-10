@@ -10,13 +10,16 @@ import { zonesFor, RES } from './zones.js';
 function supervise(start, log) {
   let child = null, stopped = false, delay = 1000;
   const run = () => {
-    if (stopped) return; const t0 = Date.now(); child = start();
+    if (stopped) return; const t0 = Date.now();
+    try { child = start(); } catch (e) { log('Renderer konnte nicht gestartet werden', e?.message ?? e); delay = Math.min(delay * 2, 30000); setTimeout(run, delay); return; } // z. B. Programm nicht ausführbar: später erneut versuchen, nie abstürzen
     let ended = false;
     const again = (c) => { if (ended) return; ended = true; log('Renderer beendet', c); delay = Date.now() - t0 > 30000 ? 1000 : Math.min(delay * 2, 30000); if (!stopped) setTimeout(run, delay); };
     child.on('exit', again); child.on('error', again); // z. B. Programm fehlt → später erneut versuchen, nie abstürzen
   };
   run();
-  return { stop: () => { stopped = true; child?.kill('SIGTERM'); }, restart: () => child?.kill('SIGTERM'), pid: () => child?.pid };
+  // Reagiert ein eingefrorener Prozess nicht auf SIGTERM, wird er nach 5 Sekunden hart beendet (dann startet die Überwachung ihn neu)
+  const end = () => { const c = child; if (!c) return; try { c.kill('SIGTERM'); } catch {} const k = setTimeout(() => { if (c.exitCode === null && c.signalCode === null) { try { c.kill('SIGKILL'); } catch {} } }, 5000); k.unref?.(); };
+  return { stop: () => { stopped = true; end(); }, restart: end, pid: () => child?.pid };
 }
 
 export function chromiumRenderer({ url, profileDir, log = () => {} }) {
@@ -64,7 +67,10 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
     const { items } = playableItems(plan, r.playlistId, getManifest(), { profile, now: t, have: (m) => haveFile(m) });
     return { r, items, plan, t };
   }
-  function tick() { // aktuelles Element starten
+  function tick() { // aktuelles Element starten; ein Fehler darf den Takt nie anhalten (sonst bliebe das letzte Bild für immer stehen)
+    try { tickOnce(); } catch (e) { log('Anzeige-Takt:', e?.message ?? e); clearTimeout(timer); if (!stopped) timer = setTimeout(tick, 5000); }
+  }
+  function tickOnce() {
     clearTimeout(timer); if (stopped) return;
     if (sharing) { timer = setTimeout(tick, 2000); return; } // Bildschirm teilen: der Plan pausiert
     const { r, items, plan, t } = pick(); const hs = getHealth();
@@ -80,7 +86,7 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
     const due = dueInsert(plan, r, t, lastIns); let ins = null; if (due) { lastIns.set(due.id, t); ins = insertItem(due, getManifest(), { profile, now: t, have: (m) => haveFile(m) }); }
     advance = !ins; if (ins) current = ins; else { idx %= items.length; current = items[idx]; }
     show(fileOf(current), current.kind === 'video'); const nx = items[(ins ? idx : idx + 1) % items.length]; onShow({ current: { mediaId: current.mediaId, name: current.name, kind: current.kind, duration: current.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null });
-    let wait = current.kind === 'video' ? (current.durationS ?? 30) * 1000 + 3000 : current.duration * 1000; // Video: end-file löst weiter, Timer nur als Sicherung
+    let wait = current.kind === 'video' ? (current.durationS ?? 30) * 1000 + 3000 : (Number(current.duration) > 0 ? Number(current.duration) : 10) * 1000; // Video: end-file löst weiter, Timer nur als Sicherung; fehlt die Dauer, nicht in einer Endlosschleife neu laden
     if (r.until) wait = current.kind === 'video' ? wait : Math.min(wait, Math.max(0, r.until - now())); // Bild endet spätestens an der Terminkante; Video wird zu Ende gespielt
     timer = setTimeout(() => { next(); }, Math.max(500, wait));
   }
@@ -88,7 +94,8 @@ export function liteRenderer({ getPlan, getManifest, haveFile, fileOf, getHealth
   const osd = (text, ms) => send(['show-text', text, ms]);
   // Laufband, Uhr, Infozone (nur wenn der Hub für diesen Bildschirm ein Layout vorgibt): einfache Einblendung statt Webseite, siehe zones.js.
   // Nicht bei gedrehtem Bildschirm (die Einblendung würde nicht mitgedreht) und nicht auf den Hinweisbildern (Warten, Uhrzeit, Hilfe).
-  function applyZones() {
+  function applyZones() { try { applyZonesOnce(); } catch (e) { log('Einblendung:', e?.message ?? e); } }
+  function applyZonesOnce() {
     if (stopped) return; const hs = getHealth(), plan = getPlan();
     const hidden = sharing || getRotation() !== 0 || hs.displayOff || hs.pairing || hs.timeSynced === false || (hs.offlineSince && now() - hs.offlineSince > 24 * 3600e3 && hs.cacheEmpty);
     const z = hidden ? null : zonesFor({ layout: plan?.layout, tickers: plan?.tickers ?? [], now: now() }), key = z?.key ?? '';

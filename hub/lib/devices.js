@@ -6,6 +6,15 @@ import { randomToken, sha256hex, safeEqual, pairingCode, encrypt, decrypt } from
 import { formatFingerprint } from './tls.js';
 import { schedulePayload, manifestPayload, PROFILES } from './plan.js';
 import { validateMessage, msg, COMMANDS } from '../../shared/protocol.js';
+import { parseJson, safeInterval } from '../../shared/guard.js';
+
+/** Geräte-Zustand für die Datenbank: Ist er zu groß, werden die größten Einträge weggelassen (abgeschnittenes JSON wäre unlesbar und würde Listen und Warnungen stören) */
+export function fitState(o, max = 20000) {
+  let j = JSON.stringify(o); if (j.length <= max) return j;
+  const rest = { ...o }, size = (k) => JSON.stringify(rest[k]).length;
+  for (const k of Object.keys(rest).sort((a, b) => size(b) - size(a))) { delete rest[k]; j = JSON.stringify({ ...rest, gekuerzt: true }); if (j.length <= max) return j; }
+  return JSON.stringify({ gekuerzt: true, version: o?.version ?? null });
+}
 import { createLimiter } from './ratelimit.js';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
@@ -56,20 +65,20 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     const t = now(), w = watching(t); let n = 0;
     for (const id of sockets.keys()) {
       const interval = w.detail(id) ? 5000 : w.tile ? 30000 : 0; if (!interval || t - (lastReq.get(id) ?? 0) < interval - 200) continue;
-      const d = getDevice(id); if (!d || d.status !== 'active' || reduced(d, d.state_json ? JSON.parse(d.state_json) : null)) continue;
+      const d = getDevice(id); if (!d || d.status !== 'active' || reduced(d, parseJson(d.state_json, null))) continue;
       lastReq.set(id, t); if (sendTo(id, 'command', { id: 'auto-' + randomUUID(), command: 'screenshot' })) n++;
     }
     return n;
   }
-  const shotTimer = setInterval(screenshotTick, 5000); shotTimer.unref(); app.addHook('onClose', async () => clearInterval(shotTimer));
-  app.decorate('devices', { sockets, sendTo, pushPlan, screenshotTick, viewers, shots, signals, getDevice, reduced, watching });
+  const shotTimer = safeInterval(screenshotTick, 5000, console.error, 'Vorschau'); app.addHook('onClose', async () => clearInterval(shotTimer));
+  app.decorate('devices', { sockets, sendTo, deliverQueued, pushPlan, screenshotTick, viewers, shots, signals, getDevice, reduced, watching });
 
 
   const present = (d) => {
-    const st = d.state_json ? JSON.parse(d.state_json) : null;
+    const st = parseJson(d.state_json, null);
     const g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id) : null;
-    return { id: d.id, display: d.display_json ? JSON.parse(d.display_json) : null, name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, renderer: d.renderer ?? 'auto', orientation: d.orientation,
-      status: deviceStatus(d), summary: summary(d, st), location: d.location ?? null, lastSeen: d.last_seen, state: st, hw: d.hw_json ? JSON.parse(d.hw_json) : null,
+    return { id: d.id, display: parseJson(d.display_json, null), name: d.name, groupId: d.group_id, groupName: g?.name ?? null, model: d.model, profile: d.profile, renderer: d.renderer ?? 'auto', orientation: d.orientation,
+      status: deviceStatus(d), summary: summary(d, st), location: d.location ?? null, lastSeen: d.last_seen, state: st, hw: parseJson(d.hw_json, null),
       spki: d.spki_seen ? formatFingerprint(d.spki_seen) : null, online: sockets.has(d.id), isHub: isHubDevice(d.id) };
   };
 
@@ -264,7 +273,7 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
 
   function deliverQueued(id) {
     for (const c of db.prepare("SELECT * FROM commands WHERE device_id=? AND status='queued' ORDER BY created_at").all(id)) {
-      const args = c.type === 'wifi_change' ? JSON.parse(decrypt(key, c.args_json)) : JSON.parse(c.args_json || '{}');
+      let args; try { args = c.type === 'wifi_change' ? JSON.parse(decrypt(key, c.args_json)) : JSON.parse(c.args_json || '{}'); } catch { db.prepare("UPDATE commands SET status='failed', result_json=? WHERE id=?").run(JSON.stringify({ error: 'Der Befehl war beschädigt.' }), c.id); continue; } // ein kaputter Befehl darf die übrigen nicht blockieren
       if (sendTo(id, 'command', { id: c.id, command: c.type, args })) {
         db.prepare("UPDATE commands SET status='sent', args_json=? WHERE id=?").run(c.type === 'wifi_change' ? '{}' : c.args_json, c.id); // WLAN-Passwort nach Zustellung löschen
       }
@@ -281,24 +290,24 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
     sockets.get(d.id)?.close(4000, 'replaced'); sockets.set(d.id, socket);
     db.prepare('UPDATE devices SET last_seen=? WHERE id=?').run(now(), d.id);
     socket.on('pong', () => { alive = true; });
-    const timer = setInterval(() => { if (!alive) return socket.terminate(); alive = false; socket.ping(); }, 45000);
-    socket.on('message', (raw) => {
+    const timer = safeInterval(() => { if (!alive) return socket.terminate(); alive = false; socket.ping(); }, 45000, console.error, 'WebSocket-Takt');
+    const handle = (raw) => {
       let m; try { m = JSON.parse(raw.toString()); } catch { return socket.close(1007, 'json'); }
       const err = validateMessage(m); if (err) return socket.close(1008, err);
       const cur = getDevice(d.id); if (!cur || cur.status !== 'active') return socket.close(4001, 'revoked');
       db.prepare('UPDATE devices SET last_seen=? WHERE id=?').run(now(), d.id);
       if (m.type === 'hello') {
         db.prepare('UPDATE devices SET model=COALESCE(?,model), hw_json=COALESCE(?,hw_json) WHERE id=?').run(m.model ?? null, m.hw ? JSON.stringify(m.hw) : null, d.id);
-        try { const st = JSON.parse(cur.state_json ?? '{}'); if (m.version && st.version !== m.version) db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...st, version: m.version }).slice(0, 20000), d.id); } catch {} // Version sofort übernehmen: Der Plan hängt davon ab, was der Bildschirm versteht (z. B. Einschübe ab 0.2.26)
+        try { const st = JSON.parse(cur.state_json ?? '{}'); if (m.version && st.version !== m.version) db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(fitState({ ...st, version: m.version }), d.id); } catch {} // Version sofort übernehmen: Der Plan hängt davon ab, was der Bildschirm versteht (z. B. Einschübe ab 0.2.26)
         pushPlan(getDevice(d.id)); deliverQueued(d.id);
         sendTo(d.id, 'plays_ack', { id: 0 }); // Fähigkeits-Meldung: dieser Hub versteht „plays“. Ein alter Hub würde die Nachricht ablehnen und die Verbindung trennen, deshalb senden neue Bildschirme erst nach diesem Signal.
       } else if (m.type === 'heartbeat') {
         let keep = {}; if (m.state.playerStatus === undefined) { try { keep = { playerStatus: JSON.parse(getDevice(d.id).state_json ?? '{}').playerStatus }; } catch {} } // „Ist“ aus der letzten status-Meldung bleibt erhalten
-        db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...keep, ...m.state }).slice(0, 20000), d.id);
+        db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(fitState({ ...keep, ...m.state }), d.id);
         try { metrics?.recordDevice(d.id, m.state); } catch {} // Verlauf (Speicher/Temperatur/Last) – darf den Heartbeat nie stören
       } else if (m.type === 'status') {
         let st = {}; try { st = JSON.parse(getDevice(d.id).state_json ?? '{}'); } catch {}
-        db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(JSON.stringify({ ...st, playerStatus: { current: m.current, next: m.next ?? null, source: m.source ?? null, scheduleId: m.scheduleId ?? null, ts: now() } }).slice(0, 20000), d.id);
+        db.prepare('UPDATE devices SET state_json=? WHERE id=?').run(fitState({ ...st, playerStatus: { current: m.current, next: m.next ?? null, source: m.source ?? null, scheduleId: m.scheduleId ?? null, ts: now() } }), d.id);
       } else if (m.type === 'command_result') {
         db.prepare("UPDATE commands SET status=?, result_json=? WHERE id=? AND device_id=?").run(m.ok ? 'done' : 'failed', JSON.stringify(m.result ?? { error: m.error }), m.id, d.id);
       } else if (m.type === 'plays') { // Wiedergabe-Nachweis: Zähler des Bildschirms aufnehmen und bestätigen (auch Doppeltes wird bestätigt, aber nicht doppelt gezählt)
@@ -312,7 +321,10 @@ async function devicesPlugin(app, { db, key, audit, tls, dataDir, mediaDir, hubI
           try { app.waechter?.ingest(d.id, buf).catch(() => {}); } catch {} // Bild-Wächter (nur Prüfsumme und Helligkeit, das Bild wird nicht aufgehoben)
         }
       }
-    });
+    };
+    // Ein Fehler bei einer einzelnen Nachricht (z. B. eine kurz gesperrte Datenbank) beendet nur diese Verbindung – der Bildschirm verbindet sich von selbst neu –, nie den Hub.
+    socket.on('message', (raw) => { try { handle(raw); } catch (e) { req.log.error({ err: e }, 'WebSocket-Nachricht fehlgeschlagen'); try { socket.close(1011, 'intern'); } catch {} } });
+    socket.on('error', (e) => req.log.warn({ err: e }, 'WebSocket-Fehler'));
     socket.on('close', () => { clearInterval(timer); if (sockets.get(d.id) === socket) sockets.delete(d.id); });
   });
 }

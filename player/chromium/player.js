@@ -51,6 +51,7 @@ async function main() {
   await refresh().catch(() => {});
   let idx = 0, lastPl = null;
   for (;;) {
+   try { // ein Fehler bei einem Element (kaputter Plan, Darstellungsfehler) darf die Wiedergabe nie anhalten: kurz warten, dann weiter
     const now = Date.now(), r = resolvePlaylist(plan, now); document.body.classList.toggle('black', !!health.displayOff || r.off === true);
     const have = (m) => (health.cached ?? []).includes(m.id), profile = health.profile ?? 'standard';
     const { items } = playableItems(plan, r.playlistId, manifest, { profile, now, have }); // noch nicht geladene Medien werden übersprungen
@@ -61,13 +62,14 @@ async function main() {
     if (ins) item = ins; else { item = items[idx % items.length]; idx++; }
     const node = build(item); await show(node, item.transition);
     const nx = items[idx % items.length]; fetch('/status', { method: 'POST', body: JSON.stringify({ current: { mediaId: item.mediaId, name: item.name, kind: item.kind, duration: item.duration }, next: items.length > 1 ? { mediaId: nx.mediaId, name: nx.name } : null }) }).catch(() => {});
-    let ms = item.duration * 1000;
+    let ms = (Number(item.duration) > 0 ? Number(item.duration) : 10) * 1000; // fehlt die Dauer, nicht in einer Endlosschleife neu zeichnen
     if (node.tagName === 'VIDEO') { // Video wird immer zu Ende gespielt
       await node.play().catch(() => {}); ms = await new Promise((res) => { node.onended = () => res(0); node.onerror = () => res(0); setTimeout(() => res(0), ((item.durationS ?? 60) + 5) * 1000); });
     } else {
       if (r.until) ms = Math.min(ms, Math.max(0, r.until - Date.now())); // sekundengenau an der Terminkante wechseln
       await sleep(Math.max(ms, 300));
     }
+   } catch (e) { console.error('Wiedergabe:', e); await sleep(3000); }
   }
 }
 // ---- Zonen (Z.7): Laufband und Uhr/Datum; Lite hat keine Zonen (der Hub liefert dort kein Layout) ----
@@ -102,6 +104,6 @@ const ev = new EventSource('/events');
 ev.addEventListener('share', (e) => shareShow(JSON.parse(e.data).n)); ev.addEventListener('shareend', shareHide);
 ev.addEventListener('identify', (e) => identify(JSON.parse(e.data))); ev.addEventListener('testpattern', (e) => testPattern(JSON.parse(e.data)));
 ev.addEventListener('black', () => document.body.classList.add('black')); ev.addEventListener('unblack', () => document.body.classList.remove('black'));
-ev.addEventListener('plan', refresh); ev.addEventListener('manifest', refresh); ev.addEventListener('reload', () => location.reload());
+ev.addEventListener('plan', () => refresh().catch(() => {})); ev.addEventListener('manifest', () => refresh().catch(() => {})); ev.addEventListener('reload', () => location.reload());
 setInterval(() => refresh().catch(() => {}), 30000);
-main();
+main().catch((e) => { console.error(e); setTimeout(() => location.reload(), 5000); }); // die Schleife fängt Fehler selbst ab – das hier ist nur das letzte Netz

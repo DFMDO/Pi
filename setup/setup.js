@@ -12,6 +12,7 @@ import { isProbe, PORTAL_URL } from './lib/captive.js';
 import { writeFinalConfig } from './lib/config.js';
 import { startCameraLoop } from './lib/camera.js';
 import { createLed, sysfsWriter } from './lib/led.js';
+import { installProcessGuards } from '../shared/guard.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url)), UI = join(HERE, 'ui');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
@@ -21,12 +22,15 @@ const FILES = new Map([['/', 'index.html'], ['/setup.js', 'setup.js'], ['/setup.
 const DISPLAY = new Map([['/', 'display.html'], ['/display.js', 'display.js'], ['/setup.css', 'setup.css'], ['/logo.svg', '../../assets/dfm-logo.svg'], ['/theme.css', '../../assets/dfm-theme.css']]);
 
 /** HTTP-Schicht. `ctl` ist der Controller; wird in Tests mit Fake-Abhängigkeiten gebaut. */
+/** Ein Fehler bei einer Anfrage beantwortet nur diese Anfrage mit „500“ – der Einrichtungsdienst läuft weiter */
+const safe = (fn) => async (req, res) => { try { await fn(req, res); } catch { try { if (!res.headersSent) res.writeHead(500, HEAD); res.end(); } catch { /* Verbindung schon weg */ } } };
+
 export function createServers(ctl, { toSvg = (t) => QRCode.toString(t, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' }) } = {}) {
   const json = (res, code, o) => { res.writeHead(code, { ...HEAD, 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
   const body = (req) => new Promise((resolve) => { let b = ''; req.on('data', (c) => { b += c; if (b.length > 20000) req.destroy(); }); req.on('end', () => { try { resolve(JSON.parse(b || '{}')); } catch { resolve(null); } }); });
   const sendFile = (res, map, p) => { const f = join(UI, map.get(p)); if (!existsSync(f)) { res.writeHead(404, HEAD).end(); return; } res.writeHead(200, { ...HEAD, 'Content-Type': TYPES[f.slice(f.lastIndexOf('.'))] ?? 'text/plain' }); res.end(readFileSync(f)); };
 
-  const portal = http.createServer(async (req, res) => {
+  const portal = http.createServer(safe(async (req, res) => {
     const p = new URL(req.url, 'http://x').pathname;
     if (p === '/favicon.ico') { res.writeHead(404, HEAD).end(); return; }
     if (isProbe(p)) { res.writeHead(302, { ...HEAD, Location: PORTAL_URL }).end(); return; }
@@ -45,18 +49,19 @@ export function createServers(ctl, { toSvg = (t) => QRCode.toString(t, { type: '
     // Alles andere (beliebige Domain, die das Handy aufruft) → Einrichtungsseite
     if (req.method === 'GET') { res.writeHead(302, { ...HEAD, Location: PORTAL_URL }).end(); return; }
     res.writeHead(405, HEAD).end();
-  });
+  }));
 
-  const display = http.createServer(async (req, res) => {
+  const display = http.createServer(safe(async (req, res) => {
     const p = new URL(req.url, 'http://x').pathname;
     if (p === '/state') { const d = await ctl.display(); if (d.qr) d.qrSvg = await toSvg(d.qr); delete d.qr; return json(res, 200, d); }
     if (FILES.has(p) || DISPLAY.has(p)) return sendFile(res, DISPLAY, p);
     res.writeHead(404, HEAD).end();
-  });
+  }));
   return { portal, display };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  installProcessGuards({ name: 'Einrichtung', log: (...a) => console.error(...a) });
   const { hashPassword, checkPasswordPolicy } = await import('../hub/lib/crypto.js');
   const dev = JSON.parse(readFileSync(join(process.env.DFM_DATA ?? '/data', 'device.json'), 'utf8'));
   const led = createLed({ write: sysfsWriter((await import('node:fs'))) });

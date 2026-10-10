@@ -2,6 +2,7 @@
 import { buildTimeline, findConflicts } from '../../shared/schedule.js';
 import { deviceWarnings } from './health.js';
 import { careWarnings } from './pflege.js';
+import { parseJson } from '../../shared/guard.js';
 
 export const DAY = 86400000;
 export const PROFILES = ['lite', 'standard', 'pro'];
@@ -67,7 +68,7 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
     layout: device.profile === 'lite' ? null : device.layout_json ? JSON.parse(device.layout_json) : null,
     maintenance: { nightlyReboot: (stg['maintenance.nightlyReboot'] ?? 'true') === 'true' ? (stg['maintenance.rebootAt'] ?? '03:30') : null },
     ...(inserts.length ? { inserts } : {}),
-    display: device.display_json ? JSON.parse(device.display_json) : null, sync: { window: st['sync.window'] ?? '', bandwidthKbps: Number(st['sync.bandwidthKbps'] ?? 0) } };
+    display: parseJson(device.display_json, null), sync: { window: st['sync.window'] ?? '', bandwidthKbps: Number(st['sync.bandwidthKbps'] ?? 0) } };
 }
 
 /** Wiedergabe-Art: Lite immer mpv (kein Browser); sonst wie eingestellt, Standard ist der Browser */
@@ -118,11 +119,12 @@ export function warnings(db, now = Date.now()) {
     else if (days <= 14) out.push({ kind: 'laeuft_ab', ids: [], text: `„${m.name}“ läuft in ${days} ${days === 1 ? 'Tag' : 'Tagen'} ab (gültig bis ${m.valid_until.split('-').reverse().join('.')}). Danach wird es nicht mehr gezeigt.` });
   }
   for (const d of db.prepare("SELECT * FROM devices WHERE status='active'").all()) {
-    const st = d.state_json ? JSON.parse(d.state_json) : null;
+    const st = parseJson(d.state_json, null);
     for (const w of deviceWarnings(d, st, now, { watch: db.prepare('SELECT * FROM watch_state WHERE device_id=?').get(d.id) })) out.push({ kind: w.kind, ids: [d.id], text: w.text });
     if (st?.syncState && st.syncState.done < st.syncState.total) out.push({ kind: 'medien_laden', ids: [d.id], text: `„${d.name}“ lädt noch Medien (${st.syncState.done} von ${st.syncState.total}).` });
   }
   for (const c of careWarnings(db, now)) out.push(c);
+  if (db.integrity && db.integrity !== 'ok') out.push({ kind: 'datenbank', ids: [], text: `Die Prüfung der Datenbank beim Start hat Fehler gemeldet (${String(db.integrity).slice(0, 120)}). Bitte jetzt ein Backup herunterladen (Erweitert → Sicherung) und die IT informieren.` });
   return out;
 }
 

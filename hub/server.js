@@ -6,6 +6,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { buildApp } from './app.js';
 import { ensureCertificate } from './lib/tls.js';
 import { bootGuard, markHealthy } from './lib/update.js';
+import { installProcessGuards } from '../shared/guard.js';
+
+// Nicht abgefangene Fehler in Hintergrundaufgaben werden protokolliert statt den Hub zu beenden; bei Dauerfehlern oder einem schweren Fehler startet er sauber neu (Code 75).
+installProcessGuards({ name: 'Hub', log: (...a) => console.error(...a) });
 
 const dataDir = process.env.DFM_DATA ?? '/data';
 const httpsPort = Number(process.env.DFM_HTTPS_PORT ?? 443), httpPort = Number(process.env.DFM_HTTP_PORT ?? 80);
@@ -27,10 +31,12 @@ await app.listen({ port: httpsPort, host: '0.0.0.0' });
 createHttp((req, res) => {
   const host = String(req.headers.host ?? 'dfm-signage.local').replace(/[^a-zA-Z0-9.\-:]/g, '').replace(/:\d+$/, '');
   res.writeHead(301, { Location: `https://${host}${httpsPort === 443 ? '' : ':' + httpsPort}/` }).end();
-}).listen(httpPort, '0.0.0.0');
+}).on('error', (e) => console.error('Port 80 (nur Weiterleitung) nicht verfügbar:', e.message)).listen(httpPort, '0.0.0.0'); // ohne Port 80 läuft der Hub trotzdem
 
 // Nach 60 s ohne Absturz gilt eine Version als gesund (Update-Rollback-Schutz)
 setTimeout(() => markHealthy(appDir), 60000).unref();
 // Täglich Backup (nur wenn Verschlüsselung eingerichtet), stündlich prüfen
 setInterval(() => { try { app.runBackup(app.settings()['backup.extraDir']); } catch (e) { console.error('Backup fehlgeschlagen:', e.message); } }, 3600000).unref();
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => app.close().then(() => process.exit(0)));
+// Sauber beenden (Datenbank schließen), aber nie länger als 8 Sekunden warten: Ein hängender Abschluss darf das Herunterfahren oder den Neustart nicht blockieren.
+let closing = false;
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { if (closing) return; closing = true; const hard = setTimeout(() => process.exit(0), 8000); app.close().catch((e) => console.error('Beenden:', e?.message ?? e)).finally(() => { clearTimeout(hard); process.exit(0); }); });

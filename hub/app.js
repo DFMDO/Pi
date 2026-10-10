@@ -30,6 +30,7 @@ import einschuebePlugin from './lib/einschuebe.js';
 import systemPlugin from './lib/system.js';
 import { createVariantQueue } from './lib/variants.js';
 import { createLimiter } from './lib/ratelimit.js';
+import { safeInterval } from '../shared/guard.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -53,7 +54,7 @@ function indexStatic(root) {
 export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-ui', 'dist'), updateKeyPem = '', appDir, baseDir, now = () => Date.now(), hubInfo, onRestart, logger = false, useTls = false, fetchText, importRoots, usbDir, mailer }) {
   mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const mediaDir = join(dataDir, 'media'); mkdirSync(mediaDir, { recursive: true });
-  const db = openDb(join(dataDir, 'hub.db'));
+  const db = openDb(join(dataDir, 'hub.db'), { log: (...a) => console.error(...a) });
   const key = loadOrCreateKey(join(dataDir, 'keys', 'master.key'));
   const audit = createAudit(db);
   const app = Fastify({ logger, bodyLimit: 2 * 1024 * 1024, trustProxy: false,
@@ -167,8 +168,10 @@ export async function buildApp({ dataDir, tls, uiDir = join(HERE, '..', 'admin-u
   });
 
   // Aufräumen: abgelaufene Sitzungen / Papierkorb
-  const janitor = setInterval(() => { db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now()); db.prepare('DELETE FROM trash WHERE deleted_at<?').run(now() - 30 * 86400000); db.prepare('DELETE FROM pairing_codes WHERE expires_at<?').run(now()); }, 600000).unref();
-  app.addHook('onClose', async () => { clearInterval(janitor); await variants.close(); db.close(); });
+  // (Jede Aufgabe ist abgesichert: Ein Fehler – zum Beispiel eine kurz gesperrte Datenbank – wird protokolliert und beendet den Hub nicht.)
+  const janitor = safeInterval(() => { db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now()); db.prepare('DELETE FROM trash WHERE deleted_at<?').run(now() - 30 * 86400000); db.prepare('DELETE FROM pairing_codes WHERE expires_at<?').run(now()); }, 600000, console.error, 'Aufräumen');
+  const checkpoint = safeInterval(() => { db.pragma('wal_checkpoint(PASSIVE)'); }, 3600000, console.error, 'Datenbank-Pflege'); // WAL-Datei klein halten (schont die SD-Karte beim nächsten Stromausfall)
+  app.addHook('onClose', async () => { clearInterval(janitor); clearInterval(checkpoint); await variants.close(); try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch {} try { db.close(); } catch {} });
   variants.ensureAll();
   return app;
 }

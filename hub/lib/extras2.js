@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join, relative, resolve, sep, basename, extname } from 'node:path';
 import sharp from 'sharp';
+import { parseJson } from '../../shared/guard.js';
 import { BUILTIN, renderTemplate, readability, buildQrPayload, isInternalHost, renderQr, qrChecks } from './templates.js';
 import { detectKind, probeVideo, mediaHints, SHARP_OPTS, LIMITS } from './variants.js';
 import { epochToLocal, localToEpoch, addDays, dowOf } from '../../shared/time.js';
@@ -154,7 +155,7 @@ async function extras2Plugin(app, { db, audit, mediaDir, dataDir, variants, now 
   const MAXSKEW = 120000;
   app.post('/api/v1/devices/:id/commissioning/run', { config: { perm: 'devices.manage' }, schema: { body: { type: ['object', 'null'], additionalProperties: false, properties: { answers: { type: 'object', additionalProperties: { type: 'boolean' } }, noWait: { type: 'boolean' } } } } }, async (req, reply) => {
     const d = dv().getDevice(req.params.id); if (!d || d.status !== 'active') return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
-    const answers = req.body?.answers ?? {}, items = [], t = now(), online = deviceStatus(d, t).level === 'ok', hw = d.hw_json ? JSON.parse(d.hw_json) : {};
+    const answers = req.body?.answers ?? {}, items = [], t = now(), online = deviceStatus(d, t).level === 'ok', hw = parseJson(d.hw_json, {});
     const item = (id, title, status, text, hint, extra = {}) => items.push({ id, title, status, text, ...(hint ? { hint } : {}), ...extra });
     // 1 Verbindung
     let diag = null, rtt = null;
@@ -286,6 +287,7 @@ async function extras2Plugin(app, { db, audit, mediaDir, dataDir, variants, now 
     const s = settings(), t = now(), days = (k, d) => Math.max(1, Number(s[k] ?? d)); let n = 0;
     n += db.prepare('DELETE FROM overrides WHERE COALESCE(ended_at, until) < ?').run(t - days('retention.overrideDays', 30) * DAY).changes;
     db.prepare('DELETE FROM override_kind WHERE id NOT IN (SELECT id FROM overrides)').run();
+    n += db.prepare("DELETE FROM commands WHERE (status IN ('done','failed') AND created_at < ?) OR (status IN ('queued','sent') AND created_at < ?)").run(t - 30 * DAY, t - 7 * DAY).changes; // erledigte nach 30 Tagen, nie zugestellte oder unbeantwortete nach 7 Tagen
     n += db.prepare('DELETE FROM wifi_history WHERE ts < ?').run(t - days('retention.historyDays', 90) * DAY).changes;
     n += db.prepare('DELETE FROM device_events WHERE ts < ?').run(t - days('retention.historyDays', 180) * DAY).changes;
     n += db.prepare("DELETE FROM special_days WHERE source='custom' AND COALESCE(date_to,date) < ?").run(iso(new Date(t - days('retention.overrideDays', 30) * DAY))).changes;

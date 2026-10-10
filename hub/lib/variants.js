@@ -27,7 +27,8 @@ export function demuxerFor(file) {
   return h.subarray(4, 8).toString() === 'ftyp' ? 'mov,mp4,m4a,3gp,3g2,mj2' : h.subarray(0, 4).toString('hex') === '1a45dfa3' ? 'matroska,webm' : null;
 }
 const sha256File = (f) => new Promise((res, rej) => { const h = createHash('sha256'); createReadStream(f).on('data', (d) => h.update(d)).on('end', () => res(h.digest('hex'))).on('error', rej); });
-const run = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, { maxBuffer: 1 << 24 }, (e, so, se) => (e ? rej(new Error(se.slice(-300) || e.message)) : res(so))));
+/** Externes Programm mit Zeitlimit: Ein hängendes ffmpeg/ffprobe würde sonst die ganze Verarbeitungsschlange für immer blockieren (und Speicher belegen) */
+export const run = (cmd, args, { timeoutMs = 30 * 60000 } = {}) => new Promise((res, rej) => execFile(cmd, args, { maxBuffer: 1 << 24, timeout: timeoutMs, killSignal: 'SIGKILL' }, (e, so, se) => (e ? rej(new Error(e.killed ? `Zeitüberschreitung: ${cmd} hat nach ${Math.max(1, Math.round(timeoutMs / 60000))} Minuten nicht geantwortet und wurde beendet.` : String(se ?? '').slice(-300) || e.message)) : res(so))));
 
 let prefix = null;
 function lowPriority() { // nice + ionice, falls im System verfügbar
@@ -37,11 +38,11 @@ function lowPriority() { // nice + ionice, falls im System verfügbar
   try { execFileSync('ionice', ['-c3', 'true']); prefix = [...prefix, 'ionice', '-c3']; } catch {}
   return prefix;
 }
-const runLow = (cmd, args) => { const p = lowPriority(); return p.length ? run(p[0], [...p.slice(1), cmd, ...args]) : run(cmd, args); };
+const runLow = (cmd, args, opts) => { const p = lowPriority(); return p.length ? run(p[0], [...p.slice(1), cmd, ...args], opts) : run(cmd, args, opts); };
 
 export async function probeVideo(file) {
   const fmt = demuxerFor(file); if (!fmt) throw new Error('Containerformat nicht erlaubt');
-  const out = JSON.parse(await run('ffprobe', ['-v', 'error', '-protocol_whitelist', 'file', '-f', fmt, '-select_streams', 'v:0', '-show_entries', 'stream=width,height,avg_frame_rate,codec_name,pix_fmt,profile,bit_rate:format=duration,bit_rate', '-of', 'json', file]));
+  const out = JSON.parse(await run('ffprobe', ['-v', 'error', '-protocol_whitelist', 'file', '-f', fmt, '-select_streams', 'v:0', '-show_entries', 'stream=width,height,avg_frame_rate,codec_name,pix_fmt,profile,bit_rate:format=duration,bit_rate', '-of', 'json', file], { timeoutMs: 60000 }));
   const s = out.streams?.[0]; if (!s) throw new Error('Keine Videospur gefunden.');
   const [a, b] = (s.avg_frame_rate || '0/1').split('/').map(Number);
   return { width: s.width, height: s.height, fps: b ? a / b : 0, duration: parseFloat(out.format?.duration ?? '0'), codec: s.codec_name, pixFmt: s.pix_fmt ?? null, profile: s.profile ?? null,
@@ -72,14 +73,14 @@ export function canPassThrough(probe, profile) {
 async function videoVariant(src, dst, spec, probe, profile) {
   if (canPassThrough(probe, profile)) { // nur umverpacken: Bildspur kopieren, Ton/Untertitel weg, „faststart“ für fortsetzbares Laden
     const out = dst + '.mp4';
-    await runLow('ffmpeg', ['-y', '-v', 'error', '-protocol_whitelist', 'file', '-f', demuxerFor(src), '-i', src, '-map', '0:v:0', '-an', '-sn', '-c:v', 'copy', '-movflags', '+faststart', out]);
+    await runLow('ffmpeg', ['-y', '-v', 'error', '-protocol_whitelist', 'file', '-f', demuxerFor(src), '-i', src, '-map', '0:v:0', '-an', '-sn', '-c:v', 'copy', '-movflags', '+faststart', out], { timeoutMs: 20 * 60000 });
     return out;
   }
   const vf = [`scale=-2:'min(${spec.h},ih)'`]; if (probe.fps > spec.fpsMax + 0.5) vf.push(`fps=${spec.fpsMax}`);
   const out = dst + '.mp4';
   await runLow('ffmpeg', ['-y', '-v', 'error', '-protocol_whitelist', 'file', '-f', demuxerFor(src), '-i', src, '-map', '0:v:0', '-an', '-sn', '-vf', vf.join(','),
     '-c:v', 'libx264', ...spec.x264, '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-threads', FF_THREADS, '-b:v', spec.vb, '-maxrate', spec.maxrate, '-bufsize', spec.buf,
-    '-movflags', '+faststart', out]);
+    '-movflags', '+faststart', out], { timeoutMs: 3 * 3600000 }); // Neuberechnung auf einem Pi 3 dauert lange, aber nicht endlos
   return out;
 }
 
@@ -126,7 +127,7 @@ export function createVariantQueue({ db, mediaDir, onChange = () => {}, log = ()
     }
     kick();
   }
-  function kick() { if (!closed && !running && !waiting) { waiting = true; setImmediate(() => { waiting = false; running = loop().finally(() => { running = null; }); }); } }
+  function kick() { if (!closed && !running && !waiting) { waiting = true; setImmediate(() => { waiting = false; running = loop().catch((e) => log('variant loop', e?.message ?? e)).finally(() => { running = null; }); }); } }
   async function loop() {
     for (;;) {
       if (closed) return;
@@ -143,9 +144,9 @@ export function createVariantQueue({ db, mediaDir, onChange = () => {}, log = ()
         db.prepare("UPDATE media_variants SET status='ready', path=?, sha256=?, size=?, error=NULL WHERE id=?").run(out.split('/').pop(), await sha256File(out), statSync(out).size, v.id);
       } catch (e) {
         log('variant failed', v.id, e.message);
-        db.prepare("UPDATE media_variants SET status='failed', error=? WHERE id=?").run(String(e.message).slice(0, 300), v.id);
+        try { db.prepare("UPDATE media_variants SET status='failed', error=? WHERE id=?").run(String(e.message).slice(0, 300), v.id); } catch (e2) { log('variant status', e2.message); }
       }
-      onChange();
+      try { onChange(); } catch (e) { log('variant onChange', e.message); } // ein Fehler beim Benachrichtigen darf die Schlange nicht anhalten
     }
   }
   return { ensureAll, kick, close: async () => { closed = true; await running; }, idle: async () => { while (!closed && (running || waiting || db.prepare("SELECT 1 FROM media_variants WHERE status IN ('pending','running')").get())) { kick(); await (running ?? new Promise((r) => setTimeout(r, 20))); } } };

@@ -14,7 +14,8 @@ import { collect, timeSynced, parseDrops, powerSave } from './lib/sysinfo.js';
 import { execFile } from 'node:child_process';
 import { createLocalServer } from './lib/localserver.js';
 import { request as privRequest } from './lib/privd.js';
-import { resolvePlaylist } from '../../shared/sequencer.js';
+import { resolvePlaylist, playableItems } from '../../shared/sequencer.js';
+import { safeInterval, installProcessGuards } from '../../shared/guard.js';
 import { validateMessage, msg } from '../../shared/protocol.js';
 import { stage, activate } from '../../hub/lib/update.js';
 import { pairWithHub, PairError } from './lib/pair.js';
@@ -30,7 +31,7 @@ export function ownAddresses() {
 }
 
 export class Agent {
-  constructor({ dataDir, version = '0.2.27', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.28', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });
@@ -40,26 +41,56 @@ export class Agent {
     this.hubPlays = false; // erst true, wenn der Hub „plays“ versteht (siehe plays_ack)
     this.share = null; this.shareDir = process.env.DFM_SHARE_DIR ?? '/run/dfm-agent'; this.shareIdleMs = 30000; this.shareCheckMs = 5000; // Bildschirm teilen (nur im Arbeitsspeicher; endet, wenn 30 s lang kein Bild mehr kommt)
     this.plays = createPlayCounter({ file: join(dataDir, 'state', 'plays.json') }); this.playsMs = 300000; // Wiedergabe-Nachweis: lokal zählen, alle 5 Minuten gesammelt melden
-    this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health(), onStatus: (s) => this.onPlayerStatus(s) });
+    this.startedAt = Date.now(); this.heal = { count: 0, streak: 0, last: 0 }; this.diskError = null; // Selbstheilung (Wiedergabe-Wächter) und Schreibfehler der Speicherkarte
+    this.server = createLocalServer({ getPlan: () => this.plan, getManifest: () => this.manifest, mediaDir: this.mediaDir, port, getHealth: () => this.health(), onStatus: (s) => { try { this.onPlayerStatus(s); } catch (e) { this.log('Statusmeldung:', e.message); } } });
   }
   health() { let cached = []; try { cached = readdirSync(this.mediaDir).filter((f) => !f.endsWith('.part')); } catch {}
     return { cached, displayOff: !!this.displayOff, pairing: this.pairing ?? null, deviceName: this.cfg?.name, timeSynced: this.timeOk ?? true, connected: this.connected, hasPlan: !!this.plan, syncState: this.syncState, orientation: this.cfg?.orientation ?? 0, profile: this.cfg?.profile,
     cacheEmpty: !(this.manifest?.items?.length), offlineSince: this.offlineSince ?? null,
     isHub: !!this.cfg?.local, addresses: ownAddresses(), share: this.share ? { active: true, n: this.share.n } : null }; } // Adressen: der Standby-Bildschirm zeigt dem Einrichter, wo die Verwaltung erreichbar ist
 
+  /** Schreiben mit Absicherung: Ist die Karte voll oder schreibgeschützt, arbeitet der Agent mit dem Stand im Arbeitsspeicher weiter (die Anzeige läuft), statt Pläne zu verwerfen */
+  persist(file, data, mode) {
+    try { writeJson(file, data, mode); this.diskError = null; return true; }
+    catch (e) { this.diskError = { at: Date.now(), code: String(e.code ?? e.message).slice(0, 60) }; this.log(`Speichern nicht möglich (${String(file).split(/[\\/]/).pop()}):`, e.message); return false; }
+  }
+  /**
+   * Wiedergabe-Wächter (Selbstheilung): Meldet die Anzeige viel länger keinen Elementwechsel, als der Plan hergibt (Browser eingefroren, mpv hängt), wird zuerst nur die Anzeige neu gestartet,
+   * beim zweiten Mal in Folge der ganze Agent. Höchstens einmal pro Stunde; nie kurz nach dem Start, bei ausgeschaltetem Bildschirm, beim Teilen, beim Laden von Medien oder wenn der Plan nichts zu zeigen hat.
+   * @returns 'anzeige' | 'agent' | null
+   */
+  watchPlayback(now = Date.now()) {
+    const h = this.heal; if (this.stopped || !this.renderer?.restart) return null;
+    if (now - this.startedAt < 20 * 60000 || now - h.last < 3600000) return null;
+    if (this.displayOff || this.share || this.displayRevert || this.pairing || this.timeOk === false) return null;
+    if (this.syncState && this.syncState.done < this.syncState.total) return null;
+    const r = resolvePlaylist(this.plan, now); if (!r.playlistId) return null;
+    const { items } = playableItems(this.plan, r.playlistId, this.manifest, { profile: this.rendererWanted() === 'mpv' ? 'lite' : (this.cfg?.profile ?? 'standard'), now, have: (m) => existsSync(join(this.mediaDir, m.id)) });
+    if (!items.length) return null;
+    const dur = (i) => (i.kind === 'video' ? (i.durationS ?? 30) : i.duration ?? 10), limit = Math.max(20 * 60000, (Math.max(...items.map(dur)) * 2 + 300) * 1000);
+    const seen = Math.max(this.playerStatus?.current?.since ?? 0, this.startedAt);
+    if (now - seen < limit) return null;
+    h.last = now; h.count++; h.streak++;
+    if (h.streak >= 2) { this.log('Wiedergabe steht weiterhin – der Agent startet neu'); this.exit(75); return 'agent'; }
+    this.log(`Wiedergabe steht seit ${Math.round((now - seen) / 60000)} Minuten – die Anzeige wird neu gestartet`); try { this.renderer.restart(); } catch (e) { this.log('Neustart der Anzeige:', e.message); }
+    return 'anzeige';
+  }
+
   async start() {
     this.boundPort = await this.server.listen();            // 1) sofort anzeigen, was im Cache liegt (kein Hub nötig)
     if (this.plan) this.applyHubSettings(this.plan);        // Bildschirm-Zeiten/Sync-Einstellungen gelten auch nach Neustart ohne Hub
     // Sicherheitsnetz gegen Speicherlecks: Wächst der Agent über 300 MB (normal sind 60–100 MB), startet er sich neu (Code 75 → systemd startet ihn wieder), statt dem ganzen Gerät den Speicher zu nehmen.
-    this.rssTimer = setInterval(() => { const mb = process.memoryUsage().rss / 1048576; if (mb > (this.rssLimitMB ?? 300)) { this.log(`Speicherverbrauch zu hoch (${Math.round(mb)} MB) – Neustart`); this.exit(75); } }, 60000); this.rssTimer.unref();
+    this.rssTimer = safeInterval(() => { const mb = process.memoryUsage().rss / 1048576; if (mb > (this.rssLimitMB ?? 300)) { this.log(`Speicherverbrauch zu hoch (${Math.round(mb)} MB) – Neustart`); this.exit(75); } }, 60000, this.log, 'Speicher-Wächter');
     const authority = () => !!this.cfg?.local; // Hub + Bildschirm in einem: dieses Gerät ist selbst die Zeitquelle
-    this.timeOk = await timeSynced({ authority: authority() }); this.timeTimer = setInterval(async () => { this.timeOk = await timeSynced({ authority: authority() }); this.checkDisplay(); }, 30000).unref();
-    this.playsTimer = setInterval(() => this.sendPlays(), this.playsMs); this.playsTimer.unref();
-    this.shareTimer = setInterval(() => { if (this.share && Date.now() - this.share.last > this.shareIdleMs) this.shareStop('keine Bilder mehr'); }, this.shareCheckMs); this.shareTimer.unref();
-    this.renderer?.start?.();
+    const checkTime = async () => { try { this.timeOk = await timeSynced({ authority: authority() }); } catch (e) { this.log('Uhrzeit-Prüfung:', e.message); } };
+    await checkTime(); this.timeTimer = safeInterval(async () => { await checkTime(); this.checkDisplay(); }, 30000, this.log, 'Uhrzeit');
+    this.watchTimer = safeInterval(() => this.watchPlayback(), 60000, this.log, 'Wiedergabe-Wächter');
+    this.playsTimer = safeInterval(() => this.sendPlays(), this.playsMs, this.log, 'Wiedergabe-Nachweis');
+    this.shareTimer = safeInterval(() => { if (this.share && Date.now() - this.share.last > this.shareIdleMs) this.shareStop('keine Bilder mehr'); }, this.shareCheckMs, this.log, 'Teilen');
+    try { this.renderer?.start?.(); } catch (e) { this.log('Anzeige konnte nicht gestartet werden:', e.message); }
     if (!this.cfg?.token && this.cfg?.pairing) await this.pairNow();   // Erstverbindung mit dem Hub (Einmalcode)
     if (!this.cfg?.token) throw new Error('Dieses Gerät ist noch nicht mit einem Hub verbunden.');
-    this.loop(); return this;
+    this.loop().catch((e) => { this.log('Hauptschleife abgebrochen:', e?.message ?? e); this.exit(75); }); return this; // bricht die Schleife je ab, startet der Dienst neu statt ohne Verbindung weiterzulaufen
   }
   /** Pairing nach der Einrichtung: Code und (optional) Fingerabdruck stammen aus der Einrichtung. Der Code wird danach gelöscht. */
   async pairNow() {
@@ -69,7 +100,7 @@ export class Agent {
       try {
         this.pairing = 'waiting';
         const r = await pairWithHub({ hubUrl: c.hubUrl, code: c.pairing.code, expectedFp: c.hubSpki, deviceId: c.deviceId, name: c.name, model: c.model, profile: c.profile, hw: c.hw, pollMs: 2000, onStatus: () => {} });
-        Object.assign(c, { token: r.token, hubSpki: r.spki }); delete c.pairing; this.pairing = null; writeJson(this.cfgFile, c); return;
+        Object.assign(c, { token: r.token, hubSpki: r.spki }); delete c.pairing; this.pairing = null; this.persist(this.cfgFile, c); return;
       } catch (e) {
         if (e instanceof PairError && ['code', 'fingerprint', 'rejected'].includes(e.code)) { // endgültig: neu einrichten
           this.log('Pairing endgültig fehlgeschlagen:', e.message); writeFileSync(join(this.dataDir, 'unpaired'), e.message); this.pairing = null; this.exit(0); return;
@@ -78,7 +109,7 @@ export class Agent {
       }
     }
   }
-  async stop() { this.stopped = true; clearInterval(this.shareTimer); this.shareStop('Agent beendet'); clearInterval(this.playsTimer); clearTimeout(this.playsKick); this.plays.stop(); clearInterval(this.rssTimer); clearInterval(this.timeTimer); clearTimeout(this.retryT); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
+  async stop() { this.stopped = true; clearInterval(this.shareTimer); this.shareStop('Agent beendet'); clearInterval(this.playsTimer); clearTimeout(this.playsKick); this.plays.stop(); clearInterval(this.rssTimer); clearInterval(this.timeTimer); clearInterval(this.watchTimer); clearInterval(this.sigTimer); clearTimeout(this.retryT); clearInterval(this.hb); this.ws?.terminate(); this.renderer?.stop?.(); await this.server.close(); }
 
   async loop() {
     while (!this.stopped) {
@@ -112,13 +143,13 @@ export class Agent {
       const ws = new WebSocket(base.replace('https', 'wss') + '/api/v1/ws', { agent: pinnedAgent(hubSpki), headers: { Authorization: `Bearer ${token}` }, handshakeTimeout: 10000, maxPayload: 8 << 20 });
       ws.on('unexpected-response', (_q, res) => { const e = new Error('HTTP ' + res.statusCode); if (res.statusCode === 401) e.revoked = true; reject(e); });
       ws.on('error', (e) => { if (!opened) reject(e); });
-      ws.on('open', async () => {
-        opened = true; this.ws = ws; this.reconnects = (this.reconnects ?? 0) + 1; this.connected = true; this.offlineSince = null; this.attempt = 0; this.cfg.lastIp = new URL(base).hostname; writeJson(this.cfgFile, this.cfg);
+      ws.on('open', () => { try {
+        opened = true; this.ws = ws; this.reconnects = (this.reconnects ?? 0) + 1; this.connected = true; this.offlineSince = null; this.attempt = 0; this.cfg.lastIp = new URL(base).hostname; this.persist(this.cfgFile, this.cfg);
         this.send('hello', { version: this.version, profile: this.cfg.profile, model: this.cfg.model, hw: this.cfg.hw });
-        this.sendHeartbeat(); this.hb = setInterval(() => this.sendHeartbeat(), this.heartbeatMs);
+        this.sendHeartbeat(); clearInterval(this.hb); this.hb = safeInterval(() => this.sendHeartbeat(), this.heartbeatMs, this.log, 'Herzschlag');
         this.hubPlays = false; clearTimeout(this.playsKick); this.playsKick = setTimeout(() => this.sendPlays(), 15000); this.playsKick.unref?.(); // nach (Wieder-)Verbindung gleich nachmelden
-      });
-      ws.on('message', (raw) => this.onMessage(raw.toString()));
+      } catch (e) { this.log('Verbindungsaufbau:', e.message); } });
+      ws.on('message', (raw) => { this.onMessage(raw.toString()).catch((e) => this.log('Nachricht:', e.message)); });
       ws.on('close', (code) => { clearInterval(this.hb); this.ws = null; if (code === 4001) this.revoked = true; opened ? resolve() : reject(new Error('geschlossen')); });
     });
   }
@@ -130,15 +161,14 @@ export class Agent {
     const [h, m] = at.split(':').map(Number), [ch, cm] = hhmm.split(':').map(Number);
     if (ch * 60 + cm >= h * 60 + m && ch * 60 + cm < h * 60 + m + 10 && this.rebootDay !== day && process.uptime() > 6 * 3600) { this.rebootDay = day; this.log('Nächtlicher Neustart'); try { privRequest(this.privdDir, 'reboot'); } catch {} }
   }
-  async sendHeartbeat() {
+  async sendHeartbeat() { try {
     this.nightlyReboot(); const np = this.nowPlayingInfo();
-    this.send('heartbeat', { state: await collect({ version: this.version, authority: !!this.cfg?.local, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, wifiSwitch: readJson(join(this.dataDir, 'state', 'wifi-switch-result.json')), reconnects: this.reconnects ?? 0, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
-  }
+    this.send('heartbeat', { state: await collect({ version: this.version, authority: !!this.cfg?.local, extra: { syncState: this.syncState, nowPlaying: np, playerStatus: this.playerStatus ?? null, wifiSwitch: readJson(join(this.dataDir, 'state', 'wifi-switch-result.json')), reconnects: this.reconnects ?? 0, selfHeal: this.heal.count ? { count: this.heal.count, last: this.heal.last } : undefined, speicherFehler: this.diskError ?? undefined, profile: this.cfg.profile, orientation: this.cfg.orientation ?? 0, displayPower: this.displayRule ? (readText(process.env.DFM_DISPLAY_STATUS ?? '/run/dfm/display-power.status') ?? 'unbekannt') : undefined } }) });
+  } catch (e) { this.log('Herzschlag:', e.message); } }
   /** Aufstellmodus (Z.15): alle 2 s Signal melden, höchstens 15 Minuten */
   startSignalWatch(seconds) {
     clearInterval(this.sigTimer); const until = Date.now() + seconds * 1000;
-    this.sigTimer = setInterval(async () => { if (Date.now() > until || !this.ws) return clearInterval(this.sigTimer); const c = await collect({ version: this.version }); this.send('signal', { dbm: c.signalDbm ?? null, wifi: c.wifi ?? null }); }, 2000);
-    this.sigTimer.unref?.();
+    this.sigTimer = safeInterval(async () => { if (Date.now() > until || !this.ws) return clearInterval(this.sigTimer); const c = await collect({ version: this.version }); this.send('signal', { dbm: c.signalDbm ?? null, wifi: c.wifi ?? null }); }, 2000, this.log, 'Aufstellmodus');
   }
   /** Was der Player gerade WIRKLICH zeigt (Ist) – gemeldet von Chromium-Seite oder Lite-Renderer, sofort an den Hub */
   onPlayerStatus(s) {
@@ -147,6 +177,7 @@ export class Agent {
     const nxt = s.next ? { mediaId: String(s.next.mediaId ?? '').slice(0, 40), name: String(s.next.name ?? '').slice(0, 120) } : null;
     const r = resolvePlaylist(this.plan, Date.now());
     this.playerStatus = { current: cur, next: nxt, source: r.source, scheduleId: r.scheduleId ?? null };
+    this.heal.streak = 0; // die Anzeige lebt
     this.send('status', this.playerStatus);
     this.plays.start(this.displayOff ? null : cur); // Wiedergabe-Nachweis (bei ausgeschaltetem Bildschirm wird nicht gezählt)
   }
@@ -172,8 +203,11 @@ export class Agent {
   async onMessage(raw) {
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (validateMessage(m)) return;
-    if (m.type === 'schedule_update') { const { v, type, ...plan } = m; this.plan = plan; this.applyHubSettings(plan); writeJson(join(this.dataDir, 'cache', 'plan.json'), plan, 0o644); this.server.emit('plan'); this.renderer?.notify?.(); }
-    else if (m.type === 'media_manifest') { const { v, type, ...mf } = m; this.manifest = mf; writeJson(join(this.dataDir, 'cache', 'manifest.json'), mf, 0o644); this.runSync(); }
+    try { this.handleMessage(m); } catch (e) { this.log('Nachricht konnte nicht verarbeitet werden:', m.type, e.message); } // ein Fehler bei einer Nachricht (z. B. volle Karte) darf nie die Verbindung oder die Anzeige beenden
+  }
+  handleMessage(m) {
+    if (m.type === 'schedule_update') { const { v, type, ...plan } = m; this.plan = plan; this.persist(join(this.dataDir, 'cache', 'plan.json'), plan, 0o644); this.applyHubSettings(plan); this.server.emit('plan'); this.renderer?.notify?.(); }
+    else if (m.type === 'media_manifest') { const { v, type, ...mf } = m; this.manifest = mf; this.persist(join(this.dataDir, 'cache', 'manifest.json'), mf, 0o644); this.runSync(); }
     else if (m.type === 'command') this.runCommand(m);
     else if (m.type === 'plays_ack') { this.hubPlays = true; this.plays.ack(m.id); }
     else if (m.type === 'share_start') this.shareStart(m.id);
@@ -181,16 +215,13 @@ export class Agent {
     else if (m.type === 'share_stop') this.shareStop('vom Hub beendet');
   }
 
-  fetchRange = async (url, start) => { // gepinnter Download mit Range-Fortsetzung
-    const { PassThrough } = await import('node:stream'); const sink = new PassThrough();
+  fetchRange = async (url, start) => { // gepinnter Download mit Range-Fortsetzung; wird die Verbindung still, bricht sie nach 30 s ab (sonst bliebe der Abgleich für immer hängen)
     const headers = start ? { Range: `bytes=${start}-` } : {};
-    const base = this.activeBase();
+    const { default: https } = await import('node:https'); const u = new URL(this.activeBase() + url);
     return new Promise((resolve, reject) => {
-      import('node:https').then(({ default: https }) => {
-        const u = new URL(base + url);
-        const req = https.request({ hostname: u.hostname, port: u.port || 443, path: u.pathname, headers: { ...headers, Authorization: `Bearer ${this.cfg.token}` }, agent: pinnedAgent(this.cfg.hubSpki) }, (res) => { resolve({ status: res.statusCode, stream: res }); });
-        req.on('error', reject); req.end();
-      });
+      const req = https.request({ hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, headers: { ...headers, Authorization: `Bearer ${this.cfg.token}` }, agent: pinnedAgent(this.cfg.hubSpki), timeout: this.fetchIdleMs ?? 30000 }, (res) => { resolve({ status: res.statusCode, stream: res }); });
+      req.on('timeout', () => req.destroy(new Error('Zeitüberschreitung beim Herunterladen')));
+      req.on('error', reject); req.end();
     });
   };
   activeBase() { return `https://${this.cfg.lastIp ?? new URL(this.cfg.hubUrl).hostname}${new URL(this.cfg.hubUrl).port ? ':' + new URL(this.cfg.hubUrl).port : ''}`; }
@@ -199,7 +230,7 @@ export class Agent {
   /** Wiedergabe-Art (Browser oder Video-optimiert mit mpv) kommt vom Hub. Ändert sie sich, startet der Agent neu und wählt den passenden Renderer. */
   rendererWanted() { return this.cfg?.profile === 'lite' || this.cfg?.renderer === 'mpv' ? 'mpv' : 'browser'; }
   applyHubSettings(plan) {
-    if (plan.renderer && plan.renderer !== this.rendererWanted()) { this.cfg.renderer = plan.renderer; writeJson(this.cfgFile, this.cfg); this.log('Wiedergabe-Art geändert:', plan.renderer, '– Anzeige startet neu'); setTimeout(() => this.exit(75), 300); } // 75 (nicht 0): Der Dienst startet nur nach einem "Fehler" neu (Restart=on-failure) – mit 0 bliebe der Bildschirm bis zum nächsten Neustart des Geräts aus
+    if (plan.renderer && plan.renderer !== this.rendererWanted()) { this.cfg.renderer = plan.renderer; this.persist(this.cfgFile, this.cfg); this.log('Wiedergabe-Art geändert:', plan.renderer, '– Anzeige startet neu'); setTimeout(() => this.exit(75), 300); } // 75 (nicht 0): Der Dienst startet nur nach einem "Fehler" neu (Restart=on-failure) – mit 0 bliebe der Bildschirm bis zum nächsten Neustart des Geräts aus
     if (plan.sync) { this.cfg.syncWindow = plan.sync.window ?? ''; this.cfg.bandwidthKbps = plan.sync.bandwidthKbps ?? 0; }
     this.displayRule = plan.display?.off ?? null; this.checkDisplay();
   }
@@ -216,7 +247,7 @@ export class Agent {
     try {
       const st = await syncMedia({ manifest: this.manifest, dir: this.mediaDir, fetchRange: this.fetchRange, jitterMs: this.cfg.syncJitterMs ?? 3000, window: this.cfg.syncWindow ?? '', bandwidthKbps: this.cfg.bandwidthKbps ?? 0,
         onProgress: (s) => { this.syncState = { done: s.done, total: s.total }; } });
-      this.syncState = { done: st.done, total: st.total, failed: st.failed.length }; this.server.emit('manifest'); this.sendHeartbeat();
+      this.syncState = { done: st.done, total: st.total, failed: st.failed.length, ...(st.noSpace ? { noSpace: true } : {}) }; this.server.emit('manifest'); this.sendHeartbeat();
       if (st.failed.length || st.skippedWindow) { clearTimeout(this.retryT); this.retryT = setTimeout(() => this.runSync(), st.skippedWindow ? 5 * 60000 : 20000 + Math.random() * 40000); this.retryT.unref?.(); } // Hub ausgelastet / Fenster geschlossen → später erneut
     } catch (e) { this.log('Sync-Fehler', e.message); }
     finally { this.syncing = false; if (this.resync) { this.resync = false; this.runSync(); } }
@@ -280,18 +311,22 @@ export class Agent {
   }
 
   handleRevoked() { // Hub hat dieses Gerät gesperrt/entfernt → Verbindung löschen, neu einrichten
-    this.log('Gerät wurde im Hub gesperrt oder entfernt'); writeFileSync(join(this.dataDir, 'unpaired'), String(Date.now())); this.cfg.token = null; writeJson(this.cfgFile, this.cfg); this.exit(0);
+    this.log('Gerät wurde im Hub gesperrt oder entfernt'); try { writeFileSync(join(this.dataDir, 'unpaired'), String(Date.now())); } catch (e) { this.log('Marke unpaired nicht geschrieben:', e.message); } this.cfg.token = null; this.persist(this.cfgFile, this.cfg); this.exit(0);
   }
 }
 
 // Start als Dienst
 if (import.meta.url === `file://${process.argv[1]}`) {
+  // Nicht abgefangene Fehler in Hintergrundaufgaben werden protokolliert statt die Anzeige zu beenden; bei Dauerfehlern startet der Agent sauber neu (Code 75).
+  installProcessGuards({ name: 'Agent', log: (...x) => console.error(...x) });
   const dataDir = process.env.DFM_AGENT_DATA ?? '/data/agent';
   const cfg = readJson(join(dataDir, 'agent.json'));
   const { chromiumRenderer, liteRenderer } = await import('./lib/renderers.js');
   const a = new Agent({ dataDir, log: (...x) => console.error(...x), port: Number(process.env.DFM_PORT ?? 8080) });
-  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' || cfg?.renderer === 'mpv' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getRotation: () => a.cfg?.orientation ?? 0, onShow: (s) => a.onPlayerStatus(s), haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
+  if (!process.env.DFM_NO_RENDERER) a.renderer = cfg?.profile === 'lite' || cfg?.renderer === 'mpv' ? liteRenderer({ getPlan: () => a.plan, getManifest: () => a.manifest, getHealth: () => a.health(), getRotation: () => a.cfg?.orientation ?? 0, onShow: (s) => { try { a.onPlayerStatus(s); } catch (e) { console.error('Statusmeldung:', e.message); } }, haveFile: (m) => existsSync(join(a.mediaDir, m.id)), fileOf: (i) => join(a.mediaDir, i.mediaId), profile: 'lite' })
     : chromiumRenderer({ url: 'http://127.0.0.1:8080/player/', profileDir: join(dataDir, 'chromium-profile'), log: (...x) => console.error(...x) });
   await a.start();
-  for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => a.stop().then(() => process.exit(0)));
+  // Sauber beenden, aber nie länger als 5 Sekunden warten
+  let closing = false;
+  for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => { if (closing) return; closing = true; const hard = setTimeout(() => process.exit(0), 5000); a.stop().catch((e) => console.error('Beenden:', e?.message ?? e)).finally(() => { clearTimeout(hard); process.exit(0); }); });
 }

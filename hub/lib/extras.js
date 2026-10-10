@@ -6,6 +6,7 @@ import { schedulePayload, DAY } from './plan.js';
 import { sha256hex, randomToken } from './crypto.js';
 import { deviceWarnings, signalQuality } from './health.js';
 import { deviceStatus } from './devices.js';
+import { parseJson } from '../../shared/guard.js';
 import { can } from './permissions.js';
 
 const since = (ms) => { const m = Math.max(1, Math.round(ms / 60000)); return m < 120 ? `${m} Minuten` : m < 2880 ? `${Math.round(m / 60)} Stunden` : `${Math.round(m / 1440)} Tagen`; };
@@ -176,7 +177,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
   });
   app.get('/api/v1/devices/:id/profile', { config: { perm: 'devices.read' } }, async (req, reply) => {
     const d = dv().getDevice(req.params.id); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
-    const hw = d.hw_json ? JSON.parse(d.hw_json) : {};
+    const hw = parseJson(d.hw_json, {});
     return { id: d.id, name: d.name, location: d.location, floor: d.floor, serial: d.serial ?? hw.serial ?? null, mac: d.mac ?? hw.mac ?? null, installedAt: d.installed_at ?? new Date(d.created_at).toISOString().slice(0, 10), notes: d.notes, docUrl: d.doc_url, model: d.model, version: stOf(d)?.version ?? null,
       maintenance: d.maintenance_since, ready: d.ready !== 0, layout: d.layout_json ? JSON.parse(d.layout_json) : null };
   });
@@ -273,7 +274,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
   });
   app.get('/api/v1/devices.csv', { config: { perm: 'devices.read' } }, async (req, reply) => {
     const rows = [['Name', 'Modell', 'Seriennummer', 'MAC', 'Standort', 'Etage', 'Gruppe', 'Einbaudatum', 'Version', 'Status']];
-    for (const d of activeDevices(req.user)) { const hw = d.hw_json ? JSON.parse(d.hw_json) : {}, st = stOf(d), g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id)?.name : '';
+    for (const d of activeDevices(req.user)) { const hw = parseJson(d.hw_json, {}), st = stOf(d), g = d.group_id ? db.prepare('SELECT name FROM device_groups WHERE id=?').get(d.group_id)?.name : '';
       rows.push([d.name, d.model ?? '', d.serial ?? hw.serial ?? '', d.mac ?? hw.mac ?? '', d.location ?? '', d.floor ?? '', g ?? '', d.installed_at ?? new Date(d.created_at).toISOString().slice(0, 10), st?.version ?? '', deviceStatus(d, now()).label]); }
     audit.log({ user: req.user, action: 'geraeteliste.exportiert', ip: req.ip });
     return reply.header('Content-Type', 'text/csv; charset=utf-8').header('Content-Disposition', 'attachment; filename="bildschirme.csv"').send('﻿' + rows.map((r) => r.map(csvCell).join(';')).join('\r\n') + '\r\n'); // Semikolon + BOM: öffnet in Excel direkt

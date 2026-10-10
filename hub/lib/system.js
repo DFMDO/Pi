@@ -8,6 +8,7 @@ import { verifyPackage } from '../../shared/update.js';
 import { request as privRequest } from '../../player/agent/lib/privd.js';
 import { formatFingerprint } from './tls.js';
 import { memInfo } from './metrics.js';
+import { safeInterval } from '../../shared/guard.js';
 
 const DAY = 86400000;
 const dirSize = (d) => { let n = 0; try { for (const f of readdirSync(d, { withFileTypes: true })) n += f.isDirectory() ? dirSize(join(d, f.name)) : statSync(join(d, f.name)).size; } catch {} return n; };
@@ -30,7 +31,7 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
   // Arbeitsspeicher-Wächter: Warnung nur, wenn der freie Speicher DAUERHAFT knapp ist (5 Messungen im Abstand von 1 Minute), nicht beim kurzen Start-Peak.
   const MEM_WARN_MB = 100, memSamples = [];
   const sampleMem = () => { memSamples.push(memInfo().availMB); if (memSamples.length > 5) memSamples.shift(); };
-  sampleMem(); const memTimer = setInterval(sampleMem, 60000); memTimer.unref(); app.addHook('onClose', async () => clearInterval(memTimer));
+  try { sampleMem(); } catch {} const memTimer = safeInterval(sampleMem, 60000, console.error, 'Speicher-Wächter'); app.addHook('onClose', async () => clearInterval(memTimer));
   app.get('/api/v1/system/memory', { config: { perm: 'system.read' } }, async () => {
     const m = memInfo(), low = memSamples.length >= 5 && memSamples.every((x) => x < MEM_WARN_MB), swapFull = m.swapTotalMB > 0 && m.swapUsedMB / m.swapTotalMB > 0.8;
     const warn = low || swapFull;
