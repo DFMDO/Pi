@@ -191,7 +191,120 @@ dl.terms{display:grid;grid-template-columns:minmax(120px,220px) 1fr;gap:6px 18px
 .tourbox{border:1px solid var(--dfm-line);border-top:4px solid var(--dfm-accent);box-shadow:0 24px 60px rgba(0,0,0,.45);animation:pop .2s ease-out both}.tourbox p{margin:.3em 0 .8em}
 .tourhl{outline:3px solid var(--dfm-accent);outline-offset:3px;box-shadow:0 0 0 9999px rgba(0,0,0,.0)}
 
+/* ---------- Gestaltung v2 (0.2.30): einheitliche Symbole, ruhigere Knöpfe, klare Karten, hilfreiche Platzhalter ---------- */
+.ico{display:inline-grid;place-items:center;width:1.2em;height:1.2em;flex:none;vertical-align:-.22em;margin-inline-end:.4em}
+.ico svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ico.i-dot svg{fill:currentColor;stroke:none}
+.btn .ico,nav.side .ni .ico,.status .ico,.chip .ico,.quick .qi .ico,.cicon .ico,.emptyicon .ico,.pagehelp .ico,.sidebtn .ico,.kindbadge .ico,.metachip .ico,.shotempty .ico,.li-i .ico,.help .ico{margin:0}
+nav.side .ni .ico{width:18px;height:18px}
+.quick .qi .ico{width:26px;height:26px}.quick .qi{color:var(--dfm-primary)}.quick.main .qi{color:#fff}
+.cicon{color:var(--dfm-primary)}.cicon .ico{width:26px;height:26px}
+.status .ico{width:1em;height:1em}
+.notice .ico{color:var(--dfm-warn)}.notice.bad .ico{color:var(--dfm-bad)}.notice.ok .ico{color:var(--dfm-ok)}
+.chip .ico{width:1.1em;height:1.1em;margin-inline-end:.4em}
+
+/* Knöpfe: Rot nur für die Hauptaktion; alles andere ruhig und neutral */
+.btn.sec{background:var(--surface-2);color:var(--dfm-text);border-color:color-mix(in srgb,var(--dfm-text) 14%,var(--surface-2))}
+.btn.sec:hover{background:color-mix(in srgb,var(--surface-2) 84%,var(--dfm-text));border-color:color-mix(in srgb,var(--dfm-text) 30%,transparent)}
+.btn.sec .ico,.btn.link .ico{color:var(--dfm-primary)}
+.btn.link{color:var(--dfm-text);text-decoration:none;border-radius:10px;padding:0 12px;font-weight:650}
+.btn.link:hover{background:var(--surface-2);text-decoration:none}
+.btn.sm{padding:0 14px;font-size:.95rem}
+
+/* Seitenkopf: Überschrift links, Anleitung rechts */
+.pagehead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 16px;margin-bottom:2px}
+.pagehead h1{margin:.1em 0 .15em}.pagehead .pagehelp{margin:0}
+.lead{margin-bottom:20px}
+
+/* Karten: einheitlicher Aufbau (Kopf – Angaben – Inhalt – Aktionen) */
+.card{border-radius:18px;border-color:color-mix(in srgb,var(--dfm-text) 9%,var(--dfm-line))}
+.cardhead{display:flex;align-items:flex-start;gap:10px;margin-bottom:6px}
+.cardhead h2,.cardhead h3{margin:0;flex:1;min-width:0;font-size:1.12rem;line-height:1.3;overflow-wrap:anywhere}
+.cardmeta{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
+.metachip{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:.87rem;font-weight:600;line-height:1.5}
+.metachip.warn{color:var(--dfm-warn);background:color-mix(in srgb,var(--dfm-warn) 12%,transparent)}.metachip.bad{color:var(--dfm-bad);background:color-mix(in srgb,var(--dfm-bad) 12%,transparent)}
+.cardactions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--dfm-line)}
+.cardactions .sp{flex:1}.cardactions .btn{padding:0 14px}.cardactions .btn.link{padding:0 10px}
+.btn.iconbtn{padding:0;width:44px;min-width:44px}.btn.iconbtn .ico{margin:0;width:1.25em;height:1.25em}
+.card.is-bad{border-top:3px solid var(--dfm-bad)}.card.is-warn{border-top:3px solid var(--dfm-warn)}
+
+/* Bildschirm-Karten (Startseite, Bildschirme) */
+.devcard{transition:transform .15s,box-shadow .15s}.devcard:hover{transform:translateY(-2px);box-shadow:var(--shadow-hover)}
+.devbody{padding:14px 16px 16px}.devbody .cardactions{margin-top:12px;padding-top:12px}
+.shot.empty{border:0}
+.shotempty{display:flex;flex-direction:column;align-items:center;gap:8px;color:#8e8e89;font-size:.88rem}.shotempty .ico{width:38px;height:38px;opacity:.65}
+.shotempty.off{color:#c98a93}
+.shot{position:relative}
+.shot .stamp{left:8px;bottom:8px}
+
+/* Bilder & Videos: Karten mit Vorschau, Art-Plakette und Aktionsleiste */
+.mediaGrid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+.mediaCard{padding:0;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s}
+.mediaCard:hover{transform:translateY(-2px);box-shadow:var(--shadow-hover)}
+.mediaCard .shot{border-radius:0;margin:0}
+.mediaCard .mbody{padding:12px 14px 6px;flex:1;display:grid;gap:4px;align-content:start}
+.mediaCard .mname{overflow-wrap:anywhere;line-height:1.3}
+.mediaCard .mfoot{display:flex;gap:2px;padding:6px 6px 8px;border-top:1px solid var(--dfm-line);flex-wrap:wrap}
+.mediaCard .mfoot .sp{flex:1}
+.kindbadge{position:absolute;left:8px;top:8px;display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;background:rgba(12,12,14,.74);color:#fff;font-size:.78rem;font-weight:700}
+.kindbadge.warn{background:#9a6700}.kindbadge.bad{background:#a4001c}
+.textthumb{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:34px 14px 12px 20px;text-align:left;color:#fff;background:#1a1a1a;border-left:8px solid #c8102e;font-weight:750;line-height:1.2;overflow:hidden;font-size:1rem}
+.textthumb small{font-weight:500;opacity:.9;font-size:.8rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.textthumb.t-hinweis{background:#f2a900;color:#1a1a1a;border-color:#1a1a1a}.textthumb.t-highlight{background:#c8102e;border-color:#fff}.textthumb.t-frage{background:#0b3d91;border-color:#f2a900}.textthumb.t-antwort{background:#1b7f3b;border-color:#fff}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:flex-end;margin:0 0 14px}
+.tgroup{display:flex;flex-direction:column;gap:6px}.tgroup .tlabel{font-size:.74rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.tgroup .tbtns{display:flex;flex-wrap:wrap;gap:8px}
+
+/* Abspiellisten: Karten */
+.listcard .listitems{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:6px;counter-reset:li}
+.listcard .listitems li{counter-increment:li;display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:10px;background:var(--surface-2);font-size:.95rem}
+.listcard .listitems li::before{content:counter(li);display:grid;place-items:center;flex:none;width:24px;height:24px;border-radius:50%;background:var(--dfm-card);font-size:.8rem;font-weight:700;color:var(--muted)}
+.listcard .listitems .t{flex:1;min-width:0;overflow-wrap:anywhere}.listcard .listitems .d{color:var(--muted);font-size:.85rem;white-space:nowrap}
+
+/* Leere Zustände: Symbol in einem Kreis, klare Handlungsaufforderung */
+.empty{padding:40px 20px}
+.emptyicon{display:grid;place-items:center;width:76px;height:76px;margin:0 auto 12px;border-radius:50%;background:var(--primary-soft);color:var(--dfm-primary);font-size:inherit}
+.emptyicon .ico{width:36px;height:36px}
+
+/* Ladeplatzhalter */
+.skel{border-radius:14px;background:linear-gradient(100deg,var(--surface-2) 30%,color-mix(in srgb,var(--surface-2) 55%,var(--dfm-card)) 50%,var(--surface-2) 70%);background-size:300% 100%;animation:shimmer 1.4s linear infinite}
+.skel-title{height:38px;width:min(320px,60%);margin:6px 0 14px}.skel-line{height:18px;width:min(560px,90%);margin-bottom:26px}
+.skelgrid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}.skel-card{height:160px}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+
+/* Kalender: ruhigere Termine */
+.cal .ev{border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.28);border-left:4px solid rgba(255,255,255,.55);padding:3px 8px;line-height:1.25}
+.cal .h{font-size:.92rem}.cal .col.today{background:color-mix(in srgb,var(--dfm-primary) 7%,transparent)}.cal .h.today{color:var(--dfm-primary)}
+
+/* Auf einen Blick (Startseite) */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:0 0 18px}
+.kpi{display:flex;align-items:center;gap:14px;min-height:76px;padding:12px 16px;background:var(--dfm-card);border:1px solid var(--dfm-line);border-radius:var(--r);text-decoration:none;color:inherit;box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow-hover)}
+.kpiicon{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:var(--surface-2);flex:none}.kpiicon .ico{width:25px;height:25px;margin:0}
+.kpitext{display:flex;flex-direction:column;line-height:1.25;min-width:0}.kpitext b{font-size:1.5rem;font-weight:800;letter-spacing:-.01em}.kpitext span{color:var(--muted);font-size:.93rem}
+.kpi.ok .kpiicon{background:color-mix(in srgb,var(--dfm-ok) 16%,transparent);color:var(--dfm-ok)}.kpi.warn .kpiicon{background:color-mix(in srgb,var(--dfm-warn) 16%,transparent);color:var(--dfm-warn)}.kpi.bad .kpiicon{background:color-mix(in srgb,var(--dfm-bad) 16%,transparent);color:var(--dfm-bad)}
+
+/* Suchfeld mit Lupe */
+.searchbox{position:relative;max-width:440px;margin:0 0 16px}.searchbox .ico{position:absolute;left:14px;top:50%;transform:translateY(-50%);margin:0;color:var(--muted);pointer-events:none}.searchbox input{padding-left:42px;border-radius:14px}
+.listcard .listitems li.more{background:none;color:var(--muted);padding-left:44px}.listcard .listitems li.more::before{content:none}
+
+/* Benutzer */
+.avatar.sm{width:32px;height:32px;font-size:.9rem}.uname{display:inline-flex;align-items:center;gap:10px;font-weight:650}
+.role-admin{background:color-mix(in srgb,var(--btn) 15%,transparent);color:var(--dfm-primary)}.role-editor{background:color-mix(in srgb,#2a6f97 18%,transparent);color:#4a9bc7}.role-anzeige{background:var(--surface-2);color:var(--muted)}
+.liveshot .shotempty{width:100%}
+
+/* Anleitung: Karten für Kapitel */
+details.chapter{transition:box-shadow .15s}details.chapter[open]{box-shadow:var(--shadow-hover)}
+
+/* Anmeldeseite: Spielfeld-Linien als Hintergrund */
+.loginbrand::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.16;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 680 440' fill='none' stroke='white' stroke-width='3'%3E%3Crect x='20' y='20' width='640' height='400' rx='6'/%3E%3Cpath d='M340 20v400'/%3E%3Ccircle cx='340' cy='220' r='62'/%3E%3Crect x='20' y='120' width='110' height='200'/%3E%3Crect x='550' y='120' width='110' height='200'/%3E%3Crect x='20' y='170' width='44' height='100'/%3E%3Crect x='616' y='170' width='44' height='100'/%3E%3C/svg%3E") no-repeat right -90px bottom -40px/620px auto}
+.loginbrand > *{position:relative;z-index:1}
+
 /* ---------- Schmale Bildschirme ---------- */
+@media (max-width:560px){
+  .mediaGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.mediaCard .mfoot .btn.link{padding:0 8px;font-size:.9rem}.textthumb{padding-left:14px;font-size:.88rem}
+  .toolbar .tgroup{width:100%}.kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.kpi{padding:10px 12px;gap:10px}.kpitext b{font-size:1.25rem}
+}
 @media (max-width:820px){
   .shell{grid-template-columns:minmax(0,1fr)}
   main table{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}

@@ -1,6 +1,6 @@
 import { h, dialog, confirmDlg, toast, field, statusEl, empty, fmtDate, help } from '../ui.js';
 import { get, post, put, patch, del, api, state, can } from '../api.js';
-import { shot } from './home.js';
+import { shot, devCard } from './home.js';
 import { commissioning } from './betrieb.js';
 import { labelsDlg } from './etiketten.js';
 
@@ -27,7 +27,7 @@ export async function pairDialog(after) {
 const ROLES = { lite: 'Lite (einfach)', standard: 'Standard', pro: 'Pro (leistungsstark)' };
 export async function devicesPage({ route }) {
   const [devices, groups] = await Promise.all([get('/devices'), get('/groups')]);
-  const rows = devices.map((d) => h('article', { class: 'card' },
+  const rows = devices.map((d) => d.status.level !== 'pending' ? devCard(d, can('devices.manage') ? [h('button', { class: 'btn sec', onclick: () => editDlg(d, groups, route) }, '📝 Bearbeiten'), cmdMenu(d, route)] : null) : h('article', { class: 'card is-warn' },
     h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, d.name), h('span', { class: 'sp' }), statusEl(d.status)), h('p', {}, d.summary),
     d.status.level === 'pending' ? h('div', { class: 'notice' }, h('b', {}, 'Ist das dein Bildschirm? '), `Modell: ${d.model ?? 'unbekannt'}, Name: ${d.name}`, h('div', { class: 'row', style: 'margin-top:8px' },
       h('select', { class: 'inline', id: 'rep-' + d.id, 'aria-label': 'Ersetzt welchen Bildschirm?' }, h('option', { value: '' }, 'Neuer Bildschirm'), devices.filter((x) => x.status.level !== 'pending' && x.status.label !== 'Gesperrt').map((x) => h('option', { value: x.id }, `Ersetzt: ${x.name}`))),
@@ -43,7 +43,7 @@ export async function devicesPage({ route }) {
       h('button', { class: 'btn sec', onclick: () => wallDlg(g, route) }, 'Gleichtakt / Videowand')))) : null;
   return h('div', {}, h('h1', {}, 'Bildschirme'), h('p', { class: 'lead' }, 'Hier verwaltest du alle Bildschirme im Museum.'),
     can('devices.manage') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', onclick: () => pairDialog(route) }, '➕ Neuen Bildschirm verbinden'), h('button', { class: 'btn sec', onclick: () => labelsDlg(devices) }, '🏷️ Etiketten drucken'), h('button', { class: 'btn sec', onclick: () => groupDlg(route) }, 'Gruppe anlegen'), h('button', { class: 'btn sec', onclick: () => replaceInfo(route) }, 'Bildschirm ersetzen'), h('a', { class: 'btn sec', href: '/api/v1/devices.csv' }, 'Liste als Excel/CSV'), h('button', { class: 'btn sec', onclick: () => hubInfo() }, 'Hub-Adresse & Fingerabdruck')) : null,
-    rows.length ? h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(340px,1fr))' }, rows) : empty('Noch kein Bildschirm verbunden', 'Klicke oben auf „Neuen Bildschirm verbinden“.'), groupBox);
+    rows.length ? h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(300px,1fr))' }, rows) : empty('Noch kein Bildschirm verbunden', 'Klicke oben auf „Neuen Bildschirm verbinden“.'), groupBox);
 }
 /** Gleichtakt / Videowand einer Gruppe einstellen */
 function wallDlg(g, route) {

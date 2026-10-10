@@ -2,6 +2,7 @@ import { h, dialog, confirmDlg, toast, field, empty, fmtBytes } from '../ui.js';
 import { get, post, patch, del, api, state, can } from '../api.js';
 import { templateDlg, qrDlg, importDlg } from './tools.js';
 import { quizDlg, cleanupDlg } from './alltag.js';
+import { icon } from '../icons.js';
 
 const KIND = { image: 'Bild', video: 'Video', text: 'Text', pdfpage: 'PDF-Seite' };
 export async function mediaPage({ route }) {
@@ -10,19 +11,36 @@ export async function mediaPage({ route }) {
   const search = h('input', { type: 'search', placeholder: 'Suchen …', 'aria-label': 'Medien suchen', oninput: () => draw() });
   const grid = h('div', { class: 'mediaGrid' });
   const draw = () => { const q = search.value.toLowerCase(); grid.replaceChildren(...items.filter((m) => !q || m.name.toLowerCase().includes(q) || m.folder.toLowerCase().includes(q) || m.tags.join(' ').includes(q)).map(card)); };
-  const card = (m) => h('div', { class: 'card mediaCard' }, h('div', { class: 'shot' }, thumb(m)), h('b', {}, m.name), h('div', { class: 'hint' }, `${m.stream ? '📹 Live-Bild' : KIND[m.kind]}${m.size ? ' · ' + fmtBytes(m.size) : ''}${m.folder ? ' · ' + m.folder : ''}`), m.stream ? h('div', { class: 'hint' }, m.text?.stream?.url ?? '') : null,
-    m.expired ? h('div', { class: 'notice bad' }, '⛔ Abgelaufen – wird nicht mehr gezeigt') : m.validUntil ? h('div', { class: 'hint' }, `Gültig bis ${m.validUntil.split('-').reverse().join('.')}${m.license ? ' · ' + m.license : ''}`) : null,
-    ...m.hints.map((t) => h('div', { class: 'hint warn' }, 'ℹ ' + t)), ...m.variants.filter((v) => v.status === 'failed').map((v) => h('div', { class: 'hint bad' }, '⚠ Dieses Medium konnte nicht für alle Bildschirme vorbereitet werden.')),
-    m.variants.some((v) => v.status === 'pending' || v.status === 'running') ? h('div', { class: 'hint' }, '⏳ Wird für die Bildschirme vorbereitet …') : null,
-    can('media.write') ? h('div', { class: 'row' }, h('button', { class: 'btn link', onclick: () => rename(m, route) }, 'Umbenennen & Lizenz'), m.stream ? h('button', { class: 'btn link', onclick: () => streamAddr(m, route) }, 'Adresse ändern') : null, h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: () => remove(m, route) }, 'Löschen')) : null);
+  const KIND_ICON = { image: 'image', video: 'video', text: 'edit', pdfpage: 'file' };
+  const card = (m) => {
+    const live = !!m.stream, pending = m.variants.some((v) => v.status === 'pending' || v.status === 'running'), failed = m.variants.some((v) => v.status === 'failed');
+    return h('div', { class: 'card mediaCard' },
+      h('div', { class: 'shot' }, thumb(m), h('span', { class: 'kindbadge' + (m.expired ? ' bad' : '') }, icon(live ? 'video' : KIND_ICON[m.kind] ?? 'image'), m.expired ? 'Abgelaufen' : live ? 'Live-Bild' : KIND[m.kind])),
+      h('div', { class: 'mbody' }, h('b', { class: 'mname' }, m.name),
+        [m.size ? fmtBytes(m.size) : null, m.folder || null].some(Boolean) ? h('div', { class: 'hint' }, [m.size ? fmtBytes(m.size) : null, m.folder || null].filter(Boolean).join(' · ')) : null,
+        live ? h('div', { class: 'hint' }, m.text?.stream?.url ?? '') : null,
+        m.expired ? h('div', { class: 'notice bad' }, '⛔ Abgelaufen – wird nicht mehr gezeigt') : m.validUntil ? h('div', { class: 'hint' }, `Gültig bis ${m.validUntil.split('-').reverse().join('.')}${m.license ? ' · ' + m.license : ''}`) : null,
+        ...m.hints.map((t) => h('div', { class: 'hint warn' }, 'ℹ ' + t)), failed ? h('div', { class: 'hint bad' }, '⚠ Dieses Medium konnte nicht für alle Bildschirme vorbereitet werden.') : null,
+        pending ? h('div', { class: 'hint' }, '⏳ Wird für die Bildschirme vorbereitet …') : null),
+      can('media.write') ? h('div', { class: 'mfoot' }, h('button', { class: 'btn link', title: 'Umbenennen, Urheber, Lizenz und Gültigkeit', onclick: () => rename(m, route) }, '📝 Bearbeiten'), live ? h('button', { class: 'btn link', onclick: () => streamAddr(m, route) }, '🔗 Adresse') : null,
+        h('span', { class: 'sp' }), h('button', { class: 'btn link iconbtn', 'aria-label': 'Löschen', title: 'Löschen', style: 'color:var(--dfm-bad)', onclick: () => remove(m, route) }, '🗑')) : null);
+  };
   draw();
   return h('div', {}, h('h1', {}, 'Bilder & Videos'), h('p', { class: 'lead' }, 'Lade Bilder, Videos oder PDFs hoch und lege Text-Ankündigungen an. Danach kannst du sie in Abspiellisten und Termine einbauen.'),
     storage?.warn ? h('div', { class: 'notice' }, '⚠ ' + storage.text) : null,
-    can('media.write') ? h('div', { class: 'row', style: 'margin-bottom:12px' }, h('button', { class: 'btn big', 'data-tour': 'upload', onclick: () => uploadDlg(route) }, '⬆️ Bild oder Video hochladen'), h('button', { class: 'btn sec', onclick: () => templateDlg(route) }, '🧩 Vorlage verwenden'), h('button', { class: 'btn sec', onclick: () => qrDlg(route) }, '🔳 QR-Code erstellen'), h('button', { class: 'btn sec', onclick: () => streamDlg(route) }, '📹 Live-Bild (Kamera)'), can('import.run') ? h('button', { class: 'btn sec', onclick: () => importDlg(route) }, '📁 Ordner / USB-Stick importieren') : null, h('button', { class: 'btn sec', onclick: () => textDlg(route) }, '📝 Text-Ankündigung erstellen'), h('button', { class: 'btn sec', onclick: () => quizDlg(route) }, '❓ Frage & Antwort'), h('button', { class: 'btn sec', onclick: () => cleanupDlg(route) }, '🧹 Aufräumen'), h('span', { class: 'sp' }), search) : search,
-    items.length ? grid : empty('Noch nichts hochgeladen', 'Lade dein erstes Bild hoch. Erlaubt sind Bilder (JPG, PNG, WebP), Videos (MP4, MOV, MKV) und PDF.', can('media.write') ? h('button', { class: 'btn big', onclick: () => uploadDlg(route) }, 'Bild oder Video hochladen') : null),
+    can('media.write') ? h('div', { class: 'toolbar' },
+      h('div', { class: 'tgroup' }, h('span', { class: 'tlabel' }, 'Hochladen'), h('div', { class: 'tbtns' }, h('button', { class: 'btn big', 'data-tour': 'upload', onclick: () => uploadDlg(route) }, '⬆️ Bild oder Video hochladen'))),
+      h('div', { class: 'tgroup' }, h('span', { class: 'tlabel' }, 'Neu erstellen'), h('div', { class: 'tbtns' }, h('button', { class: 'btn sec', onclick: () => textDlg(route) }, '📝 Text-Ankündigung erstellen'), h('button', { class: 'btn sec', onclick: () => templateDlg(route) }, '🧩 Vorlage verwenden'),
+        h('button', { class: 'btn sec', onclick: () => quizDlg(route) }, '❓ Frage & Antwort'), h('button', { class: 'btn sec', onclick: () => qrDlg(route) }, '🔳 QR-Code erstellen'), h('button', { class: 'btn sec', onclick: () => streamDlg(route) }, '📹 Live-Bild (Kamera)'))),
+      h('div', { class: 'tgroup' }, h('span', { class: 'tlabel' }, 'Verwalten'), h('div', { class: 'tbtns' }, can('import.run') ? h('button', { class: 'btn sec', onclick: () => importDlg(route) }, '📁 Ordner / USB-Stick importieren') : null, h('button', { class: 'btn sec', onclick: () => cleanupDlg(route) }, '🧹 Aufräumen')))) : null,
+    h('div', { class: 'searchbox' }, icon('search'), search),
+    items.length ? grid : empty('Noch nichts hochgeladen', 'Lade dein erstes Bild hoch. Erlaubt sind Bilder (JPG, PNG, WebP), Videos (MP4, MOV, MKV) und PDF.', can('media.write') ? h('button', { class: 'btn big', onclick: () => uploadDlg(route) }, '⬆️ Bild oder Video hochladen') : null, '🖼️'),
     trashSection(route));
 }
-const thumb = (m) => (m.kind === 'text' ? h('div', { style: 'padding:8px;font-weight:700' }, m.text?.title ?? m.name) : m.kind === 'video' ? h('span', {}, '🎬 Video') : h('img', { alt: m.name, loading: 'lazy', src: `/api/v1/media/${m.id}/file`, onerror: (e) => e.target.replaceWith(document.createTextNode('Wird vorbereitet …')) }));
+const thumb = (m) => (m.stream ? h('div', { class: 'textthumb t-hinweis' }, m.text?.title ?? m.name, h('small', {}, 'Kamerabild – wird live gezeigt'))
+  : m.kind === 'text' ? h('div', { class: 'textthumb t-' + (m.text?.template ?? 'standard') }, m.text?.title ?? m.name, m.text?.body ? h('small', {}, m.text.body) : null)
+  : m.kind === 'video' ? h('div', { class: 'shotempty' }, '🎞️', h('span', {}, 'Video'))
+  : h('img', { alt: m.name, loading: 'lazy', src: `/api/v1/media/${m.id}/file`, onerror: (e) => e.target.replaceWith(h('div', { class: 'shotempty' }, '⏳', h('span', {}, 'Wird vorbereitet …'))) }));
 function uploadDlg(route) {
   const f = h('input', { type: 'file', multiple: true, accept: 'image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/x-matroska,application/pdf' }), list = h('div', {}), folder = h('input', { placeholder: 'z. B. Sommer-Aktion', maxlength: 60 });
   const d = dialog('Bild oder Video hochladen', h('div', {}, h('p', {}, 'Wähle eine oder mehrere Dateien aus. Du kannst die Dateien auch hierher ziehen.'), f, field('Ordner (optional)', folder), list), [{ text: 'Schließen', cls: 'sec', fn: () => route() }]);

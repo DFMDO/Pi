@@ -1,17 +1,28 @@
 import { h, dialog, confirmDlg, toast, field, empty } from '../ui.js';
 import { get, post, put, del, can } from '../api.js';
+import { icon } from '../icons.js';
 
 export async function playlistsPage({ route }) {
   const [all, media, dr] = await Promise.all([get('/playlists'), get('/media'), get('/drafts')]); const canPub = dr.canPublish;
   // Entwurf einer veröffentlichten Liste wird bei dieser angezeigt; eigenständige Entwürfe als eigene Karte
   const draftFor = Object.fromEntries(all.filter((p) => p.draftOf).map((p) => [p.draftOf, p])); const lists = all.filter((p) => !p.draftOf); const byId = Object.fromEntries(media.map((m) => [m.id, m])); const includable = lists.filter((p) => p.state === 'published');
-  const cards = lists.map((p) => h('article', { class: 'card' }, h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, p.name), p.isDefault ? h('span', { class: 'status ok' }, '✔ Standard') : null, p.state === 'draft' ? h('span', { class: 'status warn' }, '✎ Entwurf') : draftFor[p.id] ? h('span', { class: 'status warn' }, '✎ Änderungen als Entwurf') : null, h('span', { class: 'sp' }),
-    can('playlists.write') ? [h('button', { class: 'btn', onclick: () => edit(draftFor[p.id] ?? p, media, route, p.id, canPub, includable) }, 'Bearbeiten'), (p.state === 'draft' || draftFor[p.id]) && canPub ? h('button', { class: 'btn', onclick: async () => { try { await post(`/playlists/${(draftFor[p.id] ?? p).id}/publish`); toast('Veröffentlicht. Die Bildschirme bekommen die Liste gleich.'); route(); } catch (e) { toast(e.message, 'err'); } } }, 'Veröffentlichen') : null, draftFor[p.id] || p.state === 'draft' ? h('button', { class: 'btn sec', onclick: async () => { await post(`/playlists/${(draftFor[p.id] ?? p).id}/discard`); route(); } }, 'Entwurf verwerfen') : null, p.isDefault ? null : h('button', { class: 'btn sec', onclick: async () => { try { await del(`/playlists/${p.id}`); toast(`„${p.name}“ liegt im Papierkorb.`); route(); } catch (e) { if (e.data?.needsConfirm && await confirmDlg('Abspielliste löschen?', e.message, 'Löschen')) { await del(`/playlists/${p.id}?force=1`); route(); } else toast(e.message, 'err'); } } }, 'Löschen')] : null),
-    p.isDefault ? h('p', { class: 'hint' }, 'Diese Liste läuft, wenn kein Termin etwas anderes festlegt.') : null,
-    (draftFor[p.id] ?? p).items.length ? h('p', { class: 'hint' }, `Eine Runde dauert ${Math.floor((draftFor[p.id] ?? p).durationS / 60)}:${String((draftFor[p.id] ?? p).durationS % 60).padStart(2, '0')} Minuten.`) : null,
-    (draftFor[p.id] ?? p).items.length ? h('ol', {}, (draftFor[p.id] ?? p).items.map((i) => h('li', {}, i.playlistId ? `📂 Liste „${i.listName ?? '(gelöscht)'}“` : `${byId[i.mediaId]?.name ?? '(gelöscht)'} – ${i.duration} Sekunden`))) : h('p', { class: 'hint' }, 'Diese Liste ist noch leer. Klicke auf „Bearbeiten“ und füge Bilder oder Videos hinzu.')));
+  const dur = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const cards = lists.map((p) => {
+    const cur = draftFor[p.id] ?? p, hasDraft = p.state === 'draft' || !!draftFor[p.id], shown = cur.items.slice(0, 6), more = cur.items.length - shown.length;
+    const publish = async () => { try { await post(`/playlists/${cur.id}/publish`); toast('Veröffentlicht. Die Bildschirme bekommen die Liste gleich.'); route(); } catch (e) { toast(e.message, 'err'); } };
+    const discard = async () => { await post(`/playlists/${cur.id}/discard`); route(); };
+    const remove = async () => { try { await del(`/playlists/${p.id}`); toast(`„${p.name}“ liegt im Papierkorb.`); route(); } catch (e) { if (e.data?.needsConfirm && await confirmDlg('Abspielliste löschen?', e.message, 'Löschen')) { await del(`/playlists/${p.id}?force=1`); route(); } else toast(e.message, 'err'); } };
+    return h('article', { class: 'card listcard' + (hasDraft ? ' is-warn' : '') },
+      h('div', { class: 'cardhead' }, h('h2', {}, p.name), p.isDefault ? h('span', { class: 'status ok' }, '✔ Standard') : null, p.state === 'draft' ? h('span', { class: 'status warn' }, '✎ Entwurf') : draftFor[p.id] ? h('span', { class: 'status warn' }, '✎ Änderungen als Entwurf') : null),
+      h('div', { class: 'cardmeta' }, h('span', { class: 'metachip' }, icon('list'), `${cur.items.length} ${cur.items.length === 1 ? 'Element' : 'Elemente'}`), cur.items.length ? h('span', { class: 'metachip' }, icon('clock'), `Runde ${dur(cur.durationS)} Min.`) : null),
+      p.isDefault ? h('p', { class: 'hint', style: 'margin:0 0 8px' }, 'Diese Liste läuft, wenn kein Termin etwas anderes festlegt.') : null,
+      cur.items.length ? h('ul', { class: 'listitems' }, shown.map((i) => h('li', {}, h('span', { class: 't' }, i.playlistId ? `📂 Liste „${i.listName ?? '(gelöscht)'}“` : byId[i.mediaId]?.name ?? '(gelöscht)'), i.playlistId ? null : h('span', { class: 'd' }, `${i.duration} s`))), more > 0 ? h('li', { class: 'more' }, `… und ${more} weitere`) : null)
+        : h('p', { class: 'hint' }, 'Diese Liste ist noch leer. Klicke auf „Bearbeiten“ und füge Bilder oder Videos hinzu.'),
+      can('playlists.write') ? h('div', { class: 'cardactions' }, h('button', { class: 'btn', onclick: () => edit(cur, media, route, p.id, canPub, includable) }, '📝 Bearbeiten'), hasDraft && canPub ? h('button', { class: 'btn sec', onclick: publish }, '✔ Veröffentlichen') : null, h('span', { class: 'sp' }),
+        hasDraft ? h('button', { class: 'btn link', onclick: discard }, '↩ Verwerfen') : null, p.isDefault ? null : h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: remove }, '🗑 Löschen')) : null);
+  });
   return h('div', {}, h('h1', {}, 'Abspiellisten'), h('p', { class: 'lead' }, 'Eine Abspielliste legt fest, welche Bilder und Videos nacheinander gezeigt werden. Du kannst auch ganze Listen ineinander einfügen (zum Beispiel „Ausstellung A“ in die Hauptliste).'),
-    can('playlists.write') ? h('p', {}, h('button', { class: 'btn big', onclick: () => nameDlg(route) }, '➕ Neue Abspielliste')) : null, h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, cards));
+    can('playlists.write') ? h('p', {}, h('button', { class: 'btn big', onclick: () => nameDlg(route) }, '➕ Neue Abspielliste')) : null, cards.length ? h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, cards) : empty('Noch keine Abspielliste', 'Eine Abspielliste ist eine Reihenfolge von Bildern, Videos und Texten.', can('playlists.write') ? h('button', { class: 'btn big', onclick: () => nameDlg(route) }, '➕ Neue Abspielliste') : null, '▶️'));
 }
 function nameDlg(route) {
   const n = h('input', { maxlength: 80 });

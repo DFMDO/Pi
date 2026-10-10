@@ -67,10 +67,12 @@ export async function quickActions(route) {
 /** Szenen verwalten (Entwurf/Veröffentlichen wie bei Terminen) */
 export async function scenesPage({ route }) {
   const [scenes, devices, groups, drafts] = await Promise.all([get('/scenes'), get('/devices'), get('/groups'), get('/drafts')]);
-  const cards = scenes.map((s) => h('article', { class: 'card' }, h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, s.name), s.state === 'draft' ? h('span', { class: 'status warn' }, '✎ Entwurf') : h('span', { class: 'status ok' }, '✔ Veröffentlicht'), h('span', { class: 'sp' }),
-    can('scenes.write') ? [h('button', { class: 'btn', onclick: () => edit(s) }, 'Bearbeiten'), s.state === 'draft' && drafts.canPublish ? h('button', { class: 'btn', onclick: async () => { await post(`/scenes/${s.id}/publish`); toast('Veröffentlicht.'); route(); } }, 'Veröffentlichen') : null,
-      h('button', { class: 'btn sec', onclick: async () => { if (await confirmDlg('Szene löschen?', `„${s.name}“ wird gelöscht.`, 'Löschen')) { await del(`/scenes/${s.id}`); route(); } } }, 'Löschen')] : null),
-    h('ul', {}, s.items.map((i) => h('li', {}, `${i.targetName}: ${i.contentName}`)))));
+  const cards = scenes.map((s) => h('article', { class: 'card listcard' + (s.state === 'draft' ? ' is-warn' : '') },
+    h('div', { class: 'cardhead' }, h('h2', {}, s.name), s.state === 'draft' ? h('span', { class: 'status warn' }, '✎ Entwurf') : h('span', { class: 'status ok' }, '✔ Veröffentlicht')),
+    h('ul', { class: 'listitems' }, s.items.map((i) => h('li', {}, h('span', { class: 't' }, i.targetName), h('span', { class: 'd' }, i.contentName)))),
+    can('scenes.write') ? h('div', { class: 'cardactions' }, h('button', { class: 'btn', onclick: () => edit(s) }, '📝 Bearbeiten'),
+      s.state === 'draft' && drafts.canPublish ? h('button', { class: 'btn sec', onclick: async () => { await post(`/scenes/${s.id}/publish`); toast('Veröffentlicht.'); route(); } }, '✔ Veröffentlichen') : null, h('span', { class: 'sp' }),
+      h('button', { class: 'btn link', style: 'color:var(--dfm-bad)', onclick: async () => { if (await confirmDlg('Szene löschen?', `„${s.name}“ wird gelöscht.`, 'Löschen')) { await del(`/scenes/${s.id}`); route(); } } }, '🗑 Löschen')) : null));
   async function edit(s) {
     const items = (s?.items ?? []).map((i) => ({ scope: i.scope, targetId: i.targetId, content: i.content })); const name = h('input', { value: s?.name ?? '', maxlength: 80 }), box = h('div', {});
     const c = await contentSelect(), t = h('select', { 'aria-label': 'Ziel' }, h('option', { value: 'all:' }, 'Alle Bildschirme'), groups.map((g) => h('option', { value: 'group:' + g.id }, 'Gruppe: ' + g.name)), devices.filter((d) => d.status.level !== 'pending').map((d) => h('option', { value: 'device:' + d.id }, d.name)));

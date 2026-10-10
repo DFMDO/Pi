@@ -47,7 +47,7 @@ async function route() {
   const liveId = /^#\/live\/([0-9a-f-]{36})$/.exec(path)?.[1];
   const helpId = /^#\/hilfe\/([a-z0-9-]+)$/.exec(path)?.[1], helpNav = NAV.find((n) => n[0] === '#/hilfe');
   const page = liveId ? [NAV[1][0], NAV[1][1], NAV[1][2], (c) => livePage(c, { openId: liveId })] : helpId ? [helpNav[0], helpNav[1], helpNav[2], (c) => helpPage(c, { openId: helpId })] : navFor().find((n) => n[0] === path.split('?')[0]) ?? NAV[0];
-  const view = h('div', {}, h('p', {}, 'Wird geladen …'));
+  const view = h('div', { 'aria-busy': 'true' }, h('span', { class: 'sr' }, 'Wird geladen …'), h('div', { class: 'skel skel-title' }), h('div', { class: 'skel skel-line' }), h('div', { class: 'skelgrid' }, h('div', { class: 'skel skel-card' }), h('div', { class: 'skel skel-card' }), h('div', { class: 'skel skel-card' })));
   if (path !== lastPath) window.scrollTo({ top: 0, behavior: 'instant' }); lastPath = path; // neue Seite: nach oben (beim bloßen Neuladen derselben Seite bleibt die Stelle)
   mount(view, liveId ? '#/live' : page[0]);
   try { view.replaceWith(await page[3]({ route, pair: pairDialog })); } catch (e) { view.replaceChildren(h('div', { class: 'notice bad' }, e.message)); }
@@ -69,7 +69,7 @@ function mount(content, active) {
 /** Link „Anleitung zu dieser Seite“ unter der Überschrift (öffnet das passende Kapitel der Hilfe) */
 function addHelpLink(path) {
   const id = HELP_FOR[path], main = $('main'), h1 = main?.querySelector('h1'); if (!id || !h1 || main.querySelector('.pagehelp')) return;
-  const anchor = h1.nextElementSibling?.classList.contains('lead') ? h1.nextElementSibling : h1; anchor.after(h('a', { class: 'pagehelp', href: '#/hilfe/' + id }, '❓ Anleitung zu dieser Seite'));
+  const head = h('div', { class: 'pagehead' }); h1.before(head); head.append(h1, h('a', { class: 'pagehelp', href: '#/hilfe/' + id }, '❓ Anleitung zu dieser Seite'));
 }
 /** Hell/Dunkel: folgt dem Gerät, kann aber umgeschaltet werden (wird nur lokal im Browser gemerkt) */
 function applyTheme() { try { const t = localStorage.getItem('dfm-theme'); if (t) document.documentElement.dataset.theme = t; } catch {} }

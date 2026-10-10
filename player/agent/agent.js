@@ -31,7 +31,7 @@ export function ownAddresses() {
 }
 
 export class Agent {
-  constructor({ dataDir, version = '0.2.29', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
+  constructor({ dataDir, version = '0.2.30', renderer = null, privdDir = '/run/dfm/privd', port = 8080, updateKey = '/etc/dfm/update-key.pub', log = () => {}, heartbeatMs = 30000, pollMs = 60000, exit = (c) => process.exit(c) }) {
     Object.assign(this, { dataDir, version, renderer, privdDir, port, updateKey, log, heartbeatMs, pollMs, exit });
     this.cfgFile = join(dataDir, 'agent.json'); this.mediaDir = join(dataDir, 'cache', 'media');
     mkdirSync(this.mediaDir, { recursive: true });

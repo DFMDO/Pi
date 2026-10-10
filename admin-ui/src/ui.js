@@ -1,5 +1,6 @@
 // Kleine UI-Helfer: Elemente bauen (nie innerHTML mit Fremdtext → kein XSS), Hinweise, Dialoge.
 import './app.css';
+import { icon, lead } from './icons.js';
 export function h(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
   for (let [k, v] of Object.entries(attrs ?? {})) {
@@ -8,7 +9,11 @@ export function h(tag, attrs = {}, ...kids) {
     if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; /* per CSSOM: erlaubt unter strenger CSP */ else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else if (k === 'value') e.value = v; else if (k === 'checked') e.checked = !!v; else e.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of kids.flat(Infinity)) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  for (const c of kids.flat(Infinity)) {
+    if (c == null || c === false) continue;
+    if (typeof c === 'string') { const l = lead(c); if (l) { e.append(icon(l.name)); if (l.rest) e.append(document.createTextNode(l.rest)); continue; } } // Emoji am Anfang → einheitliches Symbol (icons.js)
+    e.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
   return e;
 }
 export const $ = (sel, el = document) => el.querySelector(sel);

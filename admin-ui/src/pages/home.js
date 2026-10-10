@@ -1,4 +1,5 @@
 import { h, statusEl, empty, fmtDate, fmtBytes } from '../ui.js';
+import { icon } from '../icons.js';
 import { get, post, state, can } from '../api.js';
 import { pairDialog } from './devices.js';
 import { quickActions } from './quick.js';
@@ -7,7 +8,20 @@ import { importDlg } from './tools.js';
 import { usbUpdateBox } from './usbupdate.js';
 
 /** Vorschaubild (Screenshot) eines Bildschirms; wenn keins da ist, ein ruhiger Platzhalter */
-export const shot = (d) => { const box = h('div', { class: 'shot' }, 'Noch keine Vorschau'); if (d.status.level === 'ok') { const i = h('img', { alt: `Vorschau von ${d.name}`, src: `/api/v1/devices/${d.id}/screenshot?t=${Date.now() >> 14}` }); i.onload = () => box.replaceChildren(i); } return box; };
+export const shot = (d) => { const bad = d.status.level === 'bad', box = h('div', { class: 'shot' }, h('div', { class: 'shotempty' + (bad ? ' off' : '') }, bad ? '⛔' : '🖥️', h('span', {}, bad ? 'Nicht erreichbar' : d.status.level === 'warn' ? 'Keine Verbindung' : 'Noch keine Vorschau'))); if (d.status.level === 'ok') { const i = h('img', { alt: `Vorschau von ${d.name}`, src: `/api/v1/devices/${d.id}/screenshot?t=${Date.now() >> 14}` }); i.onload = () => box.replaceChildren(i); } return box; };
+
+/** Bildschirm-Karte: Vorschau, Name mit Zustand, Angaben als Plaketten, was gerade läuft – optional mit Aktionen */
+export function devCard(d, actions = null) {
+  const st = d.state ?? {}, extra = String(d.summary ?? '').slice(d.name.length + 2), info = extra === 'läuft' || extra === 'nicht erreichbar' ? null : extra.replace(/^läuft, /, '');
+  const chip = (ic, text, cls = '') => h('span', { class: 'metachip ' + cls }, icon(ic), text);
+  const chips = [d.groupName ? chip('folder', d.groupName) : null, st.cpuTemp != null ? chip('thermo', `${Math.round(st.cpuTemp)} °C`, st.cpuTemp >= 80 ? 'bad' : st.cpuTemp >= 72 ? 'warn' : '') : null,
+    st.signalDbm != null ? chip('wifi', `${st.signalDbm} dBm`, st.signalDbm < -72 ? 'warn' : '') : null, st.syncState?.total ? chip('image', `${st.syncState.done}/${st.syncState.total}`, st.syncState.done < st.syncState.total ? 'warn' : '') : null].filter(Boolean);
+  return h('article', { class: 'card devcard' + (d.status.level === 'bad' ? ' is-bad' : d.status.level === 'warn' ? ' is-warn' : '') }, shot(d),
+    h('div', { class: 'devbody' }, h('div', { class: 'cardhead' }, h('h3', {}, d.name), statusEl(d.status)), h('p', { class: 'devsum', style: 'margin:0 0 6px' }, d.summary), // Klartextsatz mit Zustand (nicht nur Farbe/Symbol)
+      chips.length ? h('div', { class: 'cardmeta', style: 'margin:6px 0 4px' }, chips) : null,
+      h('p', { class: 'hint', style: 'margin:6px 0 0' }, d.lastSeen ? `Letzte Meldung: ${fmtDate(d.lastSeen)}` : 'Noch keine Meldung'),
+      actions ? h('div', { class: 'cardactions' }, actions) : null));
+}
 
 /** Kachel auf der Startseite: Symbol in einer Plakette, Titel und Erklärung */
 const tile = (icon, title, desc, onclick, cls = 'quick', extra = {}) => h('button', { class: cls, onclick, ...extra }, h('span', { class: 'qi', 'aria-hidden': 'true' }, icon), h('span', { class: 'qt' }, h('b', {}, title), h('span', { class: 'hint' }, desc)));
@@ -26,7 +40,14 @@ export async function homePage({ route }) {
   const active = devices.filter((d) => d.status.level !== 'pending'), pending =devices.filter((d) => d.status.level === 'pending');
   const quick = [['🖼️', 'Bild oder Video anzeigen', 'Datei hochladen und auf einem Bildschirm zeigen', '#/medien'], ['📝', 'Text-Ankündigung anzeigen', 'Aus einer DFM-Vorlage erstellen', '#/medien?text=1'], ['📅', 'Für einen bestimmten Tag planen', 'Zeitraum und Bildschirm wählen', '#/kalender']];
   const issues = [...warnings.map((w) => w.text), ...active.filter((d) => d.status.level === 'warn' || d.status.level === 'bad').map((d) => d.status.level === 'warn' ? `${d.name} hat gerade keine Verbindung. Der Bildschirm zeigt weiter die zuletzt geladenen Inhalte.` : `${d.name} ist nicht erreichbar. Bitte Strom und WLAN prüfen.`), storage?.warn ? storage.text : null, memory?.warn ? memory.text : null, ...(prog?.items ?? []).map((i) => `Vorhersage für „${i.name}“ (${i.title}): ${i.text} – Mehr unter Betrieb → Prognose.`)].filter(Boolean);
-  return h('div', {}, h('h1', {}, 'Startseite'), h('p', { class: 'lead' }, 'Hier siehst du, ob alle Bildschirme laufen und was gerade gezeigt wird.'),
+  // Auf einen Blick: laufen alle Bildschirme, gibt es Hinweise, wartet etwas auf Veröffentlichung, ist der Speicher knapp?
+  const kpi = (ic, value, label, cls, href) => h('a', { class: 'kpi ' + cls, href }, h('span', { class: 'kpiicon' }, icon(ic)), h('span', { class: 'kpitext' }, h('b', {}, value), h('span', {}, label)));
+  const okN = active.filter((d) => d.status.level === 'ok').length, nDraft = drafts.schedules + drafts.playlists;
+  const kpis = active.length ? h('div', { class: 'kpis' }, kpi('monitor', `${okN} von ${active.length}`, okN === 1 && active.length === 1 ? 'Bildschirm läuft' : 'Bildschirme laufen', okN === active.length ? 'ok' : 'bad', '#/live'),
+    kpi('alert', String(issues.length), issues.length === 1 ? 'Hinweis' : 'Hinweise', issues.length ? 'warn' : 'ok', '#/betrieb'),
+    nDraft ? kpi('edit', String(nDraft), nDraft === 1 ? 'Entwurf wartet' : 'Entwürfe warten', 'warn', '#/kalender') : null,
+    storage ? kpi('box', `${storage.usedPercent} %`, 'Speicher belegt', storage.warn ? 'warn' : '', '#/betrieb') : null) : null;
+  return h('div', {}, h('h1', {}, 'Startseite'), h('p', { class: 'lead' }, 'Hier siehst du, ob alle Bildschirme laufen und was gerade gezeigt wird.'), kpis,
     can('overrides.write') ? await quickActions(route) : null,
     h('div', { class: 'grid', style: 'margin-bottom:16px' }, ...(can('media.write') ? quick.map(([i, t, d, href]) => tile(i, t, d, () => { location.hash = href; })) : []),
       can('media.write') && can('overrides.write') ? tile('📷', 'Foto vom Handy zeigen', 'Foto aufnehmen oder wählen und sofort zeigen', () => photoDialog(route)) : null,
@@ -36,9 +57,9 @@ export async function homePage({ route }) {
     await clockNotice(), await usbNotice(route), await usbUpdateBox({ onlyNewer: true }),
     ...notices(issues),
     h('h2', {}, 'Meine Bildschirme'),
-    active.length ? h('div', { class: 'grid' }, active.map((d) => h('article', { class: 'card devcard' }, shot(d), h('div', { class: 'devbody' }, h('div', { class: 'row' }, h('h3', {}, d.name), h('span', { class: 'sp' }), statusEl(d.status)), h('p', {}, d.summary), h('p', { class: 'hint', style: 'margin:0' }, d.lastSeen ? `Letzte Meldung: ${fmtDate(d.lastSeen)}` : 'Noch keine Meldung'))))) : empty('Noch kein Bildschirm verbunden', 'Verbinde deinen ersten Bildschirm. Das dauert nur wenige Minuten.', can('devices.manage') ? h('button', { class: 'btn big', onclick: () => pairDialog(route) }, 'Neuen Bildschirm verbinden') : null),
+    active.length ? h('div', { class: 'grid' }, active.map((d) => devCard(d))) : empty('Noch kein Bildschirm verbunden', 'Verbinde deinen ersten Bildschirm. Das dauert nur wenige Minuten.', can('devices.manage') ? h('button', { class: 'btn big', onclick: () => pairDialog(route) }, 'Neuen Bildschirm verbinden') : null),
     h('h2', {}, 'Was läuft heute?'), await today(devices, sched),
-    storage ? h('p', { class: 'hint', style: 'margin-top:24px' }, `Speicher: ${storage.usedPercent} % belegt (${fmtBytes(storage.mediaBytes)} Medien)`) : null);
+    storage ? h('p', { class: 'hint', style: 'margin-top:24px' }, `Medien insgesamt: ${fmtBytes(storage.mediaBytes)}`) : null);
 }
 async function today(devices, sched) {
   const d = new Date(), pad = (n) => String(n).padStart(2, '0'), day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

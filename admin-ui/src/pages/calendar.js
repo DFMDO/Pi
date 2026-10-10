@@ -34,10 +34,10 @@ export async function calendarPage({ route }) {
   }
   function grid(days, ev) {
     const g = h('div', { class: 'cal', style: `grid-template-columns:54px repeat(${days.length},1fr)` }, h('div', { class: 'h' }));
-    days.forEach((d) => g.append(h('div', { class: 'h' }, `${DAYS[dowOf(d)]} ${d.slice(8)}.${d.slice(5, 7)}.`)));
+    days.forEach((d) => g.append(h('div', { class: 'h' + (d === today() ? ' today' : '') }, `${DAYS[dowOf(d)]} ${d.slice(8)}.${d.slice(5, 7)}.`)));
     const hours = h('div', {}); for (let x = H0; x < H1; x++) hours.append(h('div', { class: 'hour' }, `${x}:00`)); g.append(hours);
     days.forEach((d) => {
-      const col = h('div', { class: 'col', 'data-date': d }); for (let x = H0; x < H1; x++) col.append(h('div', { class: 'slot' }));
+      const col = h('div', { class: 'col' + (d === today() ? ' today' : ''), 'data-date': d }); for (let x = H0; x < H1; x++) col.append(h('div', { class: 'slot' }));
       for (const e of ev.filter((e) => epochToLocal(e.start).date === d)) {
         const s = epochToLocal(e.start).time, en = epochToLocal(e.end).date === d ? epochToLocal(e.end).time : '22:00', top = (Number(s.slice(0, 2)) + Number(s.slice(3)) / 60 - H0) * PX, hgt = Math.max(24, (Number(en.slice(0, 2)) + Number(en.slice(3)) / 60 - Number(s.slice(0, 2)) - Number(s.slice(3)) / 60) * PX);
         col.append(h('button', { class: 'ev' + (e.state === 'draft' ? ' draft' : ''), style: `top:${top}px;height:${hgt}px;background:${colorOf(e.targetType, e.targetId)}`, 'aria-label': `${e.state === 'draft' ? 'Entwurf: ' : ''}${content(e.content)} auf ${nameOf(e.targetType, e.targetId)}, ${s} bis ${en}`, onclick: (x) => { x.stopPropagation(); open(scheds.find((z) => z.id === e.scheduleId), d); } }, `${e.state === 'draft' ? '✎ Entwurf · ' : ''}${s} ${content(e.content)}`, h('br'), nameOf(e.targetType, e.targetId)));

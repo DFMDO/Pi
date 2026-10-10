@@ -2,6 +2,7 @@
 import { h, dialog, confirmDlg, toast, field, statusEl, fmtDate, empty } from '../ui.js';
 import { get, post, put, can } from '../api.js';
 import { layoutPanel } from './tools.js';
+import { icon } from '../icons.js';
 import { lineChart } from './charts.js';
 import { playsView } from './nachweis.js';
 import { prognoseView } from './prognose.js';
@@ -25,10 +26,10 @@ async function health(route) {
   const [hl, wt] = await Promise.all([get('/health'), get('/watch').catch(() => null)]); if (!hl.length) return empty('Noch kein Bildschirm', 'Verbinde zuerst einen Bildschirm.');
   const watchLine = (d) => (!wt?.enabled ? null : h('p', { class: 'hint' }, `🔍 Bild-Wächter: ${d.watch ? `${(WATCH[d.watch.status] ?? ['', d.watch.status]).join(' ')} (geprüft vor ${Math.max(1, Math.round((Date.now() - d.watch.checkedAt) / 60000))} Min.)` : 'noch keine Prüfung'}${d.watch?.status === 'ok' && d.watch.note && !/in Ordnung/.test(d.watch.note) ? ' – ' + d.watch.note : ''}`));
   const toggle = wt && can('settings.manage') ? h('label', { class: 'row', style: 'margin-bottom:8px;flex-wrap:nowrap;align-items:flex-start' }, h('input', { type: 'checkbox', checked: wt.enabled, onchange: async (e) => { try { await put('/watch', { enabled: e.target.checked }); toast(e.target.checked ? 'Der Bild-Wächter ist an.' : 'Der Bild-Wächter ist aus.'); } catch (er) { toast(er.message, 'err'); } route(); } }), h('span', {}, ' Bild-Wächter: schwarze oder eingefrorene Bildschirme erkennen (fragt etwa alle 10 Minuten ein Bild ab, speichert keine Bilder)')) : null;
-  return h('div', {}, toggle, h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, hl.map((d) => h('article', { class: 'card' }, h('div', { class: 'row' }, h('h2', { style: 'margin:0' }, d.name), h('span', { class: 'sp' }), d.maintenance ? h('span', { class: 'status warn' }, '🔧 Wartung') : statusEl(d.status)),
+  return h('div', {}, toggle, h('div', { class: 'grid', style: 'grid-template-columns:repeat(auto-fit,minmax(320px,1fr))' }, hl.map((d) => h('article', { class: 'card' + (d.status.level === 'bad' && !d.maintenance ? ' is-bad' : d.warnings.length && !d.maintenance ? ' is-warn' : '') }, h('div', { class: 'cardhead' }, h('h2', {}, d.name), d.maintenance ? h('span', { class: 'status warn' }, '🔧 Wartung') : statusEl(d.status)),
     d.warnings.length ? d.warnings.map((w) => h('p', { class: 'notice' + (w.level === 'bad' ? ' bad' : '') }, (w.level === 'bad' ? '✖ ' : '▲ ') + w.text)) : h('p', {}, d.maintenance ? 'Im Wartungsmodus sind Warnungen stumm.' : '✔ Alles in Ordnung.'),
-    d.metrics ? h('p', { class: 'hint' }, `${d.metrics.tempC ?? '–'} °C · frei ${d.metrics.diskFreeMB ?? '–'} MB · Signal ${d.metrics.signalDbm ?? '–'} dBm · Version ${d.metrics.version ?? '–'}`) : null, watchLine(d),
-    h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => deviceDlg(d.id, route) }, 'Profil & Verlauf'), can('devices.manage') ? h('button', { class: 'btn sec', onclick: () => commissioning(d.id, d.name, route) }, 'Bildschirm prüfen') : null)))));
+    d.metrics ? h('div', { class: 'cardmeta' }, [['thermo', `${d.metrics.tempC ?? '–'} °C`, d.metrics.tempC >= 80 ? 'bad' : d.metrics.tempC >= 72 ? 'warn' : ''], ['box', `frei ${d.metrics.diskFreeMB ?? '–'} MB`, d.metrics.diskFreeMB < 200 ? 'warn' : ''], ['wifi', `${d.metrics.signalDbm ?? '–'} dBm`, d.metrics.signalDbm < -72 ? 'warn' : ''], ['info', `Version ${d.metrics.version ?? '–'}`, '']].map(([ic, tx, cl]) => h('span', { class: 'metachip ' + cl }, icon(ic), tx))) : null, watchLine(d),
+    h('div', { class: 'cardactions' }, h('button', { class: 'btn sec', onclick: () => deviceDlg(d.id, route) }, '📈 Verlauf'), can('devices.manage') ? h('button', { class: 'btn sec', onclick: () => commissioning(d.id, d.name, route) }, '✔ Prüfen') : null)))));
 }
 
 /** Verlauf: freier Speicher, Temperatur und Last von Hub und Bildschirmen (Lecks und Hitze sieht man als Kurve) */

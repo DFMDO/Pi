@@ -10,7 +10,7 @@ const stop = (e) => e.stopPropagation();
 
 /** Vorschaubild: echtes Bild (Stufe 2) wenn vorhanden; sonst Platzhalter mit Inhaltsname (Stufe 1). Offline/veraltet = grau mit Symbol und Text. */
 function preview(r, big = false) {
-  const box = h('div', { class: 'shot liveshot' + (big ? ' big' : '') + (!r.status.level.startsWith('ok') || r.stale ? ' gray' : '') }, h('span', { class: 'hint' }, r.ist?.current?.name ? `${r.ist.current.name}` : 'Noch keine Vorschau'));
+  const box = h('div', { class: 'shot liveshot' + (big ? ' big' : '') + (!r.status.level.startsWith('ok') || r.stale ? ' gray' : '') }, h('div', { class: 'shotempty' + (r.status.level === 'bad' ? ' off' : '') }, r.status.level === 'bad' ? '⛔' : '🖥️', h('span', {}, r.ist?.current?.name ? `${r.ist.current.name}` : 'Noch keine Vorschau')));
   if (r.shotAt) { const i = h('img', { alt: `Vorschau von ${r.name}`, src: `/api/v1/devices/${r.id}/screenshot?t=${r.shotAt}` }); i.onload = () => box.replaceChildren(i, h('span', { class: 'stamp' }, (r.status.level !== 'ok' ? `⏸ zuletzt gesehen ${ago(r.shotAt)}` : r.stale ? `⚠ Bild veraltet (${ago(r.shotAt)})` : ago(r.shotAt)))); }
   return box;
 }
