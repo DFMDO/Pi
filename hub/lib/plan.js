@@ -34,7 +34,7 @@ export function insertsFor(db, device) {
 export const rowToSchedule = (r) => ({
   state: r.state ?? 'published', draftOf: r.draft_of ?? null, note: r.note ?? null, createdBy: r.created_by ?? null,
   id: r.id, targetType: r.target_type, targetId: r.target_id, content: { type: r.content_type, id: r.content_id },
-  startLocal: r.start_local, endLocal: r.end_local, rrule: r.rrule, exdates: JSON.parse(r.exdates || '[]'),
+  startLocal: r.start_local, endLocal: r.end_local, rrule: r.rrule, exdates: parseJson(r.exdates, []),
   priority: r.priority, validFrom: r.valid_from, validTo: r.valid_to,
 });
 /** Standard: NUR veröffentlichte Termine (Player, Live-Ansicht, Konflikte). Entwürfe nur mit { drafts: true } (Kalender/Vorschau). */
@@ -105,8 +105,8 @@ export function schedulePayload(db, device, now = Date.now(), days = 14) {
   let version = ''; try { version = JSON.parse(device.state_json ?? '{}').version ?? ''; } catch {}
   const wall = wallFor(db, device, version);
   const inserts = !wall && verGte(version, INSERTS_MIN_VERSION) ? insertsFor(db, device) : []; // im Gleichtakt keine Einschübe (sie würden sich unterscheiden)
-  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation, renderer: wall ? 'mpv' : rendererOf(device), fit: device.fit_json ? JSON.parse(device.fit_json) : null, overrides, specialDays, hold, tickers,
-    layout: device.profile === 'lite' ? null : device.layout_json ? JSON.parse(device.layout_json) : null,
+  return { generatedAt: now, from, to, segments, playlists, defaultPlaylistId: def, orientation: device.orientation, renderer: wall ? 'mpv' : rendererOf(device), fit: parseJson(device.fit_json, null), overrides, specialDays, hold, tickers,
+    layout: device.profile === 'lite' ? null : parseJson(device.layout_json, null),
     maintenance: { nightlyReboot: (stg['maintenance.nightlyReboot'] ?? 'true') === 'true' ? (stg['maintenance.rebootAt'] ?? '03:30') : null },
     ...(inserts.length ? { inserts } : {}),
     ...(wall ? { wall } : {}),

@@ -69,7 +69,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
 
   // Szenen: mehrere Bildschirme/Gruppen → Inhalt; Start/Stopp mit einem Klick. Szenen haben Entwurf/Veröffentlicht wie Termine.
   const sceneItem = { type: 'object', required: ['scope', 'content'], additionalProperties: false, properties: { scope: { enum: ['all', 'device', 'group'] }, targetId: { type: 'string', maxLength: 40 }, content: contentSchema } };
-  const sceneView = (s) => ({ id: s.id, name: s.name, state: s.state, note: s.note, items: JSON.parse(s.items_json).map((i) => ({ ...i, targetName: i.scope === 'all' ? 'Alle Bildschirme' : targetName({ scope: i.scope, target_id: i.targetId }), contentName: nameOf(i.content.type, i.content.id) })),
+  const sceneView = (s) => ({ id: s.id, name: s.name, state: s.state, note: s.note, items: parseJson(s.items_json, []).map((i) => ({ ...i, targetName: i.scope === 'all' ? 'Alle Bildschirme' : targetName({ scope: i.scope, target_id: i.targetId }), contentName: nameOf(i.content.type, i.content.id) })),
     active: !!db.prepare('SELECT 1 FROM overrides WHERE scene_id=? AND ended_at IS NULL AND until>?').get(s.id, now()) });
   const mayPublishScene = (req) => can(req.user.role, 'schedules.publish') && (req.user.role === 'admin' || settings()['publish.editor'] !== 'false');
   app.get('/api/v1/scenes', { config: { perm: 'live.read' } }, async (req) => (req.user.role === 'anzeige' ? [] : db.prepare('SELECT * FROM scenes ORDER BY name').all().map(sceneView)));
@@ -94,7 +94,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
   });
   app.post('/api/v1/scenes/:id/start', { config: { perm: 'overrides.write' }, schema: { body: { type: 'object', additionalProperties: false, properties: { minutes: { type: 'integer', minimum: 5, maximum: 1440 }, endOfDay: { type: 'boolean' }, confirm: { type: 'boolean' } } } } }, async (req, reply) => {
     const s = db.prepare('SELECT * FROM scenes WHERE id=?').get(req.params.id); if (!s) return reply.code(404).send({ error: 'Szene nicht gefunden.' }); if (s.state !== 'published') return reply.code(400).send({ error: 'Diese Szene ist noch ein Entwurf. Bitte veröffentliche sie zuerst.' });
-    const items = JSON.parse(s.items_json); for (const i of items) { const bad = contentOk(i.content); if (bad) return reply.code(400).send({ error: `In der Szene „${s.name}“: ${bad}` }); }
+    const items = parseJson(s.items_json, []); for (const i of items) { const bad = contentOk(i.content); if (bad) return reply.code(400).send({ error: `In der Szene „${s.name}“: ${bad}` }); }
     if (!req.body?.confirm) return reply.code(409).send({ error: `Die Szene „${s.name}“ übernimmt jetzt ${items.length} Bildschirm(e)/Gruppe(n). Bitte bestätige.`, needsConfirm: true });
     const until = runScene(req.user, s, req.body ?? {});
     A(req, 'szene.gestartet', s.name, { bis: new Date(until).toISOString() }); app.pushAll(); return { ok: true, until, text: `Szene „${s.name}“ läuft bis ${hhmm(until)} Uhr.` };
@@ -102,12 +102,12 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
   /** Szene starten – von Hand oder per Auslöser-Link. actor = { id, name } (erscheint als „von …“). Gibt das Ende zurück. */
   function runScene(actor, s, b = {}) {
     const until = untilOf(b, now()); db.prepare('UPDATE overrides SET ended_at=? WHERE scene_id=? AND ended_at IS NULL').run(now(), s.id);
-    for (const i of JSON.parse(s.items_json)) startOverride({ user: actor }, { scope: i.scope, targetId: i.targetId, content: i.content, until, label: s.name, sceneId: s.id });
+    for (const i of parseJson(s.items_json, [])) startOverride({ user: actor }, { scope: i.scope, targetId: i.targetId, content: i.content, until, label: s.name, sceneId: s.id });
     return until;
   }
   const stopScene = (sceneId) => db.prepare('UPDATE overrides SET ended_at=? WHERE scene_id=? AND ended_at IS NULL').run(now(), sceneId).changes;
   /** Klartext, warum eine Szene gerade nicht gestartet werden kann (oder null) */
-  const sceneProblem = (s) => { if (s.state !== 'published') return 'Diese Szene ist noch ein Entwurf. Bitte veröffentliche sie zuerst.'; for (const i of JSON.parse(s.items_json)) { const bad = contentOk(i.content); if (bad) return `In der Szene „${s.name}“: ${bad}`; } return null; };
+  const sceneProblem = (s) => { if (s.state !== 'published') return 'Diese Szene ist noch ein Entwurf. Bitte veröffentliche sie zuerst.'; for (const i of parseJson(s.items_json, [])) { const bad = contentOk(i.content); if (bad) return `In der Szene „${s.name}“: ${bad}`; } return null; };
   app.decorate('scenes', { run: runScene, stop: stopScene, problem: sceneProblem });
   app.post('/api/v1/scenes/:id/stop', { config: { perm: 'overrides.write' } }, async (req) => {
     const n = stopScene(req.params.id); A(req, 'szene.beendet', req.params.id); app.pushAll(); return { ok: true, ended: n };
@@ -188,7 +188,7 @@ async function extrasPlugin(app, { db, audit, now = () => Date.now() }) {
     const d = dv().getDevice(req.params.id); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });
     const hw = parseJson(d.hw_json, {});
     return { id: d.id, name: d.name, location: d.location, floor: d.floor, serial: d.serial ?? hw.serial ?? null, mac: d.mac ?? hw.mac ?? null, installedAt: d.installed_at ?? new Date(d.created_at).toISOString().slice(0, 10), notes: d.notes, docUrl: d.doc_url, model: d.model, version: stOf(d)?.version ?? null,
-      maintenance: d.maintenance_since, ready: d.ready !== 0, layout: d.layout_json ? JSON.parse(d.layout_json) : null };
+      maintenance: d.maintenance_since, ready: d.ready !== 0, layout: parseJson(d.layout_json, null) };
   });
   app.put('/api/v1/devices/:id/playback', { config: { perm: 'devices.manage' }, schema: { body: { type: 'object', required: ['renderer'], additionalProperties: false, properties: { renderer: { enum: ['auto', 'browser', 'mpv'] } } } } }, async (req, reply) => {
     const d = dv().getDevice(req.params.id); if (!d) return reply.code(404).send({ error: 'Bildschirm nicht gefunden.' });

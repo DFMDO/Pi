@@ -1,0 +1,31 @@
+# DFM Signage Hub im Docker-Container.  Start:  docker compose up -d --build
+# Ausführliche Anleitung: docs/docker.md
+services:
+  hub:
+    build: .
+    image: dfm-signage-hub:local
+    container_name: dfm-hub
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15s
+    ports:
+      - "443:8443"   # Verwaltung und Bildschirme (HTTPS)
+      - "80:8080"    # nur Weiterleitung auf HTTPS
+    volumes:
+      - dfm-data:/data   # Datenbank, Medien, Schlüssel, Zertifikat – bitte sichern!
+    environment:
+      # Adresse(n), unter der die Bildschirme und Browser den Hub erreichen (IP-Adresse oder Name des Docker-Rechners), mehrere mit Komma:
+      DFM_HOST_IPS: "${DFM_HOST_IPS:-}"
+      # Zusätzliche Namen für das Zertifikat (zum Beispiel ein Name im Hausnetz), mehrere mit Komma:
+      DFM_EXTRA_SANS: "${DFM_EXTRA_SANS:-}"
+      DFM_PUBLIC_HTTPS_PORT: "443"
+      TZ: "Europe/Berlin"
+    healthcheck:
+      test: ["CMD", "node", "docker/healthcheck.mjs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  dfm-data:

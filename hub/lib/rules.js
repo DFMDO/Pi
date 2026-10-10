@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { epochToLocal } from '../../shared/time.js';
 import { MATCH_MAX_MS } from './apps/builders.js';
+import { parseJson } from '../../shared/guard.js';
 
 export const ROLL_MS = 15 * 60000, RENEW_LEFT_MS = 8 * 60000, OFF_DELAY_MS = 120000;
 export const WEATHER_MAX_AGE_MS = 2 * 3600e3, MATCH_MAX_AGE_MS = 3 * 3600e3;
@@ -82,7 +83,7 @@ export function evalRule(conditions, ctx) {
 }
 
 export function createRules({ db, apps, audit = null, pushAll = () => {}, now = () => Date.now() }) {
-  const parse = (r) => ({ ...r, enabled: !!r.enabled, conditions: JSON.parse(r.conditions_json) });
+  const parse = (r) => ({ ...r, enabled: !!r.enabled, conditions: parseJson(r.conditions_json, []) });
   const all = () => db.prepare('SELECT * FROM rules ORDER BY priority DESC, created_at, id').all().map(parse);
   const getState = (id) => db.prepare('SELECT * FROM rule_state WHERE rule_id=?').get(id) ?? { rule_id: id, override_id: null, blocked: 0, true_since: null, false_since: null, started_at: null };
   const putState = (s) => db.prepare('INSERT OR REPLACE INTO rule_state(rule_id,override_id,blocked,true_since,false_since,started_at) VALUES(?,?,?,?,?,?)').run(s.rule_id, s.override_id, s.blocked ? 1 : 0, s.true_since, s.false_since, s.started_at);

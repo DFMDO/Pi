@@ -43,18 +43,20 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
     return { load: loadavg(), ramTotalMB: Math.round(totalmem() / 1048576), ramFreeMB: Math.round(freemem() / 1048576), uptimeS: Math.round(uptime()),
       tempC: temp, node: process.version, rssMB: Math.round(process.memoryUsage().rss / 1048576), db: db.pragma('journal_mode', { simple: true }) };
   });
-  app.get('/api/v1/system/hub', { config: { perm: 'devices.read' } }, async () => ({ fingerprint: formatFingerprint(tls.spki), host: 'dfm-signage.local',
+  app.get('/api/v1/system/hub', { config: { perm: 'devices.read' } }, async () => ({ fingerprint: formatFingerprint(tls.spki), host: process.env.DFM_HUB_HOST ?? 'dfm-signage.local', container: IN_CONTAINER,
     addresses: Object.values((() => { try { return networkInterfaces(); } catch { return {}; } })()).flat().filter((i) => i && !i.internal && i.family === 'IPv4').map((i) => ({ ip: i.address, mac: i.mac })),
     tip: 'Bitte die IT, dieser Hardware-Adresse (MAC) immer dieselbe IP-Adresse zu geben.' }));
   // Uhr: Der Pi hat keine Batterieuhr und im Museumsnetz oft kein Internet. Der Admin-Browser kennt die richtige Zeit.
   app.get('/api/v1/system/time', { config: { perm: 'devices.read' } }, async () => ({ now: Date.now() }));
   app.post('/api/v1/system/time', { config: { perm: 'settings.manage' }, schema: { body: { type: 'object', required: ['epoch'], additionalProperties: false, properties: { epoch: { type: 'integer' } } } } }, async (req, reply) => {
+    if (IN_CONTAINER) return reply.code(409).send({ error: 'Der Hub läuft in Docker und übernimmt die Uhrzeit vom Docker-Rechner. Bitte dort die Uhr (NTP) richtig einstellen.' });
     if (Math.abs(req.body.epoch - Date.now()) > 7 * 86400000 * 365) return reply.code(400).send({ error: 'Diese Uhrzeit ist nicht plausibel.' });
     try { privRequest(process.env.DFM_PRIVD_DIR ?? '/run/dfm/privd', 'set-time', { epoch: Math.floor(req.body.epoch / 1000) }); } catch { return reply.code(500).send({ error: 'Die Uhr konnte nicht gestellt werden.' }); }
     audit.log({ user: req.user, action: 'uhr.gestellt', ip: req.ip, security: true, detail: { epoch: req.body.epoch } }); return { ok: true };
   });
   // WLAN des Hubs nachtragen (z. B. wenn er per Kabel eingerichtet wurde)
   app.post('/api/v1/system/wifi', { config: { perm: 'settings.manage' }, schema: { body: { type: 'object', required: ['ssid', 'password'], additionalProperties: false, properties: { ssid: { type: 'string', minLength: 1, maxLength: 32 }, password: { type: 'string', minLength: 8, maxLength: 64 } } } } }, async (req, reply) => {
+    if (IN_CONTAINER) return reply.code(409).send({ error: 'Der Hub läuft in Docker. Das Netzwerk wird am Docker-Rechner eingestellt, nicht hier.' });
     try { privRequest(process.env.DFM_PRIVD_DIR ?? '/run/dfm/privd', 'wifi-switch', { ssid: req.body.ssid, password: req.body.password }); } catch (e) { return reply.code(400).send({ error: 'Diese WLAN-Angaben sind ungültig.' }); }
     audit.log({ user: req.user, action: 'hub.wlan_geaendert', ip: req.ip, security: true, detail: { ssid: req.body.ssid } }); return { ok: true };
   });
@@ -87,6 +89,8 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
   app.decorate('runBackup', (extraDir) => runScheduledBackup({ dataDir, db, keyInfo: keyInfo(), extraDir }));
 
   // Update (Paket hochladen → Signatur prüfen → einspielen → verteilen)
+  // Im Docker-Container wird der Hub selbst durch ein neues Image aktualisiert; Pakete dienen dort nur der Verteilung an die Bildschirme.
+  const IN_CONTAINER = process.env.DFM_CONTAINER === '1';
   /** Version, die gerade läuft: nach einem Update die aktive Version im Anwendungsordner, sonst die des Images bzw. des Quellcodes */
   const currentVersion = () => {
     try { const v = readlinkSync(join(appDir, 'current')).split(/[\\/]/).pop(); if (SEMVER.test(v)) return v; } catch {}
@@ -100,7 +104,8 @@ async function systemPlugin(app, { db, audit, dataDir, mediaDir, tls, updateKeyP
     try {
       const m = stage(tmp, appDir, updateKeyPem, baseDir);
       writeFileSync(join(dataDir, 'updates', 'current.dfmpkg'), body); // Verteilung an Player über den Hub
-      activate(appDir, m.version); audit.log({ user: req.user, action: 'update.eingespielt', ip: req.ip, security: true, detail: { version: m.version, quelle: via } });
+      if (!IN_CONTAINER) activate(appDir, m.version); audit.log({ user: req.user, action: 'update.eingespielt', ip: req.ip, security: true, detail: { version: m.version, quelle: via, container: IN_CONTAINER } });
+      if (IN_CONTAINER) return { ok: true, version: m.version, text: 'Das Update liegt jetzt für die Bildschirme bereit. Der Hub selbst läuft in Docker und wird durch ein neues Image aktualisiert.' };
       setTimeout(onRestart, 1500); return { ok: true, version: m.version, text: 'Das Update wurde installiert. Der Hub startet in wenigen Sekunden neu.' };
     } catch (e) { audit.log({ user: req.user, action: 'update.abgelehnt', ip: req.ip, security: true, detail: { grund: e.message, quelle: via } }); throw new Error(friendly(e)); }
   }

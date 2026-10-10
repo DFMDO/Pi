@@ -411,3 +411,10 @@ Eine Folie erscheint regelmäßig zwischendurch, zum Beispiel **„alle 5 Minute
 - **Bilder & Videos:** Die Knöpfe sind in **Hochladen**, **Neu erstellen** und **Verwalten** sortiert. Jede Karte zeigt oben die Art (Bild, Video, Text, Live-Bild); Texte erscheinen in der Farbe ihrer Vorlage.
 - **Abspiellisten und Szenen** haben einheitliche Karten mit Anzahl, Rundendauer und den ersten Einträgen. Bearbeiten und Veröffentlichen stehen unten, Löschen dezent daneben.
 - **Anleitung:** Der Link „Anleitung zu dieser Seite“ steht jetzt oben rechts neben der Überschrift. Beim Laden der Seite erscheinen Platzhalter statt eines leeren Bildes.
+
+## 56. Hub im Docker-Container (seit 0.2.31)
+Der Hub kann statt auf einem Raspberry Pi auch auf einem Server oder PC im Museumsnetz in einem **Docker-Container** laufen. Die Bildschirme bleiben Raspberry Pi mit dem normalen Image. Die Einrichtung übernimmt die IT; die Schritte stehen in `docs/docker.md`.
+- **Einrichtungscode:** Er steht nicht auf einem Bildschirm, sondern im Protokoll des Containers (`docker compose logs hub`).
+- **Updates:** Der Hub selbst wird durch ein **neues Image** aktualisiert. Eine Update-Datei im Menü „Updates“ wird nur für die Bildschirme bereitgestellt.
+- **Uhr und WLAN:** Beides stellt die IT am Docker-Rechner ein; die Knöpfe im Hub zeigen dann einen Hinweis.
+- **Sicherung:** Das Volume `dfm-data` enthält alles (Datenbank, Medien, Schlüssel). Bitte regelmäßig sichern.

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { SHARP_OPTS } from './variants.js';
 import { deviceStatus } from './devices.js';
+import { parseJson } from '../../shared/guard.js';
 
 /** Zielgröße eines Bildschirms (Hochkant bei 90°/270°) */
 export const targetSize = (orientation) => (orientation === 90 || orientation === 270 ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 });
@@ -44,9 +45,9 @@ async function extras3Plugin(app, { db, audit, mediaDir, now = () => Date.now() 
   });
 
   // ======================= Gestaffelte Updates =======================
-  const log = (r, text) => { const l = JSON.parse(r.log_json); l.push({ ts: now(), text }); return JSON.stringify(l.slice(-100)); };
+  const log = (r, text) => { const l = parseJson(r.log_json, []); l.push({ ts: now(), text }); return JSON.stringify(l.slice(-100)); };
   const view = (r) => ({ id: r.id, version: r.version, fromVersion: r.from_version, state: r.state, testDevice: r.test_device, batchSize: r.batch_size, soakMinutes: r.soak_minutes, createdAt: r.created_at, updatedAt: r.updated_at,
-    steps: JSON.parse(r.steps_json).map((s) => ({ ...s, name: db.prepare('SELECT name FROM devices WHERE id=?').get(s.deviceId)?.name ?? '?' })), log: JSON.parse(r.log_json) });
+    steps: parseJson(r.steps_json, []).map((s) => ({ ...s, name: db.prepare('SELECT name FROM devices WHERE id=?').get(s.deviceId)?.name ?? '?' })), log: parseJson(r.log_json, []) });
   const verOf = (id) => { try { return JSON.parse(db.prepare('SELECT state_json FROM devices WHERE id=?').get(id)?.state_json ?? '{}').version ?? null; } catch { return null; } };
   app.get('/api/v1/rollouts', { config: { perm: 'update.manage' } }, async () => db.prepare('SELECT * FROM rollouts ORDER BY created_at DESC LIMIT 20').all().map(view));
   app.post('/api/v1/rollouts', { config: { perm: 'update.manage' }, schema: { body: { type: 'object', required: ['testDevice'], additionalProperties: false, properties: { testDevice: { type: 'string', maxLength: 40 }, batchSize: { type: 'integer', minimum: 1, maximum: 50 }, soakMinutes: { type: 'integer', minimum: 1, maximum: 120 } } } } }, async (req, reply) => {
@@ -63,13 +64,13 @@ async function extras3Plugin(app, { db, audit, mediaDir, now = () => Date.now() 
     const r = db.prepare("SELECT * FROM rollouts WHERE id=? AND state IN ('canary','rolling')").get(req.params.id); if (!r) return reply.code(404).send({ error: 'Dieses Update läuft nicht mehr.' }); abort(r, 'Von einem Admin abgebrochen.'); A(req, 'rollout.abgebrochen', r.id, null, true); return { ok: true };
   });
   function abort(r, why) { // automatischer Rückfall: alle schon aktualisierten Bildschirme gehen zur vorherigen Version zurück
-    const steps = JSON.parse(r.steps_json); for (const s of steps) if (['sent', 'ok'].includes(s.state)) { dv().queueCommand(s.deviceId, 'rollback'); s.state = 'rolled_back'; }
+    const steps = parseJson(r.steps_json, []); for (const s of steps) if (['sent', 'ok'].includes(s.state)) { dv().queueCommand(s.deviceId, 'rollback'); s.state = 'rolled_back'; }
     db.prepare("UPDATE rollouts SET state='aborted', steps_json=?, log_json=?, updated_at=? WHERE id=?").run(JSON.stringify(steps), log(r, `Abgebrochen: ${why} Alle aktualisierten Bildschirme gehen zur vorherigen Version zurück.`), now(), r.id); audit.log({ action: 'rollout.rueckfall', target: r.id, security: true, detail: { grund: why } });
   }
   /** Fortschritt prüfen (alle 20 s). Test-Bildschirm zuerst; nach Erfolg und Beobachtungszeit schrittweise die übrigen. */
   function tick() {
     for (const r of db.prepare("SELECT * FROM rollouts WHERE state IN ('canary','rolling')").all()) {
-      const steps = JSON.parse(r.steps_json), t = now(); let changed = false, logText = null;
+      const steps = parseJson(r.steps_json, []), t = now(); let changed = false, logText = null;
       const check = (s) => { // Ergebnis des Update-Befehls und Zustand des Bildschirms prüfen
         const c = s.cmdId ? db.prepare('SELECT status,result_json FROM commands WHERE id=?').get(s.cmdId) : null, d = dv().getDevice(s.deviceId), online = d && deviceStatus(d, t).level === 'ok';
         if (c?.status === 'failed') return 'failed';

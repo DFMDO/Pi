@@ -376,12 +376,12 @@ async function contentPlugin(app, { db, audit, mediaDir, variants, now = () => D
   app.get('/api/v1/trash', { config: { perm: 'media.read' } }, async () => {
     db.prepare('DELETE FROM trash WHERE deleted_at<?').run(now() - TRASH_DAYS * DAY);
     return db.prepare('SELECT id,kind,ref_id,deleted_at,payload_json FROM trash ORDER BY deleted_at DESC').all().map((t) => {
-      const p = JSON.parse(t.payload_json); return { id: t.id, kind: t.kind, deletedAt: t.deleted_at, name: p.media?.name ?? p.playlist?.name ?? 'Termin', purgeAt: t.deleted_at + TRASH_DAYS * DAY };
+      const p = parseJson(t.payload_json, {}); return { id: t.id, kind: t.kind, deletedAt: t.deleted_at, name: p.media?.name ?? p.playlist?.name ?? 'Termin', purgeAt: t.deleted_at + TRASH_DAYS * DAY };
     });
   });
   app.post('/api/v1/trash/:id/restore', { config: { perm: 'media.write' } }, async (req, reply) => {
     const t = db.prepare('SELECT * FROM trash WHERE id=?').get(req.params.id); if (!t) return reply.code(404).send({ error: 'Nicht im Papierkorb gefunden.' });
-    const p = JSON.parse(t.payload_json);
+    const p = parseJson(t.payload_json, {});
     const ins = (table, row) => { const cols = Object.keys(row); db.prepare(`INSERT OR IGNORE INTO ${table}(${cols.join(',')}) VALUES(${cols.map(() => '?').join(',')})`).run(...Object.values(row)); };
     db.transaction(() => {
       if (t.kind === 'media') { ins('media', p.media); p.variants.forEach((v) => ins('media_variants', v)); p.items.forEach((i) => db.prepare('SELECT 1 FROM playlists WHERE id=?').get(i.playlist_id) && ins('playlist_items', i)); }

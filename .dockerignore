@@ -1,0 +1,16 @@
+.git
+.github
+node_modules
+**/node_modules
+build
+docs
+tests
+tools
+**/test
+**/*.test.js
+*.img
+*.img.xz
+*.pdf
+admin-ui/dist
+.claude
+.env

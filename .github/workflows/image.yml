@@ -5,8 +5,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Name des Downloads (Tag), z. B. v0.2.30"
-        default: "v0.2.30"
+        description: "Name des Downloads (Tag), z. B. v0.2.31"
+        default: "v0.2.31"
 permissions:
   contents: write
 jobs:

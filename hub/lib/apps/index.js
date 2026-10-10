@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { epochToLocal } from '../../../shared/time.js';
 import { fetchText as realFetch } from './net.js';
 import { buildWeather, buildMatchday, buildNews, buildToday, buildProgram, buildOnThisDay, parseOnThisDay, buildLive, liveIntervalMin, buildNext, parseRooms, LEAGUES, DAYS, HOURS_RE, MATCH_MAX_MS } from './builders.js';
+import { parseJson } from '../../../shared/guard.js';
 
 const MIN = 60000;
 const str = (v, d, max) => { const s = String(v ?? d ?? '').trim(); if (s.length > max) throw new Error(`Der Text ist zu lang (höchstens ${max} Zeichen).`); return s; };
@@ -83,7 +84,7 @@ export const APP_TYPES = Object.keys(APPS);
 
 export function createApps({ db, variants = null, pushAll = () => {}, fetchText = realFetch, now = () => Date.now(), onRun = null }) {
   const row = (type) => db.prepare('SELECT * FROM apps WHERE type=?').get(type);
-  const cfgOf = (type, r = row(type)) => ({ ...APPS[type].defaults, ...(r ? JSON.parse(r.config_json || '{}') : {}) });
+  const cfgOf = (type, r = row(type)) => ({ ...APPS[type].defaults, ...(r ? parseJson(r.config_json, {}) : {}) });
   const parse = (s) => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
   /** Letzte strukturierte Ergebnisse einer App (zum Beispiel Wetterwerte) und wann sie zuletzt erfolgreich geholt wurden */
   const stateOf = (type) => { const r = row(type); return { state: parse(r?.state_json), ts: r?.last_ok ?? null, enabled: !!r?.enabled }; };

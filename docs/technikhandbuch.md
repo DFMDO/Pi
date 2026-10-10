@@ -223,3 +223,10 @@ Ziel: Ein einzelner Fehler (kaputte Daten, hängendes Programm, volle Karte, kur
 - **Gemeinsame Karte:** `devCard()` in `pages/home.js` (Startseite und Seite Bildschirme).
 - **Demo-Hub:** `node tools/demo-hub.mjs` startet einen Hub mit Beispieldaten auf `http://127.0.0.1:8765` (Admin: `admin`, Passwort aus `hub/test/helpers.js`). Nach `npm run build:ui` den Hub neu starten (er merkt sich die Dateinamen der Oberfläche).
 - Unverändert: Farben aus `theme.generated.css`, Kontraste, 44-px-Klickflächen, ≥ 16 px für Bedienelemente, kein Querscrollen auf dem Handy (`tests/e2e-ui.test.js`).
+
+## 19. Version 0.2.31 – Hub im Docker-Container und Härtung
+- **Container:** `Dockerfile` (mehrstufig, `node:22-bookworm-slim`, ffmpeg, poppler-utils, Benutzer `node`), `docker-compose.yml` (Volume `dfm-data` → `/data`, Ports 443→8443 und 80→8080), `docker/healthcheck.mjs`, `.dockerignore`, Anleitung `docs/docker.md`. Workflow `.github/workflows/docker.yml` baut das Image, startet es und prüft Antwort, Einrichtungscode im Protokoll, Gesundheitsstatus und Neustart mit Datenerhalt (veröffentlicht nichts).
+- **Umgebung:** `DFM_CONTAINER=1` (Container-Betrieb), `DFM_HOST_IPS` (Adresse(n) des Docker-Rechners → Zertifikat und Startkarten), `DFM_EXTRA_SANS` (weitere Namen im Zertifikat), `DFM_HUB_HOST` (Name auf den Karten), `DFM_PUBLIC_HTTPS_PORT` (Ziel der Weiterleitung von Port 80). Der Einrichtungscode steht beim Start im Protokoll (`docker compose logs hub`).
+- **Im Container anders** (`hub/lib/system.js`): Pakete werden angenommen und an die Bildschirme verteilt, der Hub selbst wird aber **nicht** umgeschaltet (neues Image nötig); Uhr stellen und WLAN wechseln antworten mit 409 und Klartext. `GET /api/v1/system/hub` liefert `container`.
+- **Härtung:** gespeicherte JSON-Spalten werden überall mit `parseJson` gelesen (auth, plan, extras, extras2, extras3, rules, apps, content) – eine beschädigte Zeile legt keine Seite und keine Anmeldung mehr lahm.
+- Tests: `hub/test/docker.test.js`. **Der Container selbst ist nur über die Prüfung in GitHub (Workflow „Docker“) getestet, nicht lokal und nicht in einem echten Netz.**

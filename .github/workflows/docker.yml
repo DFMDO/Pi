@@ -1,0 +1,32 @@
+name: Docker
+# Baut den Hub-Container und prüft, dass er startet, antwortet und die Einrichtung anbietet. Veröffentlicht nichts.
+on:
+  push:
+    paths: ['Dockerfile', 'docker/**', 'docker-compose.yml', '.dockerignore', 'hub/**', 'shared/**', 'admin-ui/**', 'player/agent/lib/**', '.github/workflows/docker.yml']
+  workflow_dispatch:
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Container bauen
+        run: docker build -t dfm-hub-test .
+      - name: Container starten und prüfen
+        run: |
+          docker run -d --name hub -p 8443:8443 -e DFM_HOST_IPS=127.0.0.1 -v dfm-test-data:/data dfm-hub-test
+          for i in $(seq 1 40); do
+            if curl -ks https://127.0.0.1:8443/api/v1/setup/state | grep -q needsAdmin; then ok=1; break; fi
+            sleep 2
+          done
+          docker logs hub
+          test "${ok:-0}" = 1
+          # Einrichtungscode steht im Protokoll
+          docker logs hub 2>&1 | grep -q "Einrichtungscode"
+          # Gesundheitsprüfung des Containers
+          for i in $(seq 1 30); do s=$(docker inspect --format '{{.State.Health.Status}}' hub); [ "$s" = healthy ] && break; sleep 3; done
+          echo "Zustand: $s"; test "$s" = healthy
+      - name: Neustart behält die Daten
+        run: |
+          docker restart hub
+          for i in $(seq 1 40); do curl -ks https://127.0.0.1:8443/api/v1/setup/state | grep -q needsAdmin && exit 0; sleep 2; done
+          docker logs hub; exit 1

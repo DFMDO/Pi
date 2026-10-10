@@ -4,6 +4,7 @@ import { randomToken, sha256hex, hashPassword, verifyPassword, checkPasswordPoli
   verifyTotp, newTotpSecret, newRecoveryCodes, encrypt, decrypt } from './crypto.js';
 import { can } from './permissions.js';
 import { createLimiter } from './ratelimit.js';
+import { parseJson } from '../../shared/guard.js';
 
 export const COOKIE = '__Host-dfm_sid';
 const IDLE_MS = 30 * 60000;
@@ -67,7 +68,7 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
       audit.log({ user: u, action: 'zugriff.verweigert', target: req.url, ip: req.ip, security: true });
       return reply.code(403).send({ error: 'Dafür fehlt dir die Berechtigung.' });
     }
-    u.groups = u.groups_json ? JSON.parse(u.groups_json) : null; req.user = u; req.session = s;
+    u.groups = parseJson(u.groups_json, null); req.user = u; req.session = s;
     q.touch.run(now(), now() + 12 * 3600000, s.id_hash);
   });
 
@@ -91,7 +92,7 @@ async function authPlugin(app, { db, key, audit, now = () => Date.now() }) {
     if (ok && u.totp_secret_enc) {
       const secret = decrypt(key, u.totp_secret_enc);
       if (!totp) return reply.code(401).send({ error: 'Bitte gib den Code aus deiner Authenticator-App ein.', code: 'totp' });
-      let rec = JSON.parse(u.recovery_hashes ?? '[]');
+      let rec = parseJson(u.recovery_hashes, []);
       const h = sha256hex(String(totp).replace(/\s/g, '').toLowerCase());
       if (verifyTotp(secret, totp)) ok = true;
       else if (rec.includes(h)) { rec = rec.filter((x) => x !== h); db.prepare('UPDATE users SET recovery_hashes=? WHERE id=?').run(JSON.stringify(rec), u.id); }
